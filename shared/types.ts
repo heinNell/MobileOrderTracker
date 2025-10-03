@@ -35,25 +35,25 @@ export interface Location {
 
 /**
  * IMPORTANT: PostGIS Geography Columns
- * 
+ *
  * The database stores locations as PostGIS GEOGRAPHY(POINT) which Supabase
  * returns as WKT strings: "SRID=4326;POINT(longitude latitude)"
- * 
+ *
  * When fetching orders from Supabase, location fields will be strings!
  * Use the locationUtils helper functions to convert:
- * 
+ *
  * ```typescript
  * import { parsePostGISPoint } from './locationUtils';
- * 
+ *
  * const location = parsePostGISPoint(order.loading_point_location);
  * console.log(location.latitude, location.longitude);
  * ```
- * 
+ *
  * When creating/updating orders, use toPostGISPoint():
- * 
+ *
  * ```typescript
  * import { toPostGISPoint } from './locationUtils';
- * 
+ *
  * const wkt = toPostGISPoint({ latitude: -26.2041, longitude: 28.0473 });
  * // Inserts as: "SRID=4326;POINT(28.0473 -26.2041)"
  * ```

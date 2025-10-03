@@ -14,7 +14,10 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { LocationService } from "../services/locationService";
 import type { Order, OrderStatus } from "../../../shared/types";
-import { parsePostGISPoint, toPostGISPoint } from "../../../shared/locationUtils";
+import {
+  parsePostGISPoint,
+  toPostGISPoint,
+} from "../../../shared/locationUtils";
 
 const STATUS_ACTIONS: { status: OrderStatus; label: string; color: string }[] =
   [
