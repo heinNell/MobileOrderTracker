@@ -14,6 +14,7 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { LocationService } from "../services/locationService";
 import type { Order, OrderStatus } from "../../../shared/types";
+import { parsePostGISPoint, toPostGISPoint } from "../../../shared/locationUtils";
 
 const STATUS_ACTIONS: { status: OrderStatus; label: string; color: string }[] =
   [
@@ -130,7 +131,7 @@ export const OrderDetailsScreen: React.FC = () => {
           driver_id: user.id,
           status: newStatus,
           location: location
-            ? `POINT(${location.coords.longitude} ${location.coords.latitude})`
+            ? `SRID=4326;POINT(${location.coords.longitude} ${location.coords.latitude})`
             : null,
           notes,
         });
@@ -215,7 +216,7 @@ export const OrderDetailsScreen: React.FC = () => {
           style={styles.navigateButton}
           onPress={() =>
             openGoogleMaps(
-              order.loading_point_location as any,
+              parsePostGISPoint(order.loading_point_location),
               order.loading_point_name
             )
           }
@@ -238,7 +239,7 @@ export const OrderDetailsScreen: React.FC = () => {
           style={styles.navigateButton}
           onPress={() =>
             openGoogleMaps(
-              order.unloading_point_location as any,
+              parsePostGISPoint(order.unloading_point_location),
               order.unloading_point_name
             )
           }

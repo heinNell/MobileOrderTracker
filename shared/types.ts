@@ -33,6 +33,32 @@ export interface Location {
   longitude: number;
 }
 
+/**
+ * IMPORTANT: PostGIS Geography Columns
+ * 
+ * The database stores locations as PostGIS GEOGRAPHY(POINT) which Supabase
+ * returns as WKT strings: "SRID=4326;POINT(longitude latitude)"
+ * 
+ * When fetching orders from Supabase, location fields will be strings!
+ * Use the locationUtils helper functions to convert:
+ * 
+ * ```typescript
+ * import { parsePostGISPoint } from './locationUtils';
+ * 
+ * const location = parsePostGISPoint(order.loading_point_location);
+ * console.log(location.latitude, location.longitude);
+ * ```
+ * 
+ * When creating/updating orders, use toPostGISPoint():
+ * 
+ * ```typescript
+ * import { toPostGISPoint } from './locationUtils';
+ * 
+ * const wkt = toPostGISPoint({ latitude: -26.2041, longitude: 28.0473 });
+ * // Inserts as: "SRID=4326;POINT(28.0473 -26.2041)"
+ * ```
+ */
+
 export interface TimeWindow {
   start: string;
   end: string;
@@ -80,15 +106,18 @@ export interface Order {
   qr_code_expires_at?: string;
   status: OrderStatus;
   assigned_driver_id?: string;
-  assigned_driver?: User;
+  assigned_driver?: {
+    id: string;
+    full_name: string;
+  };
   loading_point_name: string;
   loading_point_address: string;
-  loading_point_location: Location;
+  loading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
   loading_time_window_start?: string;
   loading_time_window_end?: string;
   unloading_point_name: string;
   unloading_point_address: string;
-  unloading_point_location: Location;
+  unloading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
   unloading_time_window_start?: string;
   unloading_time_window_end?: string;
   waypoints?: DeliveryPoint[];
