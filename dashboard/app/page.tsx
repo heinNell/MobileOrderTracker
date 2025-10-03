@@ -4,17 +4,34 @@
 import React, { useState, useEffect } from "react";
 import { supabase, generateQRCode } from "../lib/supabase";
 import type { Order, OrderStatus } from "../../shared/types";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const router = useRouter();
 
   useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    setUser(session.user);
     fetchOrders();
     subscribeToOrders();
-  }, []);
+  };
 
   const fetchOrders = async () => {
     try {
@@ -25,8 +42,7 @@ export default function DashboardPage() {
           *,
           assigned_driver:users!orders_assigned_driver_id_fkey(
             id,
-            full_name,
-            phone
+            full_name
           )
         `
         )
@@ -80,6 +96,114 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCreateOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      // Get user's tenant_id
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (userError) {
+        console.error("User fetch error:", userError);
+        throw new Error(`Failed to fetch user data: ${userError.message}`);
+      }
+
+      if (!userData) {
+        throw new Error(
+          "User not found in database. Please ensure your profile is set up."
+        );
+      }
+
+      // Create order with QR code placeholder
+      const orderNumber = `ORD-${Date.now()}`;
+      const qrCodeData = `${orderNumber}-${Date.now()}`;
+
+      // Get coordinates from form
+      const loadingLat = formData.get("loading_lat") as string;
+      const loadingLng = formData.get("loading_lng") as string;
+      const unloadingLat = formData.get("unloading_lat") as string;
+      const unloadingLng = formData.get("unloading_lng") as string;
+
+      // Build the insert object with only columns that exist
+      const orderData: any = {
+        tenant_id: userData.tenant_id,
+        order_number: orderNumber,
+        qr_code_data: qrCodeData,
+        qr_code_signature: "pending",
+        status: "pending",
+        loading_point_name: formData.get("loading_point_name") as string,
+        loading_point_address: formData.get("loading_point_address") as string,
+        loading_point_location: `SRID=4326;POINT(${loadingLng} ${loadingLat})`,
+        unloading_point_name: formData.get("unloading_point_name") as string,
+        unloading_point_address: formData.get(
+          "unloading_point_address"
+        ) as string,
+        unloading_point_location: `SRID=4326;POINT(${unloadingLng} ${unloadingLat})`,
+      };
+
+      // Add optional fields only if they exist in the schema
+      const sku = formData.get("sku") as string;
+      if (sku) {
+        orderData.sku = sku;
+      }
+
+      const estimatedDistance = formData.get("estimated_distance") as string;
+      if (estimatedDistance) {
+        orderData.estimated_distance_km = parseFloat(estimatedDistance) || null;
+      }
+
+      const estimatedDuration = formData.get("estimated_duration") as string;
+      if (estimatedDuration) {
+        orderData.estimated_duration_minutes =
+          parseInt(estimatedDuration) || null;
+      }
+
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .insert(orderData)
+        .select()
+        .maybeSingle();
+
+      if (orderError) {
+        console.error("Order creation error:", orderError);
+        throw new Error(`Failed to create order: ${orderError.message}`);
+      }
+
+      if (!order) {
+        throw new Error("Order was not created");
+      }
+
+      // Try to generate QR code (optional - don't fail if this errors)
+      try {
+        await generateQRCode(order.id);
+        alert(
+          "Order created successfully! QR code has been generated and downloaded."
+        );
+      } catch (qrError: any) {
+        console.warn("QR generation failed:", qrError);
+        alert(
+          "Order created successfully! (QR code generation failed - you can generate it later by clicking 'Generate QR' button)"
+        );
+      }
+
+      setShowCreateModal(false);
+      fetchOrders();
+    } catch (error: any) {
+      console.error("Error creating order:", error);
+      alert(error.message || "Failed to create order");
+    }
+  };
+
   const getStatusColor = (status: OrderStatus): string => {
     const colors: Record<OrderStatus, string> = {
       pending: "bg-gray-500",
@@ -112,12 +236,26 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold text-gray-900">
               Logistics Dashboard
             </h1>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Create New Order
-            </button>
+            <div className="flex items-center gap-4">
+              {user && (
+                <span className="text-sm text-gray-600">{user.email}</span>
+              )}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create New Order
+              </button>
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  router.push("/login");
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -231,6 +369,235 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Create Order Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Create New Order
+                </h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateOrder} className="p-6 space-y-6">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Basic Information
+                </h3>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    SKU / Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    name="sku"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., SKU-12345"
+                  />
+                </div>
+              </div>
+
+              {/* Loading Point */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Loading Point
+                </h3>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location Name
+                  </label>
+                  <input
+                    type="text"
+                    name="loading_point_name"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Warehouse A"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Address
+                  </label>
+                  <input
+                    type="text"
+                    name="loading_point_address"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 123 Main St, City, Country"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Latitude
+                    </label>
+                    <input
+                      type="number"
+                      name="loading_lat"
+                      step="any"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., -26.2041"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Longitude
+                    </label>
+                    <input
+                      type="number"
+                      name="loading_lng"
+                      step="any"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., 28.0473"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Unloading Point */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Unloading Point (Destination)
+                </h3>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location Name
+                  </label>
+                  <input
+                    type="text"
+                    name="unloading_point_name"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Customer Location"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Address
+                  </label>
+                  <input
+                    type="text"
+                    name="unloading_point_address"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 456 Oak Ave, City, Country"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Latitude
+                    </label>
+                    <input
+                      type="number"
+                      name="unloading_lat"
+                      step="any"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., -25.7479"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Longitude
+                    </label>
+                    <input
+                      type="number"
+                      name="unloading_lng"
+                      step="any"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., 28.2293"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Estimated Details */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Estimated Delivery Details (Optional)
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Distance (km)
+                    </label>
+                    <input
+                      type="number"
+                      name="estimated_distance"
+                      step="0.1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., 50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Duration (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      name="estimated_duration"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., 60"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Create Order
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

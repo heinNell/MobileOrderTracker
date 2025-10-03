@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Order Tracker - Setup Guide</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #1e40af;
+            margin-top: 30px;
+        }
+        .step {
+            background: #f0f9ff;
+            border-left: 4px solid #2563eb;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #f0fdf4;
+            border-left: 4px solid #22c55e;
+        }
+        .warning {
+            background: #fefce8;
+            border-left: 4px solid #eab308;
+        }
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .button {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 6px;
+            text-decoration: none;
+            margin: 10px 10px 10px 0;
+            font-weight: 600;
+        }
+        .button:hover {
+            background: #1d4ed8;
+        }
+        .button.secondary {
+            background: #64748b;
+        }
+        .button.secondary:hover {
+            background: #475569;
+        }
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+        .checklist li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8fafc;
+            border-radius: 4px;
+        }
+        .checklist li:before {
+            content: "☐ ";
+            margin-right: 10px;
+            color: #64748b;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status-running {
+            background: #22c55e;
+            color: white;
+        }
+        .status-pending {
+            background: #eab308;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Mobile Order Tracker - Setup Guide</h1>
+        
+        <div class="step success">
+            <h3>✅ Dashboard Status <span class="status-badge status-running">RUNNING</span></h3>
+            <p><strong>Your dashboard is live at:</strong></p>
+            <a href="http://localhost:3001" class="button" target="_blank">Open Dashboard</a>
+        </div>
+
+        <div class="step warning">
+            <h3>⚠️ Database Setup Required <span class="status-badge status-pending">PENDING</span></h3>
+            <p>You need to deploy the database schema before the dashboard will work properly.</p>
+        </div>
+
+        <h2>📋 Required Setup Steps</h2>
+
+        <div class="step">
+            <h3>Step 1: Deploy Database Schema</h3>
+            <p><strong>This is the most important step!</strong></p>
+            
+            <ol>
+                <li>
+                    <strong>Open Supabase SQL Editor:</strong><br>
+                    <a href="https://supabase.com/dashboard/project/liagltqpeilbswuqcahp/sql/new" class="button" target="_blank">
+                        Open SQL Editor
+                    </a>
+                </li>
+                <li>
+                    <strong>Copy the schema file:</strong><br>
+                    <div class="code-block">cat /workspaces/MobileOrderTracker/supabase/schema.sql</div>
+                    <p>Or <a href="../supabase/schema.sql" target="_blank">view the schema file here</a></p>
+                </li>
+                <li><strong>Paste the entire contents into the SQL Editor</strong></li>
+                <li><strong>Click "Run" button</strong> (or press Ctrl+Enter)</li>
+                <li>Wait for "Success" message</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Create Admin User</h3>
+            
+            <ol>
+                <li>
+                    <strong>Go to Supabase Authentication:</strong><br>
+                    <a href="https://supabase.com/dashboard/project/liagltqpeilbswuqcahp/auth/users" class="button" target="_blank">
+                        Open Auth Users
+                    </a>
+                </li>
+                <li>Click <strong>"Add User"</strong></li>
+                <li>Enter your email and password</li>
+                <li>Click <strong>"Create User"</strong></li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Add User to Database</h3>
+            
+            <p>After creating the auth user, go back to the SQL Editor and run:</p>
+            
+            <div class="code-block">-- Create tenant
+INSERT INTO public.tenants (name, subdomain) 
+VALUES ('Test Company', 'test')
+RETURNING id;
+
+-- Create user profile (replace YOUR-EMAIL with your actual email)
+INSERT INTO public.users (
+  id, 
+  email, 
+  full_name, 
+  role, 
+  tenant_id,
+  is_active
+)
+VALUES (
+  (SELECT id FROM auth.users WHERE email = 'YOUR-EMAIL@example.com'),
+  'YOUR-EMAIL@example.com',
+  'Admin User',
+  'admin',
+  (SELECT id FROM public.tenants WHERE name = 'Test Company'),
+  true
+);</div>
+            
+            <a href="https://supabase.com/dashboard/project/liagltqpeilbswuqcahp/sql/new" class="button" target="_blank">
+                Open SQL Editor
+            </a>
+        </div>
+
+        <div class="step">
+            <h3>Step 4: Test the System</h3>
+            
+            <ol>
+                <li><strong>Login to Dashboard:</strong> <a href="http://localhost:3001" target="_blank">localhost:3001</a></li>
+                <li>Use the email and password you created</li>
+                <li>Create your first order</li>
+                <li>Generate a QR code</li>
+                <li>Test the features!</li>
+            </ol>
+        </div>
+
+        <h2>✅ Setup Checklist</h2>
+        
+        <ul class="checklist">
+            <li>Dashboard running on localhost:3001</li>
+            <li>Database schema deployed to Supabase</li>
+            <li>Admin user created in Supabase Auth</li>
+            <li>User profile added to database</li>
+            <li>Successfully logged into dashboard</li>
+            <li>First order created</li>
+        </ul>
+
+        <h2>🔗 Quick Links</h2>
+        
+        <a href="http://localhost:3001" class="button" target="_blank">Dashboard</a>
+        <a href="https://supabase.com/dashboard/project/liagltqpeilbswuqcahp" class="button secondary" target="_blank">Supabase Dashboard</a>
+        <a href="../QUICKSTART.md" class="button secondary" target="_blank">Full Documentation</a>
+
+        <h2>📱 Optional: Mobile App Setup</h2>
+        
+        <p>To run the mobile app, open a new terminal and run:</p>
+        
+        <div class="code-block">cd /workspaces/MobileOrderTracker/mobile-app
+npm install
+npm start</div>
+
+        <h2>❓ Need Help?</h2>
+        
+        <ul>
+            <li>Check <code>QUICKSTART.md</code> for detailed instructions</li>
+            <li>View <code>docs/SETUP_GUIDE.md</code> for comprehensive setup</li>
+            <li>Read <code>PROJECT_SUMMARY.md</code> for complete overview</li>
+        </ul>
+
+        <div class="step success">
+            <h3>🎉 You're Almost There!</h3>
+            <p>Complete Steps 1-3 above and you'll have a fully functional logistics management system!</p>
+        </div>
+    </div>
+</body>
+</html>
