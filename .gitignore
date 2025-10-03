@@ -274,3 +274,8 @@ target/
 
 # Project-specific
 # Add any project-specific patterns here
+.env
+export_env.sh
+.env*
+export_env.sh
+export_env.ps1

@@ -1,0 +1,13 @@
+# Supabase Configuration
+$env:EXPO_PUBLIC_SUPABASE_URL="https://liagltqpeilbswuqcahp.supabase.co"
+$env:EXPO_PUBLIC_SUPABASE_KEY="sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK"
+
+# Vite Configuration
+$env:VITE_SUPABASE_URL="https://liagltqpeilbswuqcahp.supabase.co"
+$env:VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY="sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK"
+
+# Legacy API Keys
+$env:SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s"
+$env:SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM1NzE4NSwiZXhwIjoyMDczOTMzMTg1fQ.dtEl-YMJZ-YmEaS9B7Loy7I3bRcf-2sHjpHRF8sCD8o"
+
+# Other configurations...
