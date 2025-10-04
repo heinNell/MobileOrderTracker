@@ -1009,3 +1009,122 @@ void callbackDispatcher() {
 ```
 
 This integration ensures robust, user-friendly scanning tailored for logistics, with seamless Supabase tie-in and growth-ready scalability. For custom UI overlays or AR enhancements (new in 2025 Flutter), extend the widget as needed. If expanding to barcode support beyond QR, `mobile_scanner` handles it natively.
+
+### Barcode Scanning Integration in the Mobile Application (2025 Edition)
+
+The barcode scanning feature extends the logistics mobile app's capabilities, allowing drivers to scan product barcodes (e.g., for SKUs during loading/unloading) to verify inventory, update order statuses, or report discrepancies in real-time. This complements the existing QR code scanning for order activation, enabling comprehensive handling of both 1D barcodes (like EAN, Code128) and 2D codes (like QR) within the same interface. As of October 2025, we recommend the `ai_barcode_scanner` package (version 7.1.0) for its AI-enhanced detection using MLKit, which improves accuracy in varied lighting conditions common in logistics environments. Built on `mobile_scanner`, it supports multiple formats, real-time scanning, and cross-platform performance on Android (CameraX) and iOS (AVFoundation), with offline fallback for queuing scans. For commercial-grade precision, alternatives like Scanbot SDK offer AI-powered scanning, but `ai_barcode_scanner` provides a free, open-source solution suitable for scalable growth.
+
+
+
+
+#### Key Implementation Details
+- **Package Installation**: Add `ai_barcode_scanner: ^7.1.0` via `flutter pub add`. Ensure camera permissions are set (as in QR scanning). It depends on `mobile_scanner` internally, so no additional installs needed.
+- **Workflow**: Launch from order detail view (e.g., "Scan SKU"). On detection, validate the barcode against order metadata (e.g., match SKUs), update Supabase (e.g., mark as loaded), and handle offline queuing with Hive for sync.
+- **Security and Usability**: Restrict to authenticated drivers; use AI for robust detection. Customize UI with overlays, torch, and zoom for warehouse use.
+- **Supported Formats**: Includes QR, Code39, Code128, EAN8/13, UPC-A/E, PDF417, etc.—ideal for logistics SKUs.
+- **Offline Fallback**: Queue scanned data locally; integrate with background sync for resilience.
+- **Performance**: Real-time at high FPS; AI reduces false positives in busy scenes.
+
+#### Code Implementation
+##### Barcode Scanner Widget (Dart)
+Adapt the QR scanner to handle barcodes, processing detections similarly but checking formats.
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:ai_barcode_scanner/ai_barcode_scanner.dart';
+import 'package:http/http.dart' as http;
+import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+
+class BarcodeScannerPage extends StatefulWidget {
+  final String orderId; // Pass order ID for context
+  const BarcodeScannerPage({super.key, required this.orderId});
+
+  @override
+  _BarcodeScannerPageState createState() => _BarcodeScannerPageState();
+}
+
+class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
+  Box? offlineQueue;
+
+  @override
+  void initState() {
+    super.initState();
+    _initHive();
+  }
+
+  Future<void> _initHive() async {
+    await Hive.initFlutter();
+    offlineQueue = await Hive.openBox('offline_scans');
+  }
+
+  void _onDetect(String? code, MobileScannerArguments? args) {
+    if (code != null) {
+      _processBarcode(code);
+    }
+  }
+
+  Future<void> _processBarcode(String code) async {
+    // Validate against order SKUs (fetch from Supabase or local)
+    try {
+      final response = await http.post(
+        Uri.parse('https://your-supabase-url/functions/v1/barcode_validate'),
+        headers: {'Authorization': 'Bearer ${Supabase.instance.client.auth.currentSession?.accessToken}'},
+        body: jsonEncode({'barcode': code, 'order_id': widget.orderId}),
+      );
+      if (response.statusCode == 200) {
+        // Update order status, e.g., mark SKU as scanned
+        await Supabase.instance.client.from('orders').update({'skus_scanned': code}).eq('id', widget.orderId);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Barcode $code validated!')));
+        Navigator.pop(context);
+      } else {
+        _queueOffline(code);
+      }
+    } catch (e) {
+      _queueOffline(code);
+    }
+  }
+
+  void _queueOffline(String code) {
+    offlineQueue?.add({'barcode': code, 'order_id': widget.orderId, 'timestamp': DateTime.now().toIso8601String()});
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline: Scan queued for sync')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scan Barcode')),
+      body: AiBarcodeScanner(
+        onScan: _onDetect,
+        validator: (value) => value.startsWith('valid_prefix'), // Optional AI validation
+        canPop: false,
+        bottomBar: const SizedBox(), // Customize UI
+      ),
+    );
+  }
+}
+```
+
+
+
+
+##### Edge Function for Validation (Deno)
+Create a Supabase Edge Function to verify barcodes against order data.
+
+```typescript
+// barcode_validate.ts
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { supabaseClient } from "./supabase.ts";
+
+serve(async (req) => {
+  const { barcode, order_id } = await req.json();
+  const { data: order } = await supabaseClient.from('orders').select('skus').eq('id', order_id).single();
+  if (order && order.skus.includes(barcode)) {
+    return new Response(JSON.stringify({ valid: true }), { status: 200 });
+  }
+  return new Response('Invalid barcode', { status: 403 });
+});
+```
+
+This integration enhances inventory management, tying barcode data to Supabase for seamless updates and analytics. For further customization, like multi-barcode batch scanning, extend with package options.

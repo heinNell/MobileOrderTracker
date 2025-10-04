@@ -279,3 +279,6 @@ export_env.sh
 .env*
 export_env.sh
 export_env.ps1
+
+# Local Netlify folder
+.netlify

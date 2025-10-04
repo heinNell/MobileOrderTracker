@@ -1,0 +1,46 @@
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { performance } from "https://deno.land/std@0.177.0/node/performance.ts";
+
+// Initialize Supabase client
+const supabaseClient = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+);
+
+// Benchmark configuration
+const BENCHMARK_CONFIG = {
+  numRequests: 100,
+  concurrentRequests: 10,
+};
+
+async function processQR(qrData) {
+  const start = performance.now();
+  const response = await fetch('http://localhost:8000/process-qr', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ qrData }),
+  });
+  const end = performance.now();
+  return { duration: end - start, ok: response.ok };
+}
+
+async function runBenchmarks() {
+  console.log('Starting QR processing benchmarks...');
+  const results = [];
+  
+  for (let i = 0; i < BENCHMARK_CONFIG.numRequests; i++) {
+    const result = await processQR('test-qr-data');
+    results.push(result);
+  }
+  
+  const averageDuration = results.reduce((sum, res) => sum + res.duration, 0) / results.length;
+  const successRate = results.filter(res => res.ok).length / results.length * 100;
+  
+  console.log(`Average duration: ${averageDuration.toFixed(2)}ms`);
+  console.log(`Success rate: ${successRate.toFixed(2)}%`);
+}
+
+runBenchmarks();
