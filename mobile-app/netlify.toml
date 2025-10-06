@@ -1,0 +1,56 @@
+[build]
+  base = "."
+  command = "echo 'Static build ready'"
+  publish = "dist"
+
+# Environment variables for mobile app
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_VERSION = "9"
+  EXPO_PUBLIC_SUPABASE_URL = "https://liagltqpeilbswuqcahp.supabase.co"
+  EXPO_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s"
+  EXPO_PUBLIC_QR_CODE_SECRET = "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo="
+  EXPO_PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg"
+
+# Headers for PWA functionality
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Content-Type = "application/javascript"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Content-Type = "text/css"
+
+# PWA redirects
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Deep link handling for mobile app scheme
+[[redirects]]
+  from = "/order/:id"
+  to = "/index.html?orderId=:id"
+  status = 200
+
+# Custom domain deep link redirect
+[[redirects]]
+  from = "/qr/:id"
+  to = "ordertracker://order/:id"
+  status = 301
+  force = true

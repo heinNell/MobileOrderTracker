@@ -18,6 +18,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 const QR_CONFIG = {
   baseUrl: "https://liagltqpeilbswuqcahp.supabase.co",
   mobileAppScheme: "ordertracker://", // Deep link scheme for mobile app
+  mobileAppUrl: "https://magnificent-snickerdoodle-018e86.netlify.app", // Deployed mobile app
   fallbackUrl: "https://liagltqpeilbswuqcahp.supabase.co/app/orders", // Web fallback
   expirationHours: 24,
 };
@@ -110,10 +111,10 @@ export const generateSimpleQRCode = async (
 
   // Create simple mobile app URL for QR code
   const mobileUrl = `${QR_CONFIG.mobileAppScheme}order/${orderId}`;
-  const webUrl = `${QR_CONFIG.fallbackUrl}/${orderId}`;
+  const webUrl = `${QR_CONFIG.mobileAppUrl}?orderId=${orderId}`;
 
-  // For mobile compatibility, use simple URL instead of complex JSON
-  const qrCodeContent = mobileUrl;
+  // For mobile compatibility, use the web URL as primary with deep link as backup
+  const qrCodeContent = webUrl;
 
   const timestamp = Date.now();
   const expiresAt = new Date(
@@ -426,7 +427,7 @@ export const validateQRCode = async (
           orderId,
           orderData: order,
           mobileUrl: qrCodeData,
-          webUrl: `${QR_CONFIG.fallbackUrl}/${orderId}`,
+          webUrl: `${QR_CONFIG.mobileAppUrl}?orderId=${orderId}`,
         };
       }
     }
@@ -489,7 +490,7 @@ export const generateMobileDeepLink = (orderId: string): string => {
 
 // Generate web fallback URL
 export const generateWebFallbackUrl = (orderId: string): string => {
-  return `${QR_CONFIG.fallbackUrl}/${orderId}`;
+  return `${QR_CONFIG.mobileAppUrl}?orderId=${orderId}`;
 };
 
 // Improved QR code download with proper filename and metadata
