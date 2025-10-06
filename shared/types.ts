@@ -96,6 +96,15 @@ export interface Tenant {
   updated_at: string;
 }
 
+export interface TransporterSupplier {
+  name: string;
+  contact_phone?: string;
+  contact_email?: string;
+  cost_amount?: number;
+  cost_currency?: string;
+  notes?: string;
+}
+
 export interface Order {
   id: string;
   tenant_id: string;
@@ -129,6 +138,8 @@ export interface Order {
   estimated_duration_minutes?: number;
   actual_start_time?: string;
   actual_end_time?: string;
+  // Transporter supplier information
+  transporter_supplier?: TransporterSupplier;
   metadata?: Record<string, any>;
   created_by?: string;
   created_at: string;

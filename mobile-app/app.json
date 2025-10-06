@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "ordertracker",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -15,11 +16,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.logistics.ordertracker",
+      "associatedDomains": ["applinks:ordertracker.app"],
       "infoPlist": {
         "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
         "NSLocationWhenInUseUsageDescription": "This app requires location access to track deliveries",
         "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": ["location", "fetch"],
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "com.logistics.ordertracker",
+            "CFBundleURLSchemes": ["ordertracker"]
+          }
+        ]
       }
     },
     "android": {
@@ -28,6 +36,17 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.logistics.ordertracker",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "ordertracker"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",

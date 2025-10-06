@@ -2,12 +2,25 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase, generateQRCode } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import type { Order, OrderStatus } from "../../../shared/types";
 import { useRouter } from "next/navigation";
 import { parsePostGISPoint } from "../../../shared/locationUtils";
-import { handleApiError, handleSuccess, validateRequired, validateCoordinates } from "../../lib/utils";
+import {
+  handleApiError,
+  handleSuccess,
+  validateRequired,
+  validateCoordinates,
+} from "../../lib/utils";
 import { toast } from "react-hot-toast";
+import EnhancedOrderForm from "../components/EnhancedOrderForm";
+import QRDebugger from "../components/QRDebugger";
+import { exportOrderToPDF } from "../../lib/pdf-export";
+import {
+  generateQRCode,
+  downloadQRCode,
+  testQRCodeFlow,
+} from "../../lib/qr-service";
 
 interface DebugInfo {
   userStatus: string;
@@ -22,18 +35,24 @@ export default function EnhancedOrdersPage() {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [showDebugModal, setShowDebugModal] = useState(false);
+  const [showQRDebugger, setShowQRDebugger] = useState(false);
+  const [debugOrderId, setDebugOrderId] = useState<string>("");
   const [user, setUser] = useState<any>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
-    userStatus: 'Unknown',
+    userStatus: "Unknown",
     tenantInfo: null,
     orderCount: 0,
-    rlsStatus: 'Unknown',
-    lastError: null
+    rlsStatus: "Unknown",
+    lastError: null,
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
-  const [sortBy, setSortBy] = useState<"created_at" | "order_number" | "status">("created_at");
+  const [sortBy, setSortBy] = useState<
+    "created_at" | "order_number" | "status"
+  >("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -55,28 +74,28 @@ export default function EnhancedOrdersPage() {
       } = await supabase.auth.getSession();
 
       if (!session) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'Not authenticated',
-          lastError: 'No active session found'
+          userStatus: "Not authenticated",
+          lastError: "No active session found",
         }));
         router.push("/login");
         return;
       }
 
       setUser(session.user);
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        userStatus: 'Authenticated'
+        userStatus: "Authenticated",
       }));
-      
+
       await performDiagnostics(session.user);
       await fetchOrders();
       subscribeToOrders();
     } catch (error: any) {
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        lastError: error.message
+        lastError: error.message,
       }));
       handleApiError(error, "Failed to authenticate");
     }
@@ -87,7 +106,8 @@ export default function EnhancedOrdersPage() {
       // Check user-tenant linkage
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select(`
+        .select(
+          `
           id,
           email,
           full_name,
@@ -99,34 +119,35 @@ export default function EnhancedOrdersPage() {
             name,
             is_active
           )
-        `)
+        `
+        )
         .eq("id", user.id)
         .maybeSingle();
 
       if (userError) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'User not found in users table',
-          lastError: userError.message
+          userStatus: "User not found in users table",
+          lastError: userError.message,
         }));
         return;
       }
 
       if (!userData) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'User exists in auth but not in users table',
-          lastError: 'User profile incomplete'
+          userStatus: "User exists in auth but not in users table",
+          lastError: "User profile incomplete",
         }));
         return;
       }
 
       if (!userData.tenant_id) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'User not linked to any tenant',
+          userStatus: "User not linked to any tenant",
           tenantInfo: null,
-          lastError: 'User has no tenant assignment'
+          lastError: "User has no tenant assignment",
         }));
         return;
       }
@@ -137,19 +158,20 @@ export default function EnhancedOrdersPage() {
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", userData.tenant_id);
 
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        userStatus: 'User properly configured',
+        userStatus: "User properly configured",
         tenantInfo: userData.tenants,
         orderCount: orderCount || 0,
-        rlsStatus: countError ? 'RLS may be blocking access' : 'RLS working correctly',
-        lastError: countError?.message || null
+        rlsStatus: countError
+          ? "RLS may be blocking access"
+          : "RLS working correctly",
+        lastError: countError?.message || null,
       }));
-
     } catch (error: any) {
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        lastError: error.message
+        lastError: error.message,
       }));
     }
   };
@@ -157,7 +179,7 @@ export default function EnhancedOrdersPage() {
   const fetchOrders = async (page = 1) => {
     try {
       setLoading(true);
-      
+
       // First, verify user access
       const {
         data: { session },
@@ -179,23 +201,27 @@ export default function EnhancedOrdersPage() {
       }
 
       if (!userData) {
-        throw new Error("User not found in users table. Please ensure your profile is set up.");
+        throw new Error(
+          "User not found in users table. Please ensure your profile is set up."
+        );
       }
 
       if (!userData.tenant_id) {
-        throw new Error("User is not linked to any organization. Please contact your administrator.");
+        throw new Error(
+          "User is not linked to any organization. Please contact your administrator."
+        );
       }
-      
+
       // Get total count for pagination
       const { count, error: countError } = await supabase
         .from("orders")
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", userData.tenant_id);
-      
+
       if (countError) {
         throw new Error(`Failed to count orders: ${countError.message}`);
       }
-      
+
       if (count) {
         setTotalPages(Math.ceil(count / ordersPerPage));
       }
@@ -224,18 +250,17 @@ export default function EnhancedOrdersPage() {
       }
 
       setOrders(data || []);
-      
+
       // Update debug info
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
         orderCount: count || 0,
-        lastError: null
+        lastError: null,
       }));
-
     } catch (error: any) {
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        lastError: error.message
+        lastError: error.message,
       }));
       handleApiError(error, "Failed to fetch orders");
     } finally {
@@ -254,7 +279,7 @@ export default function EnhancedOrdersPage() {
           table: "orders",
         },
         () => {
-          fetchOrders(currentPage).catch(error => {
+          fetchOrders(currentPage).catch((error) => {
             handleApiError(error, "Failed to update orders");
           });
         }
@@ -291,70 +316,87 @@ export default function EnhancedOrdersPage() {
 
   const handleGenerateQR = async (orderId: string) => {
     try {
-      const qrCode = await generateQRCode(orderId);
+      setLoading(true);
 
-      // Create download link for QR code
-      const link = document.createElement("a");
-      link.href = qrCode.image;
-      link.download = `order-${orderId}-qr.png`;
-      link.click();
+      // First test the QR code flow to ensure everything works
+      const testResult = await testQRCodeFlow(orderId);
 
-      handleSuccess("QR code generated and downloaded successfully!");
+      if (!testResult.generation) {
+        throw new Error(
+          "QR code generation test failed: " + testResult.details.error
+        );
+      }
+
+      // Generate the actual QR code
+      const qrResult = await generateQRCode(orderId);
+
+      // Find the order for better filename
+      const order = orders.find((o) => o.id === orderId);
+
+      // Download the QR code with proper filename
+      downloadQRCode(qrResult.image, orderId, order?.order_number);
+
+      // Show success with additional info
+      const successMessage = `QR code generated successfully! Mobile app link: ${qrResult.mobileUrl}`;
+      handleSuccess(successMessage);
+
+      // Log the mobile app URL for debugging
+      console.log("Mobile app deep link:", qrResult.mobileUrl);
+      console.log("Web fallback URL:", qrResult.webUrl);
+      console.log(
+        "QR validation test:",
+        testResult.validation ? "✅ PASSED" : "❌ FAILED"
+      );
     } catch (error: any) {
       console.error("QR Generation Error:", error);
-      
-      // Enhanced QR error handling
+
+      // Enhanced QR error handling with specific solutions
       let errorMessage = "Failed to generate QR code";
-      if (error.message.includes("QR_CODE_SECRET")) {
-        errorMessage = "QR code generation is not properly configured. Please contact your administrator.";
-      } else if (error.message.includes("Not authenticated")) {
-        errorMessage = "Authentication expired. Please refresh the page and try again.";
+      let suggestion = "";
+
+      if (error.message.includes("Not authenticated")) {
+        errorMessage = "Authentication expired";
+        suggestion = "Please refresh the page and try again.";
       } else if (error.message.includes("Insufficient permissions")) {
-        errorMessage = "You don't have permission to generate QR codes for this order.";
+        errorMessage = "Permission denied";
+        suggestion =
+          "You don't have permission to generate QR codes for this order.";
+      } else if (error.message.includes("Order not found")) {
+        errorMessage = "Order not accessible";
+        suggestion =
+          "This order may have been deleted or you don't have access to it.";
+      } else if (error.message.includes("Edge function")) {
+        errorMessage = "Using fallback QR generation";
+        suggestion =
+          "QR code generated with basic method. Contact administrator if issues persist.";
+
+        // If edge function fails, try client-side generation as last resort
+        try {
+          const qrResult = await generateQRCode(orderId);
+          const order = orders.find((o) => o.id === orderId);
+          downloadQRCode(qrResult.image, orderId, order?.order_number);
+          handleSuccess("QR code generated using fallback method");
+          return;
+        } catch (fallbackError) {
+          console.error("Fallback QR generation also failed:", fallbackError);
+        }
+      } else if (error.message.includes("Canvas not supported")) {
+        errorMessage = "Browser compatibility issue";
+        suggestion =
+          "Please try using a modern browser (Chrome, Firefox, Safari, Edge).";
       }
-      
-      handleApiError(new Error(errorMessage), "QR Code Generation Failed");
+
+      const fullMessage = suggestion
+        ? `${errorMessage}. ${suggestion}`
+        : errorMessage;
+      handleApiError(new Error(fullMessage), "QR Code Generation Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreateOrder = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-
+  const handleCreateOrder = async (orderData: Partial<Order>) => {
     try {
-      // Form validation
-      const requiredFields = [
-        "loading_point_name",
-        "loading_point_address",
-        "loading_lat",
-        "loading_lng",
-        "unloading_point_name",
-        "unloading_point_address",
-        "unloading_lat",
-        "unloading_lng"
-      ];
-
-      for (const field of requiredFields) {
-        const value = formData.get(field) as string;
-        if (!validateRequired(value)) {
-          throw new Error(`Field ${field} is required`);
-        }
-      }
-
-      // Validate coordinates
-      const loadingLat = parseFloat(formData.get("loading_lat") as string);
-      const loadingLng = parseFloat(formData.get("loading_lng") as string);
-      const unloadingLat = parseFloat(formData.get("unloading_lat") as string);
-      const unloadingLng = parseFloat(formData.get("unloading_lng") as string);
-
-      if (!validateCoordinates(loadingLat, loadingLng)) {
-        throw new Error("Invalid loading point coordinates");
-      }
-
-      if (!validateCoordinates(unloadingLat, unloadingLng)) {
-        throw new Error("Invalid unloading point coordinates");
-      }
-
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -387,44 +429,20 @@ export default function EnhancedOrdersPage() {
       const orderNumber = `ORD-${Date.now()}`;
       const qrCodeData = `${orderNumber}-${Date.now()}`;
 
-      // Build the insert object with only columns that exist
-      const orderData: any = {
+      // Build the insert object
+      const insertData: any = {
         tenant_id: userData.tenant_id,
         order_number: orderNumber,
         qr_code_data: qrCodeData,
         qr_code_signature: "pending",
         status: "pending",
-        loading_point_name: formData.get("loading_point_name") as string,
-        loading_point_address: formData.get("loading_point_address") as string,
-        loading_point_location: `SRID=4326;POINT(${loadingLng} ${loadingLat})`,
-        unloading_point_name: formData.get("unloading_point_name") as string,
-        unloading_point_address: formData.get(
-          "unloading_point_address"
-        ) as string,
-        unloading_point_location: `SRID=4326;POINT(${unloadingLng} ${unloadingLat})`,
-        created_by: session.user.id
+        created_by: session.user.id,
+        ...orderData,
       };
-
-      // Add optional fields only if they exist in the schema
-      const sku = formData.get("sku") as string;
-      if (sku) {
-        orderData.sku = sku;
-      }
-
-      const estimatedDistance = formData.get("estimated_distance") as string;
-      if (estimatedDistance) {
-        orderData.estimated_distance_km = parseFloat(estimatedDistance) || null;
-      }
-
-      const estimatedDuration = formData.get("estimated_duration") as string;
-      if (estimatedDuration) {
-        orderData.estimated_duration_minutes =
-          parseInt(estimatedDuration) || null;
-      }
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .insert(orderData)
+        .insert(insertData)
         .select()
         .maybeSingle();
 
@@ -439,12 +457,17 @@ export default function EnhancedOrdersPage() {
       // Try to generate QR code (optional - don't fail if this errors)
       try {
         await generateQRCode(order.id);
-        handleSuccess("Order created successfully! QR code has been generated and downloaded.");
+        handleSuccess(
+          "Order created successfully! QR code has been generated and downloaded."
+        );
       } catch (qrError: any) {
         console.warn("QR generation failed:", qrError);
-        toast("Order created successfully! (QR code generation failed - you can generate it later)", {
-          icon: "⚠️",
-        });
+        toast(
+          "Order created successfully! (QR code generation failed - you can generate it later)",
+          {
+            icon: "⚠️",
+          }
+        );
       }
 
       setShowCreateModal(false);
@@ -452,6 +475,52 @@ export default function EnhancedOrdersPage() {
     } catch (error: any) {
       handleApiError(error, "Failed to create order");
     }
+  };
+
+  const handleUpdateOrder = async (orderData: Partial<Order>) => {
+    if (!editingOrder) return;
+
+    try {
+      const { data: updatedOrder, error } = await supabase
+        .from("orders")
+        .update(orderData)
+        .eq("id", editingOrder.id)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`Failed to update order: ${error.message}`);
+      }
+
+      handleSuccess("Order updated successfully!");
+      setShowEditModal(false);
+      setEditingOrder(null);
+      await fetchOrders(currentPage);
+    } catch (error: any) {
+      handleApiError(error, "Failed to update order");
+    }
+  };
+
+  const handleExportToPDF = async (order: Order) => {
+    try {
+      setLoading(true);
+      await exportOrderToPDF(order, {
+        includeQR: true,
+        includeTransporter: true,
+        companyName: "Mobile Order Tracker",
+        companyAddress: "Professional Logistics Management System",
+      });
+      handleSuccess("PDF exported successfully!");
+    } catch (error: any) {
+      handleApiError(error, "Failed to export PDF");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditOrder = (order: Order) => {
+    setEditingOrder(order);
+    setShowEditModal(true);
   };
 
   const runQuickDiagnostic = async () => {
@@ -493,7 +562,7 @@ export default function EnhancedOrdersPage() {
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
-      fetchOrders(page).catch(error => {
+      fetchOrders(page).catch((error) => {
         handleApiError(error, "Failed to change page");
       });
     }
@@ -575,7 +644,9 @@ export default function EnhancedOrdersPage() {
       <div className="p-4 md:p-6">
         <div className="mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Orders Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Orders Management
+            </h1>
             <div className="mt-4 md:mt-0 flex space-x-3">
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -609,24 +680,30 @@ export default function EnhancedOrdersPage() {
         <div className="bg-white shadow rounded-lg p-4 mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-gray-900">{orders.length}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {orders.length}
+              </div>
               <div className="text-sm text-gray-500">Total Orders</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-blue-600">
-                {orders.filter(o => o.status === 'pending').length}
+                {orders.filter((o) => o.status === "pending").length}
               </div>
               <div className="text-sm text-gray-500">Pending</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600">
-                {orders.filter(o => o.status === 'completed').length}
+                {orders.filter((o) => o.status === "completed").length}
               </div>
               <div className="text-sm text-gray-500">Completed</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-yellow-600">
-                {orders.filter(o => ['in_transit', 'loading', 'unloading'].includes(o.status)).length}
+                {
+                  orders.filter((o) =>
+                    ["in_transit", "loading", "unloading"].includes(o.status)
+                  ).length
+                }
               </div>
               <div className="text-sm text-gray-500">In Progress</div>
             </div>
@@ -637,7 +714,10 @@ export default function EnhancedOrdersPage() {
         <div className="bg-white shadow rounded-lg p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
-              <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="search"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Search Orders
               </label>
               <input
@@ -650,14 +730,19 @@ export default function EnhancedOrdersPage() {
               />
             </div>
             <div>
-              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="status"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Filter by Status
               </label>
               <select
                 id="status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "all")}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as OrderStatus | "all")
+                }
               >
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
@@ -691,25 +776,29 @@ export default function EnhancedOrdersPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th 
+                  <th
                     className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("order_number")}
                   >
                     <div className="flex items-center">
                       Order Number
                       {sortBy === "order_number" && (
-                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                        <span className="ml-1">
+                          {sortOrder === "asc" ? "↑" : "↓"}
+                        </span>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("status")}
                   >
                     <div className="flex items-center">
                       Status
                       {sortBy === "status" && (
-                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                        <span className="ml-1">
+                          {sortOrder === "asc" ? "↑" : "↓"}
+                        </span>
                       )}
                     </div>
                   </th>
@@ -722,14 +811,16 @@ export default function EnhancedOrdersPage() {
                   <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Unloading Point
                   </th>
-                  <th 
+                  <th
                     className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("created_at")}
                   >
                     <div className="flex items-center">
                       Created
                       {sortBy === "created_at" && (
-                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                        <span className="ml-1">
+                          {sortOrder === "asc" ? "↑" : "↓"}
+                        </span>
                       )}
                     </div>
                   </th>
@@ -746,7 +837,9 @@ export default function EnhancedOrdersPage() {
                         {orders.length === 0 ? (
                           <div>
                             <p className="text-lg mb-2">No orders found</p>
-                            <p className="text-sm mb-4">Get started by creating your first order</p>
+                            <p className="text-sm mb-4">
+                              Get started by creating your first order
+                            </p>
                             <button
                               onClick={() => setShowCreateModal(true)}
                               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -801,18 +894,46 @@ export default function EnhancedOrdersPage() {
                         {new Date(order.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleGenerateQR(order.id)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          QR
-                        </button>
-                        <button
-                          onClick={() => router.push(`/orders/${order.id}`)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          View
-                        </button>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleGenerateQR(order.id)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Generate QR Code"
+                          >
+                            QR
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDebugOrderId(order.id);
+                              setShowQRDebugger(true);
+                            }}
+                            className="text-yellow-600 hover:text-yellow-900"
+                            title="Debug QR Code"
+                          >
+                            🧪
+                          </button>
+                          <button
+                            onClick={() => handleEditOrder(order)}
+                            className="text-green-600 hover:text-green-900"
+                            title="Edit Order"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleExportToPDF(order)}
+                            className="text-purple-600 hover:text-purple-900"
+                            title="Export to PDF"
+                          >
+                            PDF
+                          </button>
+                          <button
+                            onClick={() => router.push(`/orders/${order.id}`)}
+                            className="text-gray-600 hover:text-gray-900"
+                            title="View Details"
+                          >
+                            View
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -825,8 +946,8 @@ export default function EnhancedOrdersPage() {
           {totalPages > 1 && (
             <div className="px-4 md:px-6 py-4 bg-gray-50 flex items-center justify-between border-t border-gray-200">
               <div className="text-sm text-gray-700">
-                Showing page <span className="font-medium">{currentPage}</span> of{" "}
-                <span className="font-medium">{totalPages}</span>
+                Showing page <span className="font-medium">{currentPage}</span>{" "}
+                of <span className="font-medium">{totalPages}</span>
               </div>
               <div className="flex space-x-2">
                 <button
@@ -870,8 +991,18 @@ export default function EnhancedOrdersPage() {
                   onClick={() => setShowDebugModal(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
@@ -884,7 +1015,9 @@ export default function EnhancedOrdersPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900">Tenant Information</h3>
+                <h3 className="font-semibold text-gray-900">
+                  Tenant Information
+                </h3>
                 <pre className="text-sm text-gray-600 bg-gray-100 p-2 rounded">
                   {JSON.stringify(debugInfo.tenantInfo, null, 2)}
                 </pre>
@@ -892,7 +1025,9 @@ export default function EnhancedOrdersPage() {
 
               <div>
                 <h3 className="font-semibold text-gray-900">Order Count</h3>
-                <p className="text-sm text-gray-600">{debugInfo.orderCount} orders visible to current user</p>
+                <p className="text-sm text-gray-600">
+                  {debugInfo.orderCount} orders visible to current user
+                </p>
               </div>
 
               <div>
@@ -903,7 +1038,9 @@ export default function EnhancedOrdersPage() {
               {debugInfo.lastError && (
                 <div>
                   <h3 className="font-semibold text-red-900">Last Error</h3>
-                  <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{debugInfo.lastError}</p>
+                  <p className="text-sm text-red-600 bg-red-100 p-2 rounded">
+                    {debugInfo.lastError}
+                  </p>
                 </div>
               )}
 
@@ -926,232 +1063,36 @@ export default function EnhancedOrdersPage() {
         </div>
       )}
 
-      {/* Create Order Modal - Same as before */}
+      {/* Enhanced Order Form Modals */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Create New Order
-                </h2>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
+        <EnhancedOrderForm
+          onSubmit={handleCreateOrder}
+          onCancel={() => setShowCreateModal(false)}
+          isEditing={false}
+        />
+      )}
 
-            <form onSubmit={handleCreateOrder} className="p-6 space-y-6">
-              {/* Same form fields as before */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Basic Information
-                </h3>
+      {showEditModal && editingOrder && (
+        <EnhancedOrderForm
+          order={editingOrder}
+          onSubmit={handleUpdateOrder}
+          onCancel={() => {
+            setShowEditModal(false);
+            setEditingOrder(null);
+          }}
+          isEditing={true}
+        />
+      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    SKU / Reference Number
-                  </label>
-                  <input
-                    type="text"
-                    name="sku"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., SKU-12345"
-                  />
-                </div>
-              </div>
-
-              {/* Loading Point */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Loading Point
-                </h3>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name
-                  </label>
-                  <input
-                    type="text"
-                    name="loading_point_name"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Warehouse A"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Address
-                  </label>
-                  <input
-                    type="text"
-                    name="loading_point_address"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., 123 Main St, City, Country"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Latitude
-                    </label>
-                    <input
-                      type="number"
-                      name="loading_lat"
-                      step="any"
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., -26.2041"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Longitude
-                    </label>
-                    <input
-                      type="number"
-                      name="loading_lng"
-                      step="any"
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 28.0473"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Unloading Point */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Unloading Point (Destination)
-                </h3>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name
-                  </label>
-                  <input
-                    type="text"
-                    name="unloading_point_name"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Customer Location"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Address
-                  </label>
-                  <input
-                    type="text"
-                    name="unloading_point_address"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., 456 Oak Ave, City, Country"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Latitude
-                    </label>
-                    <input
-                      type="number"
-                      name="unloading_lat"
-                      step="any"
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., -25.7479"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Longitude
-                    </label>
-                    <input
-                      type="number"
-                      name="unloading_lng"
-                      step="any"
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 28.2293"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Estimated Details */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Estimated Delivery Details (Optional)
-                </h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Distance (km)
-                    </label>
-                    <input
-                      type="number"
-                      name="estimated_distance"
-                      step="0.1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Duration (minutes)
-                    </label>
-                    <input
-                      type="number"
-                      name="estimated_duration"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 60"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Create Order
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* QR Code Debugger */}
+      {showQRDebugger && debugOrderId && (
+        <QRDebugger
+          orderId={debugOrderId}
+          onClose={() => {
+            setShowQRDebugger(false);
+            setDebugOrderId("");
+          }}
+        />
       )}
     </div>
   );

@@ -1,9 +1,16 @@
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Mobile Order Tracker - Dashboard",
   description: "Logistics management and order tracking system",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16", type: "image/x-icon" },
+      { url: "/favicon.svg", sizes: "any", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -13,13 +20,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#2563eb" />
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+      </head>
       <body suppressHydrationWarning className="antialiased">
         <div className="flex h-screen bg-gray-100">
           {/* Sidebar */}
           <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
             <div className="flex flex-col flex-grow pt-5 bg-white overflow-y-auto border-r">
               <div className="flex items-center justify-center flex-shrink-0 px-4">
-                <h1 className="text-xl font-bold text-blue-600">Mobile Order Tracker</h1>
+                <h1 className="text-xl font-bold text-blue-600">
+                  Mobile Order Tracker
+                </h1>
               </div>
               <div className="mt-5 flex-grow flex flex-col">
                 <nav className="flex-1 px-2 pb-4 space-y-1">
@@ -78,9 +93,7 @@ export default function RootLayout({
 
           {/* Main content */}
           <div className="md:pl-64 flex flex-col flex-1">
-            <main className="flex-1">
-              {children}
-            </main>
+            <main className="flex-1">{children}</main>
           </div>
         </div>
         <Toaster position="top-right" />

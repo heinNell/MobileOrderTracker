@@ -3,37 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabase";
 import { useRouter } from "next/navigation";
+import type { Order, TransporterSupplier } from "../../../../shared/types";
+import { exportOrderToPDF } from "../../../lib/pdf-export";
+import { handleApiError, handleSuccess } from "../../../lib/utils";
+import EnhancedOrderForm from "../../components/EnhancedOrderForm";
 
 // Define local interfaces for type safety
 interface LocationPoint {
   latitude: number;
   longitude: number;
-}
-
-interface Order {
-  id: string;
-  order_number: string;
-  status: string;
-  created_at: string;
-  sku?: string;
-  actual_start_time?: string;
-  actual_end_time?: string;
-  loading_point_name: string;
-  loading_point_address: string;
-  unloading_point_name: string;
-  unloading_point_address: string;
-  estimated_distance_km?: number;
-  estimated_duration_minutes?: number;
-  delivery_instructions?: string;
-  special_handling_instructions?: string;
-  contact_name?: string;
-  contact_phone?: string;
-  assigned_driver_id?: string;
-  assigned_driver?: {
-    id: string;
-    full_name: string;
-    phone?: string; // Added phone as an optional property to fix the type error
-  };
 }
 
 interface StatusUpdate {
@@ -69,12 +47,17 @@ interface LocationUpdate {
   timestamp: string;
 }
 
-export default function OrderDetailPage({ params }: { params: { id: string } }) {
+export default function OrderDetailPage({
+  params,
+}: {
+  params: { id: string };
+}) {
   const [order, setOrder] = useState<Order | null>(null);
   const [statusUpdates, setStatusUpdates] = useState<StatusUpdate[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [locationUpdates, setLocationUpdates] = useState<LocationUpdate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
 
@@ -264,6 +247,54 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     router.push("/login");
   };
 
+  const handleExportToPDF = async () => {
+    if (!order) return;
+
+    try {
+      setLoading(true);
+      await exportOrderToPDF(order, {
+        includeQR: true,
+        includeTransporter: true,
+        companyName: "Mobile Order Tracker",
+        companyAddress: "Professional Logistics Management System",
+      });
+      handleSuccess("PDF exported successfully!");
+    } catch (error: any) {
+      handleApiError(error, "Failed to export PDF");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateOrder = async (orderData: Partial<Order>) => {
+    if (!order) return;
+
+    try {
+      setLoading(true);
+      const { data: updatedOrder, error } = await supabase
+        .from("orders")
+        .update(orderData)
+        .eq("id", order.id)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`Failed to update order: ${error.message}`);
+      }
+
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+      }
+
+      handleSuccess("Order updated successfully!");
+      setShowEditModal(false);
+    } catch (error: any) {
+      handleApiError(error, "Failed to update order");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -314,6 +345,19 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             </div>
             <div className="mt-4 md:mt-0 flex space-x-3">
               <button
+                onClick={() => setShowEditModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Edit Order
+              </button>
+              <button
+                onClick={handleExportToPDF}
+                disabled={loading}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
+              >
+                Export PDF
+              </button>
+              <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 hidden md:block"
               >
@@ -339,7 +383,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-sm font-medium text-gray-500">Order Number</h3>
+                <h3 className="text-sm font-medium text-gray-500">
+                  Order Number
+                </h3>
                 <p className="text-lg font-medium">{order.order_number}</p>
               </div>
               {order.sku && (
@@ -356,14 +402,18 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               </div>
               {order.assigned_driver && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Assigned Driver</h3>
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Assigned Driver
+                  </h3>
                   <p className="text-lg font-medium">
                     {order.assigned_driver.full_name}
-                    {order.assigned_driver.phone && (
-                      <span className="text-gray-500 text-sm block">
-                        {order.assigned_driver.phone}
-                      </span>
-                    )}
+                    {order.assigned_driver &&
+                      "phone" in order.assigned_driver &&
+                      order.assigned_driver.phone && (
+                        <span className="text-gray-500 text-sm block">
+                          {String(order.assigned_driver.phone)}
+                        </span>
+                      )}
                   </p>
                 </div>
               )}
@@ -377,7 +427,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               )}
               {order.actual_end_time && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Completed</h3>
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Completed
+                  </h3>
                   <p className="text-lg font-medium">
                     {new Date(order.actual_end_time).toLocaleString()}
                   </p>
@@ -387,21 +439,34 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           </div>
 
           <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Delivery Information</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Delivery Information
+            </h2>
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-gray-500">Loading Point</h3>
+                <h3 className="text-sm font-medium text-gray-500">
+                  Loading Point
+                </h3>
                 <p className="font-medium">{order.loading_point_name}</p>
-                <p className="text-gray-600 text-sm">{order.loading_point_address}</p>
+                <p className="text-gray-600 text-sm">
+                  {order.loading_point_address}
+                </p>
               </div>
               <div>
-                <h3 className="text-sm font-medium text-gray-500">Unloading Point</h3>
+                <h3 className="text-sm font-medium text-gray-500">
+                  Unloading Point
+                </h3>
                 <p className="font-medium">{order.unloading_point_name}</p>
-                <p className="text-gray-600 text-sm">{order.unloading_point_address}</p>
+                <p className="text-gray-600 text-sm">
+                  {order.unloading_point_address}
+                </p>
               </div>
-              {(order.estimated_distance_km || order.estimated_duration_minutes) && (
+              {(order.estimated_distance_km ||
+                order.estimated_duration_minutes) && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Estimates</h3>
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Estimates
+                  </h3>
                   <div className="flex space-x-4">
                     {order.estimated_distance_km && (
                       <p className="font-medium">
@@ -421,27 +486,106 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         </div>
 
         {/* Additional Information */}
-        {(order.delivery_instructions || order.special_handling_instructions || order.contact_name) && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* Transporter Supplier Information */}
+          {order.transporter_supplier && (
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                Transporter Supplier
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Company Name
+                  </h3>
+                  <p className="font-medium">
+                    {order.transporter_supplier.name}
+                  </p>
+                </div>
+                {order.transporter_supplier.contact_phone && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Phone</h3>
+                    <p className="text-gray-700">
+                      {order.transporter_supplier.contact_phone}
+                    </p>
+                  </div>
+                )}
+                {order.transporter_supplier.contact_email && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Email</h3>
+                    <p className="text-gray-700">
+                      {order.transporter_supplier.contact_email}
+                    </p>
+                  </div>
+                )}
+                {order.transporter_supplier.cost_amount &&
+                  order.transporter_supplier.cost_currency && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">
+                        Cost
+                      </h3>
+                      <p className="font-medium text-green-600">
+                        {order.transporter_supplier.cost_currency}{" "}
+                        {order.transporter_supplier.cost_amount.toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+                {order.transporter_supplier.notes && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Notes</h3>
+                    <p className="text-gray-700">
+                      {order.transporter_supplier.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Contact Information */}
+          {order.contact_name && (
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                Contact Information
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Contact Name
+                  </h3>
+                  <p className="font-medium">{order.contact_name}</p>
+                </div>
+                {order.contact_phone && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Phone</h3>
+                    <p className="text-gray-700">{order.contact_phone}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Instructions */}
+        {(order.delivery_instructions ||
+          order.special_handling_instructions) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {order.delivery_instructions && (
-              <div className="md:col-span-2 bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Delivery Instructions</h2>
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">
+                  Delivery Instructions
+                </h2>
                 <p className="text-gray-700">{order.delivery_instructions}</p>
               </div>
             )}
             {order.special_handling_instructions && (
               <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Special Handling</h2>
-                <p className="text-gray-700">{order.special_handling_instructions}</p>
-              </div>
-            )}
-            {order.contact_name && (
-              <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Contact Information</h2>
-                <p className="font-medium">{order.contact_name}</p>
-                {order.contact_phone && (
-                  <p className="text-gray-600">{order.contact_phone}</p>
-                )}
+                <h2 className="text-xl font-bold text-gray-900 mb-4">
+                  Special Handling
+                </h2>
+                <p className="text-gray-700">
+                  {order.special_handling_instructions}
+                </p>
               </div>
             )}
           </div>
@@ -458,7 +602,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             ) : (
               <div className="space-y-4">
                 {statusUpdates.map((update) => (
-                  <div key={update.id} className="border-l-4 border-blue-500 pl-4 py-2">
+                  <div
+                    key={update.id}
+                    className="border-l-4 border-blue-500 pl-4 py-2"
+                  >
                     <div className="flex flex-wrap items-center justify-between">
                       <span
                         className={`px-2 py-1 rounded-full text-white text-xs font-semibold ${getStatusColor(
@@ -497,7 +644,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             ) : (
               <div className="space-y-4">
                 {incidents.map((incident) => (
-                  <div key={incident.id} className="border border-gray-200 rounded-lg p-4">
+                  <div
+                    key={incident.id}
+                    className="border border-gray-200 rounded-lg p-4"
+                  >
                     <div className="flex flex-wrap items-center justify-between mb-2">
                       <h3 className="font-medium">{incident.title}</h3>
                       <span
@@ -528,7 +678,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         {/* Location Updates */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-5 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900">Recent Location Updates</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              Recent Location Updates
+            </h2>
           </div>
           <div className="p-6">
             {locationUpdates.length === 0 ? (
@@ -559,13 +711,18 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                           {new Date(update.timestamp).toLocaleString()}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
-                          {update.location.latitude.toFixed(6)}, {update.location.longitude.toFixed(6)}
+                          {update.location.latitude.toFixed(6)},{" "}
+                          {update.location.longitude.toFixed(6)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {update.speed_kmh ? `${update.speed_kmh.toFixed(1)} km/h` : "N/A"}
+                          {update.speed_kmh
+                            ? `${update.speed_kmh.toFixed(1)} km/h`
+                            : "N/A"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {update.accuracy_meters ? `${update.accuracy_meters.toFixed(1)} m` : "N/A"}
+                          {update.accuracy_meters
+                            ? `${update.accuracy_meters.toFixed(1)} m`
+                            : "N/A"}
                         </td>
                       </tr>
                     ))}
@@ -576,6 +733,16 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           </div>
         </div>
       </div>
+
+      {/* Edit Order Modal */}
+      {showEditModal && order && (
+        <EnhancedOrderForm
+          order={order}
+          onSubmit={handleUpdateOrder}
+          onCancel={() => setShowEditModal(false)}
+          isEditing={true}
+        />
+      )}
     </div>
   );
 }

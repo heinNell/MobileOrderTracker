@@ -28,6 +28,31 @@
 
 ## 🎯 Overview
 
+## ✨ Latest Enhancements
+
+### 🚚 Transporter Supplier Integration
+
+- **Comprehensive supplier information** during order creation
+- **Contact details, costs, and notes** tracking for transporters
+- **Flexible currency support** for international operations
+- **Edit and update** transporter information at any time
+
+### 📄 Professional PDF Export
+
+- **One-click PDF generation** with complete order details
+- **Integrated QR codes** for digital access and verification
+- **Professional formatting** suitable for customer documentation
+- **Transporter details included** in exported reports
+
+### 🎨 Enhanced User Experience
+
+- **Tabbed order creation** form for better organization
+- **Mobile-responsive design** for all new features
+- **Real-time validation** and error handling
+- **Seamless editing** of existing orders with pre-populated data
+
+> 📖 **Detailed Feature Documentation**: See [ENHANCED_FEATURES.md](./ENHANCED_FEATURES.md) for comprehensive documentation of all new features.
+
 ---
 
 ## 🎯 Overview
@@ -430,13 +455,11 @@ serve(async (req) => {
     expires_in
   );
   const qrData = await create(token, { errorCorrectionLevel: "H" });
-  const { error } = await supabaseClient
-    .from("qr_codes")
-    .insert({
-      order_id,
-      qr_payload: token,
-      expires_at: new Date(Date.now() + expires_in),
-    });
+  const { error } = await supabaseClient.from("qr_codes").insert({
+    order_id,
+    qr_payload: token,
+    expires_at: new Date(Date.now() + expires_in),
+  });
   if (error) return new Response(JSON.stringify({ error }), { status: 500 });
   return new Response(JSON.stringify({ qr_base64: qrData }), { status: 200 });
 });
@@ -651,6 +674,7 @@ await supabase.from('orders').insert(csvData);
 };
 
 return (
+
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 <DataTable data={orders} columns={/_ define _/} />
 <button onClick={/_ open modal _/}>Create Order</button>
@@ -709,12 +733,13 @@ const supabase = useSupabaseClient();
 const [messages, setMessages] = useState([]);
 
 useEffect(() => {
-const channel = supabase.channel('messages').on('postgres_changes', { event: '_', schema: 'public', table: 'messages' }, (payload) => {
-setMessages((prev) => /_ update \*/);
+const channel = supabase.channel('messages').on('postgres*changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+setMessages((prev) => /\_ update \*/);
 }).subscribe();
 }, []);
 
 return (
+
 <div className="flex flex-col md:flex-row gap-4">
 <ul className="flex-1">{messages.map((msg) => <li key={msg.id}>{msg.content} {msg.attachments && <img src={msg.attachments[0]} alt="attachment" className="w-32" />}</li>)}</ul>
 <form>{/_ Send message _/}</form>
@@ -1014,10 +1039,8 @@ This integration ensures robust, user-friendly scanning tailored for logistics, 
 
 The barcode scanning feature extends the logistics mobile app's capabilities, allowing drivers to scan product barcodes (e.g., for SKUs during loading/unloading) to verify inventory, update order statuses, or report discrepancies in real-time. This complements the existing QR code scanning for order activation, enabling comprehensive handling of both 1D barcodes (like EAN, Code128) and 2D codes (like QR) within the same interface. As of October 2025, we recommend the `ai_barcode_scanner` package (version 7.1.0) for its AI-enhanced detection using MLKit, which improves accuracy in varied lighting conditions common in logistics environments. Built on `mobile_scanner`, it supports multiple formats, real-time scanning, and cross-platform performance on Android (CameraX) and iOS (AVFoundation), with offline fallback for queuing scans. For commercial-grade precision, alternatives like Scanbot SDK offer AI-powered scanning, but `ai_barcode_scanner` provides a free, open-source solution suitable for scalable growth.
 
-
-
-
 #### Key Implementation Details
+
 - **Package Installation**: Add `ai_barcode_scanner: ^7.1.0` via `flutter pub add`. Ensure camera permissions are set (as in QR scanning). It depends on `mobile_scanner` internally, so no additional installs needed.
 - **Workflow**: Launch from order detail view (e.g., "Scan SKU"). On detection, validate the barcode against order metadata (e.g., match SKUs), update Supabase (e.g., mark as loaded), and handle offline queuing with Hive for sync.
 - **Security and Usability**: Restrict to authenticated drivers; use AI for robust detection. Customize UI with overlays, torch, and zoom for warehouse use.
@@ -1026,7 +1049,9 @@ The barcode scanning feature extends the logistics mobile app's capabilities, al
 - **Performance**: Real-time at high FPS; AI reduces false positives in busy scenes.
 
 #### Code Implementation
+
 ##### Barcode Scanner Widget (Dart)
+
 Adapt the QR scanner to handle barcodes, processing detections similarly but checking formats.
 
 ```dart
@@ -1106,10 +1131,8 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
 }
 ```
 
-
-
-
 ##### Edge Function for Validation (Deno)
+
 Create a Supabase Edge Function to verify barcodes against order data.
 
 ```typescript
@@ -1119,11 +1142,15 @@ import { supabaseClient } from "./supabase.ts";
 
 serve(async (req) => {
   const { barcode, order_id } = await req.json();
-  const { data: order } = await supabaseClient.from('orders').select('skus').eq('id', order_id).single();
+  const { data: order } = await supabaseClient
+    .from("orders")
+    .select("skus")
+    .eq("id", order_id)
+    .single();
   if (order && order.skus.includes(barcode)) {
     return new Response(JSON.stringify({ valid: true }), { status: 200 });
   }
-  return new Response('Invalid barcode', { status: 403 });
+  return new Response("Invalid barcode", { status: 403 });
 });
 ```
 

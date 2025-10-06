@@ -19,6 +19,42 @@ const nextConfig = {
     domains: ["liagltqpeilbswuqcahp.supabase.co"],
   },
 
+  // Ensure proper MIME type handling
+  async headers() {
+    return [
+      {
+        source: "/_next/static/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/_next/static/css/(.*).css",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "text/css",
+          },
+        ],
+      },
+      {
+        source: "/_next/static/js/(.*).js",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript",
+          },
+        ],
+      },
+    ];
+  },
+
+  // Output configuration for better production builds
+  output: "standalone",
+
   // Environment variables will be handled by Netlify
 };
 
