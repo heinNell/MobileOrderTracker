@@ -17,4 +17,17 @@ config.resolver.alias = {
   "@shared": path.resolve(__dirname, "../shared"),
 };
 
+// Reduce noise in console output
+config.reporter = {
+  update: () => {}, // Disable Metro's default logging
+};
+
+// Web-specific optimizations
+if (process.env.EXPO_WEB) {
+  config.resolver.alias = {
+    ...config.resolver.alias,
+    "react-native": "react-native-web",
+  };
+}
+
 module.exports = config;
