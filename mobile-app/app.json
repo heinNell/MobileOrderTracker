@@ -50,7 +50,7 @@
         }
       ]
     ],
-    "sdkVersion": "51.0.0",
+    "sdkVersion": "53.0.0",
     "description": "Logistics QR Code Mobile Application for Drivers",
     "packagerOpts": {
       "dev": true,
