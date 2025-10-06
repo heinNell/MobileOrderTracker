@@ -4,6 +4,7 @@ const nextConfig = {
   experimental: {
     // Disable automatic browser opening
   },
+
   // Configure for codespace environment
   webpack: (config, { dev }) => {
     if (dev) {
@@ -12,6 +13,13 @@ const nextConfig = {
     }
     return config;
   },
+
+  // Image optimization settings
+  images: {
+    domains: ["liagltqpeilbswuqcahp.supabase.co"],
+  },
+
+  // Environment variables will be handled by Netlify
 };
 
 module.exports = nextConfig;

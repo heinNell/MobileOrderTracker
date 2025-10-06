@@ -50,7 +50,7 @@
         }
       ]
     ],
-    "sdkVersion": "53.0.0",
+    "sdkVersion": "51.0.0",
     "description": "Logistics QR Code Mobile Application for Drivers",
     "packagerOpts": {
       "dev": true,
@@ -68,7 +68,7 @@
       "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
       "EXPO_PUBLIC_GOOGLE_MAPS_EMBED_URL": "https://maps.googleapis.com/maps/api/js?key=AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg&libraries=places&callback=initMap",
       "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "liagltqpeilbswuqcahp",
-      "EXPO_PUBLIC_QR_CODE_SECRET": "MC44MjkyODQwOTI5MjU2MDMx"
+      "EXPO_PUBLIC_QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo="
     }
   }
 }

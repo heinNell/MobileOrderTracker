@@ -1,185 +1,116 @@
-// Supabase Edge Function: Generate QR Code
-// Generates signed QR codes for orders
-
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
-import QRCode from "https://esm.sh/qrcode@1.5.3";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+function base64EncodeUtf8(str) {
+  const enc = new TextEncoder().encode(str);
+  let binary = "";
+  const bytes = new Uint8Array(enc);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
+  return btoa(binary);
+}
+
+async function hmacSha256Hex(key, message) {
+  const enc = new TextEncoder();
+  const keyData = enc.encode(key);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
+  const bytes = new Uint8Array(sig);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Use QRCode generation via esm.sh to avoid npm resolution issues
+import QRCode from "https://esm.sh/qrcode@1.5.3";
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { orderId } = await req.json();
-
-    if (!orderId) {
-      return new Response(JSON.stringify({ error: "Order ID is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const body = await req.json().catch(() => null);
+    const orderId = body?.orderId;
+    if (!orderId) return new Response(JSON.stringify({ error: "Order ID is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Verify user authorization
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Authorization required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const qrSecret = Deno.env.get("QR_CODE_SECRET");
+    const auditTable = Deno.env.get("AUDIT_TABLE") || "audit_log"; // table name only
+
+    if (!supabaseUrl || !serviceRole || !qrSecret) {
+      return new Response(JSON.stringify({ error: "Server configuration error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token);
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return new Response(JSON.stringify({ error: "Authorization required" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const token = authHeader.replace(/Bearer\s+/i, "");
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Verify user via auth endpoint
+    const userResp = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!userResp.ok) return new Response(JSON.stringify({ error: "Invalid authorization" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const userData = await userResp.json();
 
-    // Check user permissions (admin or dispatcher)
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id, role")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData || !["admin", "dispatcher"].includes(userData.role)) {
-      return new Response(
-        JSON.stringify({ error: "Insufficient permissions" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+    // Fetch user row from users table via REST
+    const fetchUser = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userData.id}&select=tenant_id,role`, {
+      headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}` },
+    });
+    const users = await fetchUser.json();
+    const dbUser = Array.isArray(users) && users[0];
+    if (!dbUser) return new Response(JSON.stringify({ error: "User not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!["admin", "dispatcher"].includes(dbUser.role)) return new Response(JSON.stringify({ error: "Insufficient permissions" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     // Fetch order
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("id", orderId)
-      .eq("tenant_id", userData.tenant_id)
-      .single();
-
-    if (orderError || !order) {
-      return new Response(JSON.stringify({ error: "Order not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Generate QR code data
-    const timestamp = Date.now();
-    const secret = Deno.env.get("QR_CODE_SECRET");
-    if (!secret) {
-      console.error("QR_CODE_SECRET environment variable is not set");
-      return new Response(
-        JSON.stringify({
-          error: "Server configuration error",
-          details: "QR_CODE_SECRET not configured"
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Create signature
-    const signature = createHmac("sha256", secret)
-      .update(`${orderId}:${timestamp}`)
-      .digest("hex");
-
-    // Create payload
-    const payload = {
-      orderId,
-      timestamp,
-      signature,
-    };
-
-    // Encode payload
-    const qrCodeData = btoa(JSON.stringify(payload));
-
-    // Generate QR code image
-    const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
-      errorCorrectionLevel: "H",
-      type: "image/png",
-      width: 512,
-      margin: 2,
+    const fetchOrder = await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${orderId}&tenant_id=eq.${dbUser.tenant_id}`, {
+      headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}` },
     });
+    const orders = await fetchOrder.json();
+    const order = Array.isArray(orders) && orders[0];
+    if (!order) return new Response(JSON.stringify({ error: "Order not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Calculate expiration (24 hours from now)
+    const timestamp = Date.now();
+    const signature = await hmacSha256Hex(qrSecret, `${orderId}:${timestamp}`);
+    const payload = { orderId, timestamp, signature };
+    const qrCodeData = base64EncodeUtf8(JSON.stringify(payload));
+
+    const qrCodeImage = await QRCode.toDataURL(qrCodeData, { errorCorrectionLevel: "H", type: "image/png", width: 512, margin: 2 });
+
     const expiresAt = new Date(timestamp + 24 * 60 * 60 * 1000).toISOString();
 
-    // Update order with QR code data
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({
-        qr_code_data: qrCodeData,
-        qr_code_signature: signature,
-        qr_code_expires_at: expiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", orderId);
-
-    if (updateError) {
-      throw updateError;
-    }
-
-    // Log QR code generation
-    await supabase.from("audit_log").insert({
-      tenant_id: userData.tenant_id,
-      user_id: user.id,
-      order_id: orderId,
-      action: "QR_CODE_GENERATED",
-      resource_type: "order",
-      resource_id: orderId,
-      new_values: { generated_at: new Date().toISOString() },
+    // Update order via REST (PATCH)
+    await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${orderId}`, {
+      method: "PATCH",
+      headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ qr_code_data: qrCodeData, qr_code_signature: signature, qr_code_expires_at: expiresAt }),
     });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        qrCode: {
-          data: qrCodeData,
-          image: qrCodeImage,
-          expiresAt,
-        },
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  } catch (error) {
-    console.error("Error generating QR code:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: error.message,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    // Insert audit row
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/${auditTable}`, {
+        method: "POST",
+        headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ tenant_id: dbUser.tenant_id, user_id: userData.id, order_id: orderId, action: "QR_CODE_GENERATED", resource_type: "order", resource_id: orderId, new_values: { generated_at: new Date().toISOString() } }),
+      });
+    } catch (e) {
+      console.error("Audit insert failed", e);
+    }
+
+    return new Response(JSON.stringify({ success: true, qrCode: { data: qrCodeData, image: qrCodeImage, expiresAt } }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (err) {
+    console.error("Error generating QR code:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: "Internal server error", details: message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

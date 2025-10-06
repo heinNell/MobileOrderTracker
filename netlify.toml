@@ -1,0 +1,46 @@
+# Netlify configuration for Dashboard deployment
+[build]
+  # Set the base directory to the dashboard folder
+  base = "dashboard"
+  # Build command for Next.js
+  command = "npm run build"
+  # Publish directory (Next.js output)
+  publish = ".next"
+
+[build.environment]
+  # Node.js version
+  NODE_VERSION = "18"
+  # Next.js build output
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# Next.js runtime settings
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Redirect rules for Next.js SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for better security and performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache static assets
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Environment variables (set these in Netlify UI)
+# NEXT_PUBLIC_SUPABASE_URL
+# NEXT_PUBLIC_SUPABASE_ANON_KEY  
+# SUPABASE_SERVICE_ROLE_KEY
+# QR_CODE_SECRET
+# NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
