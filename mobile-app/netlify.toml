@@ -36,21 +36,22 @@
   [headers.values]
     Content-Type = "text/css"
 
-# PWA redirects
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# Deep link handling for mobile app scheme
+# PWA redirects - handle specific routes first, then fallback
 [[redirects]]
   from = "/order/:id"
   to = "/index.html?orderId=:id"
   status = 200
 
-# Custom domain deep link redirect
+# Catch-all for PWA (but preserve query parameters)
 [[redirects]]
-  from = "/qr/:id"
-  to = "ordertracker://order/:id"
-  status = 301
-  force = true
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+
+# Remove problematic deep link redirects that might cause issues
+# [[redirects]]
+#   from = "/qr/:id"
+#   to = "ordertracker://order/:id"
+#   status = 301
+#   force = true

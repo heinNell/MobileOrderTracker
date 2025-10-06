@@ -110,11 +110,11 @@ export const generateSimpleQRCode = async (
   }
 
   // Create simple mobile app URL for QR code
-  const mobileUrl = `${QR_CONFIG.mobileAppScheme}order/${orderId}`;
+  const mobileUrl = `${QR_CONFIG.mobileAppUrl}?orderId=${orderId}`;
   const webUrl = `${QR_CONFIG.mobileAppUrl}?orderId=${orderId}`;
 
-  // For mobile compatibility, use the web URL as primary with deep link as backup
-  const qrCodeContent = webUrl;
+  // For mobile compatibility, use the web URL as primary
+  const qrCodeContent = mobileUrl;
 
   const timestamp = Date.now();
   const expiresAt = new Date(
