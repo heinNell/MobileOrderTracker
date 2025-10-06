@@ -6,8 +6,13 @@ import { supabase } from "../../lib/supabase";
 import type { Order, LocationUpdate } from "../../../shared/types";
 import { useRouter } from "next/navigation";
 import { parsePostGISPoint } from "../../../shared/locationUtils";
-// @ts-ignore
-import { GoogleMap, LoadScript, Marker, Polyline } from "@react-google-maps/api";
+// Import types and components
+import {
+  GoogleMap,
+  LoadScript,
+  Marker,
+  Polyline,
+} from "@react-google-maps/api";
 
 export default function TrackingPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -15,18 +20,18 @@ export default function TrackingPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [mapCenter, setMapCenter] = useState({ lat: 0, lng: 0 });
+  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
   const [mapZoom, setMapZoom] = useState(2);
   const router = useRouter();
 
   // Map container style
-  const mapContainerStyle = {
+  const mapContainerStyle: React.CSSProperties = {
     width: "100%",
     height: "calc(100vh - 200px)",
   };
 
   // Default map options
-  const mapOptions = {
+  const mapOptions: google.maps.MapOptions = {
     zoomControl: true,
     streetViewControl: false,
     mapTypeControl: true,
@@ -35,6 +40,7 @@ export default function TrackingPage() {
 
   useEffect(() => {
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
@@ -50,6 +56,26 @@ export default function TrackingPage() {
     setUser(session.user);
     fetchOrders();
     subscribeToLocationUpdates();
+  };
+
+  // Normalize both possible shapes to { lat, lng } safely
+  const toLatLngLiteral = (
+    loc: { latitude: number; longitude: number } | { lat: number; lng: number }
+  ): google.maps.LatLngLiteral => {
+    const maybeAny = loc as any;
+    if (
+      typeof maybeAny.lat === "number" &&
+      typeof maybeAny.lng === "number"
+    ) {
+      return { lat: maybeAny.lat, lng: maybeAny.lng };
+    }
+    if (
+      typeof maybeAny.latitude === "number" &&
+      typeof maybeAny.longitude === "number"
+    ) {
+      return { lat: maybeAny.latitude, lng: maybeAny.longitude };
+    }
+    throw new Error("Invalid location object: expected {lat,lng} or {latitude,longitude}");
   };
 
   const fetchOrders = async () => {
@@ -72,15 +98,13 @@ export default function TrackingPage() {
       if (error) throw error;
 
       setOrders(data || []);
-      
+
       // Set initial map center to first order's loading point if available
       if (data && data.length > 0) {
         const firstOrder = data[0];
-        const loadingPoint = parsePostGISPoint(firstOrder.loading_point_location);
-        setMapCenter({
-          lat: loadingPoint.latitude,
-          lng: loadingPoint.longitude,
-        });
+        const loadingPointRaw = parsePostGISPoint(firstOrder.loading_point_location);
+        const loadingPoint = toLatLngLiteral(loadingPointRaw);
+        setMapCenter(loadingPoint);
         setMapZoom(10);
       }
     } catch (error) {
@@ -141,24 +165,26 @@ export default function TrackingPage() {
   // Get the latest location for each order
   const getOrderLocations = () => {
     const orderLocations: Record<string, LocationUpdate> = {};
-    
+
     // For each location update, keep only the latest one per order
     locationUpdates.forEach((update) => {
-      if (!orderLocations[update.order_id] || 
-          new Date(update.timestamp) > new Date(orderLocations[update.order_id].timestamp)) {
+      if (
+        !orderLocations[update.order_id] ||
+        new Date(update.timestamp) > new Date(orderLocations[update.order_id].timestamp)
+      ) {
         orderLocations[update.order_id] = update;
       }
     });
-    
+
     return Object.values(orderLocations);
   };
 
   // Get route points for an order
-  const getOrderRoute = (orderId: string) => {
+  const getOrderRoute = (orderId: string): google.maps.LatLngLiteral[] => {
     return locationUpdates
-      .filter(update => update.order_id === orderId)
+      .filter((update) => update.order_id === orderId)
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .map(update => ({
+      .map((update) => ({
         lat: update.location.latitude,
         lng: update.location.longitude,
       }));
@@ -205,9 +231,7 @@ export default function TrackingPage() {
               </button>
             </div>
           </div>
-          <p className="text-gray-600 mt-2">
-            Real-time tracking of active deliveries
-          </p>
+          <p className="text-gray-600 mt-2">Real-time tracking of active deliveries</p>
         </div>
 
         {/* Active Orders Summary */}
@@ -218,10 +242,10 @@ export default function TrackingPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {orders.map((order) => {
-                const latestLocation = orderLocations.find(loc => loc.order_id === order.id);
+                const latestLocation = orderLocations.find((loc) => loc.order_id === order.id);
                 return (
-                  <div 
-                    key={order.id} 
+                  <div
+                    key={order.id}
                     className={`border rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow ${
                       selectedOrder?.id === order.id ? "ring-2 ring-blue-500" : ""
                     }`}
@@ -263,9 +287,7 @@ export default function TrackingPage() {
         <div className="bg-white shadow rounded-lg p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">
-              {selectedOrder 
-                ? `Tracking: Order ${selectedOrder.order_number}` 
-                : "Live Map View"}
+              {selectedOrder ? `Tracking: Order ${selectedOrder.order_number}` : "Live Map View"}
             </h2>
             {selectedOrder && (
               <button
@@ -277,20 +299,13 @@ export default function TrackingPage() {
             )}
           </div>
 
-          <LoadScript
-            googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
-          >
-            <GoogleMap
-              mapContainerStyle={mapContainerStyle}
-              center={mapCenter}
-              zoom={mapZoom}
-              options={mapOptions}
-            >
+          <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
+            <GoogleMap mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={mapZoom} options={mapOptions}>
               {/* Render routes for all orders or selected order */}
               {(selectedOrder ? [selectedOrder] : orders).map((order) => {
                 const route = getOrderRoute(order.id);
                 if (route.length === 0) return null;
-                
+
                 return (
                   <Polyline
                     key={`route-${order.id}`}
@@ -306,21 +321,24 @@ export default function TrackingPage() {
 
               {/* Render markers for latest locations */}
               {orderLocations.map((location) => {
-                const order = orders.find(o => o.id === location.order_id);
+                const order = orders.find((o) => o.id === location.order_id);
                 if (!order) return null;
-                
+
                 // Highlight selected order
                 const isHighlighted = selectedOrder?.id === order.id;
-                
+
+                const position: google.maps.LatLngLiteral = {
+                  lat: location.location.latitude,
+                  lng: location.location.longitude,
+                };
+
                 return (
                   <Marker
                     key={location.id}
-                    position={{
-                      lat: location.location.latitude,
-                      lng: location.location.longitude,
-                    }}
+                    position={position}
                     icon={{
-                      path: google.maps.SymbolPath.CIRCLE,
+                      // Custom SVG path for circle (equivalent to SymbolPath.CIRCLE)
+                      path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
                       scale: isHighlighted ? 12 : 8,
                       fillColor: isHighlighted ? "#4F46E5" : "#10B981",
                       fillOpacity: 1,
@@ -334,37 +352,46 @@ export default function TrackingPage() {
               })}
 
               {/* Render loading and unloading points */}
-              {orders.map((order) => (
-                <React.Fragment key={order.id}>
-                  {/* Loading point */}
-                  <Marker
-                    position={parsePostGISPoint(order.loading_point_location)}
-                    icon={{
-                      path: google.maps.SymbolPath.CIRCLE,
-                      scale: 6,
-                      fillColor: "#EF4444",
-                      fillOpacity: 1,
-                      strokeColor: "#FFFFFF",
-                      strokeWeight: 1,
-                    }}
-                    title={`Loading: ${order.loading_point_name}`}
-                  />
-                  
-                  {/* Unloading point */}
-                  <Marker
-                    position={parsePostGISPoint(order.unloading_point_location)}
-                    icon={{
-                      path: google.maps.SymbolPath.CIRCLE,
-                      scale: 6,
-                      fillColor: "#3B82F6",
-                      fillOpacity: 1,
-                      strokeColor: "#FFFFFF",
-                      strokeWeight: 1,
-                    }}
-                    title={`Unloading: ${order.unloading_point_name}`}
-                  />
-                </React.Fragment>
-              ))}
+              {orders.map((order) => {
+                const loadingPointRaw = parsePostGISPoint(order.loading_point_location);
+                const unloadingPointRaw = parsePostGISPoint(order.unloading_point_location);
+                const loadingPoint = toLatLngLiteral(loadingPointRaw);
+                const unloadingPoint = toLatLngLiteral(unloadingPointRaw);
+
+                return (
+                  <React.Fragment key={order.id}>
+                    {/* Loading point */}
+                    <Marker
+                      position={loadingPoint}
+                      icon={{
+                        // Custom SVG path for circle (equivalent to SymbolPath.CIRCLE)
+                        path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
+                        scale: 6,
+                        fillColor: "#EF4444",
+                        fillOpacity: 1,
+                        strokeColor: "#FFFFFF",
+                        strokeWeight: 1,
+                      }}
+                      title={`Loading: ${order.loading_point_name}`}
+                    />
+
+                    {/* Unloading point */}
+                    <Marker
+                      position={unloadingPoint}
+                      icon={{
+                        // Custom SVG path for circle (equivalent to SymbolPath.CIRCLE)
+                        path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
+                        scale: 6,
+                        fillColor: "#3B82F6",
+                        fillOpacity: 1,
+                        strokeColor: "#FFFFFF",
+                        strokeWeight: 1,
+                      }}
+                      title={`Unloading: ${order.unloading_point_name}`}
+                    />
+                  </React.Fragment>
+                );
+              })}
             </GoogleMap>
           </LoadScript>
 

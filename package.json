@@ -1,1 +1,1 @@
-{"type": "module"}
+{"type":"module","devDependencies":{"@types/google.maps":"^3.58.1"}}
