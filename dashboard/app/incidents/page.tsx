@@ -7,9 +7,22 @@ import type { Incident, Order } from "../../../shared/types";
 import { useRouter } from "next/navigation";
 import { parsePostGISPoint } from "../../../shared/locationUtils";
 
+// Extended type for incidents with joined data from Supabase
+interface IncidentWithRelations extends Incident {
+  order?: {
+    order_number: string;
+    loading_point_name: string;
+    unloading_point_name: string;
+  };
+  driver?: {
+    full_name: string;
+    phone: string;
+  };
+}
+
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [filteredIncidents, setFilteredIncidents] = useState<Incident[]>([]);
+  const [incidents, setIncidents] = useState<IncidentWithRelations[]>([]);
+  const [filteredIncidents, setFilteredIncidents] = useState<IncidentWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
