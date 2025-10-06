@@ -50,25 +50,25 @@
         }
       ]
     ],
-    "sdkVersion": "51.0.0",  /* Upgrade to latest SDK for better dependency compatibility (run `npx expo upgrade 51` after) */
-    "description": "Logistics QR Code Mobile Application for Drivers",  /* Optional: Helps with app store listings */
+    "sdkVersion": "51.0.0",
+    "description": "Logistics QR Code Mobile Application for Drivers",
     "packagerOpts": {
-      "dev": true,  /* Enables dev mode */
-      "hostType": "tunnel",  /* Fixes WebSocket issues in Codespaces by using a public tunnel */
-      "hot": true  /* Enables hot module replacement for faster reloads */
+      "dev": true,
+      "hostType": "tunnel",
+      "hot": true
     },
     "updates": {
-      "fallbackToCacheTimeout": 0  /* Enables over-the-air updates */
+      "fallbackToCacheTimeout": 0
     },
-    "extra": {  /* Public/client-safe environment variables – access via Constants.expoConfig.extra in code. Revoke and replace real keys ASAP! */
-      "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",  /* Supabase project URL */
-      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",  /* Public anon key for client auth */
-      "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",  /* Publishable key (client-safe) */
-      "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",  /* Default publishable key */
-      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",  /* Google Maps API key for client-side maps */
-      "EXPO_PUBLIC_GOOGLE_MAPS_EMBED_URL": "https://maps.googleapis.com/maps/api/js?key=AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg&libraries=places&callback=initMap",  /* Google Maps embed/script URL */
-      "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "liagltqpeilbswuqcahp",  /* Supabase project ID (public) */
-      "EXPO_PUBLIC_QR_CODE_SECRET": "MC44MjkyODQwOTI5MjU2MDMx"  /* QR code secret (client-safe for signing/validation; regenerate if sensitive) */
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+      "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",
+      "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",
+      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+      "EXPO_PUBLIC_GOOGLE_MAPS_EMBED_URL": "https://maps.googleapis.com/maps/api/js?key=AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg&libraries=places&callback=initMap",
+      "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "liagltqpeilbswuqcahp",
+      "EXPO_PUBLIC_QR_CODE_SECRET": "MC44MjkyODQwOTI5MjU2MDMx"
     }
   }
 }
