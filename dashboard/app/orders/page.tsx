@@ -318,8 +318,11 @@ export default function EnhancedOrdersPage() {
     try {
       setLoading(true);
 
+      console.log("🔄 Starting QR code generation for order:", orderId);
+
       // First test the QR code flow to ensure everything works
       const testResult = await testQRCodeFlow(orderId);
+      console.log("🧪 QR code test result:", testResult);
 
       if (!testResult.generation) {
         throw new Error(
@@ -329,6 +332,12 @@ export default function EnhancedOrdersPage() {
 
       // Generate the actual QR code
       const qrResult = await generateQRCode(orderId);
+      console.log("✅ QR code generated successfully:", {
+        mobileUrl: qrResult.mobileUrl,
+        webUrl: qrResult.webUrl,
+        dataLength: qrResult.data.length,
+        dataPreview: qrResult.data.substring(0, 100) + "...",
+      });
 
       // Find the order for better filename
       const order = orders.find((o) => o.id === orderId);
@@ -337,18 +346,23 @@ export default function EnhancedOrdersPage() {
       downloadQRCode(qrResult.image, orderId, order?.order_number);
 
       // Show success with additional info
-      const successMessage = `QR code generated successfully! Mobile app link: ${qrResult.mobileUrl}`;
+      const successMessage = `QR code generated successfully! 
+      📱 Mobile app link: ${qrResult.mobileUrl}
+      🌐 Web fallback: ${qrResult.webUrl}`;
       handleSuccess(successMessage);
 
       // Log the mobile app URL for debugging
-      console.log("Mobile app deep link:", qrResult.mobileUrl);
-      console.log("Web fallback URL:", qrResult.webUrl);
+      console.log("📱 Mobile app deep link:", qrResult.mobileUrl);
+      console.log("🌐 Web fallback URL:", qrResult.webUrl);
       console.log(
-        "QR validation test:",
+        "🔍 QR validation test:",
         testResult.validation ? "✅ PASSED" : "❌ FAILED"
       );
+
+      // Additional debugging: show what's actually in the QR code
+      console.log("🔍 QR Code contains:", qrResult.data);
     } catch (error: any) {
-      console.error("QR Generation Error:", error);
+      console.error("❌ QR Generation Error:", error);
 
       // Enhanced QR error handling with specific solutions
       let errorMessage = "Failed to generate QR code";
@@ -372,13 +386,17 @@ export default function EnhancedOrdersPage() {
 
         // If edge function fails, try client-side generation as last resort
         try {
+          console.log("🔄 Attempting fallback QR generation...");
           const qrResult = await generateQRCode(orderId);
           const order = orders.find((o) => o.id === orderId);
           downloadQRCode(qrResult.image, orderId, order?.order_number);
           handleSuccess("QR code generated using fallback method");
           return;
         } catch (fallbackError) {
-          console.error("Fallback QR generation also failed:", fallbackError);
+          console.error(
+            "❌ Fallback QR generation also failed:",
+            fallbackError
+          );
         }
       } else if (error.message.includes("Canvas not supported")) {
         errorMessage = "Browser compatibility issue";
