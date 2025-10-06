@@ -90,7 +90,17 @@ serve(async (req) => {
     const timestamp = Date.now();
     const secret = Deno.env.get("QR_CODE_SECRET");
     if (!secret) {
-      throw new Error("QR_CODE_SECRET not configured");
+      console.error("QR_CODE_SECRET environment variable is not set");
+      return new Response(
+        JSON.stringify({
+          error: "Server configuration error",
+          details: "QR_CODE_SECRET not configured"
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Create signature
