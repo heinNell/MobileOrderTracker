@@ -6,7 +6,12 @@ import { supabase, generateQRCode } from "../../lib/supabase";
 import type { Order, OrderStatus } from "../../../shared/types";
 import { useRouter } from "next/navigation";
 import { parsePostGISPoint } from "../../../shared/locationUtils";
-import { handleApiError, handleSuccess, validateRequired, validateCoordinates } from "../../lib/utils";
+import {
+  handleApiError,
+  handleSuccess,
+  validateRequired,
+  validateCoordinates,
+} from "../../lib/utils";
 import { toast } from "react-hot-toast";
 
 interface DebugInfo {
@@ -25,15 +30,17 @@ export default function EnhancedOrdersPage() {
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
-    userStatus: 'Unknown',
+    userStatus: "Unknown",
     tenantInfo: null,
     orderCount: 0,
-    rlsStatus: 'Unknown',
-    lastError: null
+    rlsStatus: "Unknown",
+    lastError: null,
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
-  const [sortBy, setSortBy] = useState<"created_at" | "order_number" | "status">("created_at");
+  const [sortBy, setSortBy] = useState<
+    "created_at" | "order_number" | "status"
+  >("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -55,28 +62,28 @@ export default function EnhancedOrdersPage() {
       } = await supabase.auth.getSession();
 
       if (!session) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'Not authenticated',
-          lastError: 'No active session found'
+          userStatus: "Not authenticated",
+          lastError: "No active session found",
         }));
         router.push("/login");
         return;
       }
 
       setUser(session.user);
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        userStatus: 'Authenticated'
+        userStatus: "Authenticated",
       }));
-      
+
       await performDiagnostics(session.user);
       await fetchOrders();
       subscribeToOrders();
     } catch (error: any) {
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        lastError: error.message
+        lastError: error.message,
       }));
       handleApiError(error, "Failed to authenticate");
     }
@@ -87,7 +94,8 @@ export default function EnhancedOrdersPage() {
       // Check user-tenant linkage
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select(`
+        .select(
+          `
           id,
           email,
           full_name,
@@ -99,34 +107,35 @@ export default function EnhancedOrdersPage() {
             name,
             is_active
           )
-        `)
+        `
+        )
         .eq("id", user.id)
         .maybeSingle();
 
       if (userError) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'User not found in users table',
-          lastError: userError.message
+          userStatus: "User not found in users table",
+          lastError: userError.message,
         }));
         return;
       }
 
       if (!userData) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'User exists in auth but not in users table',
-          lastError: 'User profile incomplete'
+          userStatus: "User exists in auth but not in users table",
+          lastError: "User profile incomplete",
         }));
         return;
       }
 
       if (!userData.tenant_id) {
-        setDebugInfo(prev => ({
+        setDebugInfo((prev) => ({
           ...prev,
-          userStatus: 'User not linked to any tenant',
+          userStatus: "User not linked to any tenant",
           tenantInfo: null,
-          lastError: 'User has no tenant assignment'
+          lastError: "User has no tenant assignment",
         }));
         return;
       }
@@ -137,19 +146,20 @@ export default function EnhancedOrdersPage() {
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", userData.tenant_id);
 
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        userStatus: 'User properly configured',
+        userStatus: "User properly configured",
         tenantInfo: userData.tenants,
         orderCount: orderCount || 0,
-        rlsStatus: countError ? 'RLS may be blocking access' : 'RLS working correctly',
-        lastError: countError?.message || null
+        rlsStatus: countError
+          ? "RLS may be blocking access"
+          : "RLS working correctly",
+        lastError: countError?.message || null,
       }));
-
     } catch (error: any) {
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        lastError: error.message
+        lastError: error.message,
       }));
     }
   };
@@ -157,7 +167,7 @@ export default function EnhancedOrdersPage() {
   const fetchOrders = async (page = 1) => {
     try {
       setLoading(true);
-      
+
       // First, verify user access
       const {
         data: { session },
@@ -179,23 +189,27 @@ export default function EnhancedOrdersPage() {
       }
 
       if (!userData) {
-        throw new Error("User not found in users table. Please ensure your profile is set up.");
+        throw new Error(
+          "User not found in users table. Please ensure your profile is set up."
+        );
       }
 
       if (!userData.tenant_id) {
-        throw new Error("User is not linked to any organization. Please contact your administrator.");
+        throw new Error(
+          "User is not linked to any organization. Please contact your administrator."
+        );
       }
-      
+
       // Get total count for pagination
       const { count, error: countError } = await supabase
         .from("orders")
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", userData.tenant_id);
-      
+
       if (countError) {
         throw new Error(`Failed to count orders: ${countError.message}`);
       }
-      
+
       if (count) {
         setTotalPages(Math.ceil(count / ordersPerPage));
       }
@@ -224,18 +238,17 @@ export default function EnhancedOrdersPage() {
       }
 
       setOrders(data || []);
-      
+
       // Update debug info
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
         orderCount: count || 0,
-        lastError: null
+        lastError: null,
       }));
-
     } catch (error: any) {
-      setDebugInfo(prev => ({
+      setDebugInfo((prev) => ({
         ...prev,
-        lastError: error.message
+        lastError: error.message,
       }));
       handleApiError(error, "Failed to fetch orders");
     } finally {
@@ -254,7 +267,7 @@ export default function EnhancedOrdersPage() {
           table: "orders",
         },
         () => {
-          fetchOrders(currentPage).catch(error => {
+          fetchOrders(currentPage).catch((error) => {
             handleApiError(error, "Failed to update orders");
           });
         }
@@ -302,17 +315,20 @@ export default function EnhancedOrdersPage() {
       handleSuccess("QR code generated and downloaded successfully!");
     } catch (error: any) {
       console.error("QR Generation Error:", error);
-      
+
       // Enhanced QR error handling
       let errorMessage = "Failed to generate QR code";
       if (error.message.includes("QR_CODE_SECRET")) {
-        errorMessage = "QR code generation is not properly configured. Please contact your administrator.";
+        errorMessage =
+          "QR code generation is not properly configured. Please contact your administrator.";
       } else if (error.message.includes("Not authenticated")) {
-        errorMessage = "Authentication expired. Please refresh the page and try again.";
+        errorMessage =
+          "Authentication expired. Please refresh the page and try again.";
       } else if (error.message.includes("Insufficient permissions")) {
-        errorMessage = "You don't have permission to generate QR codes for this order.";
+        errorMessage =
+          "You don't have permission to generate QR codes for this order.";
       }
-      
+
       handleApiError(new Error(errorMessage), "QR Code Generation Failed");
     }
   };
@@ -331,7 +347,7 @@ export default function EnhancedOrdersPage() {
         "unloading_point_name",
         "unloading_point_address",
         "unloading_lat",
-        "unloading_lng"
+        "unloading_lng",
       ];
 
       for (const field of requiredFields) {
@@ -402,7 +418,7 @@ export default function EnhancedOrdersPage() {
           "unloading_point_address"
         ) as string,
         unloading_point_location: `SRID=4326;POINT(${unloadingLng} ${unloadingLat})`,
-        created_by: session.user.id
+        created_by: session.user.id,
       };
 
       // Add optional fields only if they exist in the schema
@@ -439,12 +455,17 @@ export default function EnhancedOrdersPage() {
       // Try to generate QR code (optional - don't fail if this errors)
       try {
         await generateQRCode(order.id);
-        handleSuccess("Order created successfully! QR code has been generated and downloaded.");
+        handleSuccess(
+          "Order created successfully! QR code has been generated and downloaded."
+        );
       } catch (qrError: any) {
         console.warn("QR generation failed:", qrError);
-        toast("Order created successfully! (QR code generation failed - you can generate it later)", {
-          icon: "⚠️",
-        });
+        toast(
+          "Order created successfully! (QR code generation failed - you can generate it later)",
+          {
+            icon: "⚠️",
+          }
+        );
       }
 
       setShowCreateModal(false);
@@ -493,7 +514,7 @@ export default function EnhancedOrdersPage() {
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
-      fetchOrders(page).catch(error => {
+      fetchOrders(page).catch((error) => {
         handleApiError(error, "Failed to change page");
       });
     }
@@ -575,7 +596,9 @@ export default function EnhancedOrdersPage() {
       <div className="p-4 md:p-6">
         <div className="mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Orders Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Orders Management
+            </h1>
             <div className="mt-4 md:mt-0 flex space-x-3">
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -609,24 +632,30 @@ export default function EnhancedOrdersPage() {
         <div className="bg-white shadow rounded-lg p-4 mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-gray-900">{orders.length}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {orders.length}
+              </div>
               <div className="text-sm text-gray-500">Total Orders</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-blue-600">
-                {orders.filter(o => o.status === 'pending').length}
+                {orders.filter((o) => o.status === "pending").length}
               </div>
               <div className="text-sm text-gray-500">Pending</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600">
-                {orders.filter(o => o.status === 'completed').length}
+                {orders.filter((o) => o.status === "completed").length}
               </div>
               <div className="text-sm text-gray-500">Completed</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-yellow-600">
-                {orders.filter(o => ['in_transit', 'loading', 'unloading'].includes(o.status)).length}
+                {
+                  orders.filter((o) =>
+                    ["in_transit", "loading", "unloading"].includes(o.status)
+                  ).length
+                }
               </div>
               <div className="text-sm text-gray-500">In Progress</div>
             </div>
@@ -637,7 +666,10 @@ export default function EnhancedOrdersPage() {
         <div className="bg-white shadow rounded-lg p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
-              <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="search"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Search Orders
               </label>
               <input
@@ -650,14 +682,19 @@ export default function EnhancedOrdersPage() {
               />
             </div>
             <div>
-              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="status"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Filter by Status
               </label>
               <select
                 id="status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "all")}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as OrderStatus | "all")
+                }
               >
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
@@ -691,25 +728,29 @@ export default function EnhancedOrdersPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th 
+                  <th
                     className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("order_number")}
                   >
                     <div className="flex items-center">
                       Order Number
                       {sortBy === "order_number" && (
-                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                        <span className="ml-1">
+                          {sortOrder === "asc" ? "↑" : "↓"}
+                        </span>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("status")}
                   >
                     <div className="flex items-center">
                       Status
                       {sortBy === "status" && (
-                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                        <span className="ml-1">
+                          {sortOrder === "asc" ? "↑" : "↓"}
+                        </span>
                       )}
                     </div>
                   </th>
@@ -722,14 +763,16 @@ export default function EnhancedOrdersPage() {
                   <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Unloading Point
                   </th>
-                  <th 
+                  <th
                     className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("created_at")}
                   >
                     <div className="flex items-center">
                       Created
                       {sortBy === "created_at" && (
-                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                        <span className="ml-1">
+                          {sortOrder === "asc" ? "↑" : "↓"}
+                        </span>
                       )}
                     </div>
                   </th>
@@ -746,7 +789,9 @@ export default function EnhancedOrdersPage() {
                         {orders.length === 0 ? (
                           <div>
                             <p className="text-lg mb-2">No orders found</p>
-                            <p className="text-sm mb-4">Get started by creating your first order</p>
+                            <p className="text-sm mb-4">
+                              Get started by creating your first order
+                            </p>
                             <button
                               onClick={() => setShowCreateModal(true)}
                               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -825,8 +870,8 @@ export default function EnhancedOrdersPage() {
           {totalPages > 1 && (
             <div className="px-4 md:px-6 py-4 bg-gray-50 flex items-center justify-between border-t border-gray-200">
               <div className="text-sm text-gray-700">
-                Showing page <span className="font-medium">{currentPage}</span> of{" "}
-                <span className="font-medium">{totalPages}</span>
+                Showing page <span className="font-medium">{currentPage}</span>{" "}
+                of <span className="font-medium">{totalPages}</span>
               </div>
               <div className="flex space-x-2">
                 <button
@@ -870,8 +915,18 @@ export default function EnhancedOrdersPage() {
                   onClick={() => setShowDebugModal(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
@@ -884,7 +939,9 @@ export default function EnhancedOrdersPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900">Tenant Information</h3>
+                <h3 className="font-semibold text-gray-900">
+                  Tenant Information
+                </h3>
                 <pre className="text-sm text-gray-600 bg-gray-100 p-2 rounded">
                   {JSON.stringify(debugInfo.tenantInfo, null, 2)}
                 </pre>
@@ -892,7 +949,9 @@ export default function EnhancedOrdersPage() {
 
               <div>
                 <h3 className="font-semibold text-gray-900">Order Count</h3>
-                <p className="text-sm text-gray-600">{debugInfo.orderCount} orders visible to current user</p>
+                <p className="text-sm text-gray-600">
+                  {debugInfo.orderCount} orders visible to current user
+                </p>
               </div>
 
               <div>
@@ -903,7 +962,9 @@ export default function EnhancedOrdersPage() {
               {debugInfo.lastError && (
                 <div>
                   <h3 className="font-semibold text-red-900">Last Error</h3>
-                  <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{debugInfo.lastError}</p>
+                  <p className="text-sm text-red-600 bg-red-100 p-2 rounded">
+                    {debugInfo.lastError}
+                  </p>
                 </div>
               )}
 
