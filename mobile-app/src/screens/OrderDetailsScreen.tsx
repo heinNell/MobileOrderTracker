@@ -1,5 +1,5 @@
-// Order Details Screen with Navigation and Status Updates
-import React, { useState, useEffect } from "react";
+// src/screens/OrderDetailsScreen.tsx
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,43 +9,80 @@ import {
   Alert,
   Linking,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { LocationService } from "../services/locationService";
 import { Order, OrderStatus } from "../shared/types";
-import { parsePostGISPoint, toPostGISPoint } from "../shared/locationUtils";
+import { parsePostGISPoint } from "../shared/locationUtils";
 
-const STATUS_ACTIONS: { status: OrderStatus; label: string; color: string }[] =
-  [
-    { status: "in_transit", label: "Start Transit", color: "#8B5CF6" },
-    { status: "arrived", label: "Arrived", color: "#10B981" },
-    { status: "loading", label: "Start Loading", color: "#F59E0B" },
-    { status: "loaded", label: "Loading Complete", color: "#10B981" },
-    { status: "unloading", label: "Start Unloading", color: "#F59E0B" },
-    { status: "completed", label: "Complete Delivery", color: "#059669" },
-  ];
+type Params = { order?: Order; orderId?: string };
+
+const STATUS_ACTIONS: { status: OrderStatus; label: string; color: string }[] = [
+  { status: "in_transit", label: "Start Transit", color: "#8B5CF6" },
+  { status: "arrived", label: "Arrived", color: "#10B981" },
+  { status: "loading", label: "Start Loading", color: "#F59E0B" },
+  { status: "loaded", label: "Loading Complete", color: "#10B981" },
+  { status: "unloading", label: "Start Unloading", color: "#F59E0B" },
+  { status: "completed", label: "Complete Delivery", color: "#059669" },
+];
 
 export const OrderDetailsScreen: React.FC = () => {
   const route = useRoute();
   const navigation = useNavigation();
-  const { order: initialOrder } = route.params as { order: Order };
+  const { order: initialOrder, orderId } = route.params as Params;
 
-  const [order, setOrder] = useState<Order>(initialOrder);
-  const [loading, setLoading] = useState(false);
-  const [isTracking, setIsTracking] = useState(false);
+  const [order, setOrder] = useState<Order | null>(initialOrder || null);
+  const [loading, setLoading] = useState<boolean>(!!orderId && !initialOrder);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [isTracking, setIsTracking] = useState<boolean>(false);
 
+  // Fetch the order if only orderId was provided (e.g., from QR scan or internal navigation)
   useEffect(() => {
-    checkTrackingStatus();
-    subscribeToOrderUpdates();
-  }, []);
+    let isMounted = true;
 
-  const checkTrackingStatus = () => {
-    const trackingOrderId = LocationService.getCurrentOrderId();
-    setIsTracking(trackingOrderId === order.id);
-  };
+    const fetchOrder = async () => {
+      if (orderId && !order) {
+        try {
+          setLoading(true);
+          const { data, error } = await supabase
+            .from("orders")
+            .select("*")
+            .eq("id", orderId)
+            .single();
 
-  const subscribeToOrderUpdates = () => {
+          if (!isMounted) return;
+
+          if (error || !data) {
+            Alert.alert("Error", "Order not found or access denied", [
+              { text: "OK", onPress: () => navigation.goBack() },
+            ]);
+            return;
+          }
+          setOrder(data as Order);
+        } catch (e) {
+          console.error("Fetch order error:", e);
+          Alert.alert("Error", "Failed to load order", [
+            { text: "Retry", onPress: fetchOrder },
+            { text: "Go Back", onPress: () => navigation.goBack() },
+          ]);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchOrder();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId, order, navigation]);
+
+  // Subscribe to live order updates - Supabase realtime for mobile
+  useEffect(() => {
+    if (!order?.id) return;
     const channel = supabase
       .channel(`order:${order.id}`)
       .on(
@@ -65,142 +102,195 @@ export const OrderDetailsScreen: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  };
+  }, [order?.id]);
 
-  const openGoogleMaps = (
-    destination: { latitude: number; longitude: number },
-    label: string
-  ) => {
-    const scheme = Platform.select({ ios: "maps:", android: "geo:" });
-    const url = Platform.select({
-      ios: `${scheme}?daddr=${destination.latitude},${destination.longitude}`,
-      android: `${scheme}${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}(${label})`,
-    });
+  // Track whether location tracking is enabled for this order - Mobile location service (async)
+  useEffect(() => {
+    const checkTracking = async () => {
+      if (!order?.id) return;
+      const currentTracked = await LocationService.getCurrentOrderId();
+      setIsTracking(currentTracked === order.id);
+    };
+    checkTracking();
+  }, [order?.id]);
 
-    if (url) {
-      Linking.openURL(url);
-    }
-  };
+  const getNextActions = useCallback(() => {
+    if (!order) return [];
+    const currentIndex = STATUS_ACTIONS.findIndex((a) => a.status === order.status);
+    return STATUS_ACTIONS.slice(currentIndex + 1);
+  }, [order]);
 
-  const startTracking = async () => {
+  const startTracking = useCallback(async () => {
+    if (!order?.id) return;
     try {
-      const success = await LocationService.startTracking(order.id);
-
-      if (success) {
+      const ok = await LocationService.startTracking(order.id);
+      if (ok) {
         setIsTracking(true);
         Alert.alert("Success", "Location tracking started");
       } else {
         Alert.alert("Error", "Failed to start location tracking");
       }
-    } catch (error) {
-      console.error("Error starting tracking:", error);
+    } catch (e) {
+      console.error("Start tracking error:", e);
       Alert.alert("Error", "Failed to start location tracking");
     }
-  };
+  }, [order?.id]);
 
-  const stopTracking = async () => {
+  const stopTracking = useCallback(async () => {
     try {
       await LocationService.stopTracking();
       setIsTracking(false);
       Alert.alert("Success", "Location tracking stopped");
-    } catch (error) {
-      console.error("Error stopping tracking:", error);
+    } catch (e) {
+      console.error("Stop tracking error:", e);
+      Alert.alert("Error", "Failed to stop tracking");
     }
-  };
+  }, []);
 
-  const updateStatus = async (newStatus: OrderStatus, notes?: string) => {
-    try {
-      setLoading(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        throw new Error("User not authenticated");
+  const openMaps = useCallback(
+    (destination: { latitude: number; longitude: number } | null, label: string) => {
+      try {
+        if (!destination) {
+          Alert.alert("Error", "Missing coordinates for this location");
+          return;
+        }
+        const scheme = Platform.select({ ios: "maps:", android: "geo:" });
+        const url = Platform.select({
+          ios: `${scheme}?daddr=${destination.latitude},${destination.longitude}`,
+          android: `${scheme}${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}(${encodeURIComponent(label)})`,
+        });
+        if (url) {
+          Linking.openURL(url).catch((err) => {
+            console.error("Error opening maps:", err);
+            Alert.alert("Error", "Unable to open maps application.");
+          });
+        } else {
+          Alert.alert("Error", "Navigation not supported on this platform.");
+        }
+      } catch (error) {
+        console.error("Error in openMaps:", error);
+        Alert.alert("Error", "Failed to open navigation.");
       }
+    },
+    []
+  );
 
-      // Get current location
-      const location = await LocationService.getCurrentLocation();
+  const updateStatus = useCallback(
+    async (newStatus: OrderStatus, notes?: string) => {
+      if (!order?.id) return;
+      try {
+        setStatusUpdating(true);
 
-      // Create status update
-      const { error: statusError } = await supabase
-        .from("status_updates")
-        .insert({
+        // Check auth - Mobile auth check
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) {
+          Alert.alert(
+            "Authentication Required",
+            "You need to be logged in to update status.",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Login", onPress: () => navigation.navigate("Login" as never) },
+            ]
+          );
+          return;
+        }
+
+        // Current location (optional) - Mobile location fetch
+        const location = await LocationService.getCurrentLocation().catch(() => null);
+
+        // Insert status update
+        const { error: statusError } = await supabase.from("status_updates").insert({
           order_id: order.id,
           driver_id: user.id,
           status: newStatus,
-          location: location
-            ? `SRID=4326;POINT(${location.coords.longitude} ${location.coords.latitude})`
-            : null,
-          notes,
+          location:
+            location && location.coords
+              ? `SRID=4326;POINT(${location.coords.longitude} ${location.coords.latitude})`
+              : null,
+          notes: notes || null,
+          created_at: new Date().toISOString(),
         });
 
-      if (statusError) throw statusError;
+        if (statusError) throw statusError;
 
-      // Update order status
-      const updateData: any = { status: newStatus };
+        // Update order record
+        const updateData: Partial<Order> = { status: newStatus } as Partial<Order>;
+        if (newStatus === "in_transit" && !order.actual_start_time) {
+          (updateData as any).actual_start_time = new Date().toISOString();
+        }
+        if (newStatus === "completed") {
+          (updateData as any).actual_end_time = new Date().toISOString();
+          await stopTracking();
+        }
 
-      if (newStatus === "in_transit" && !order.actual_start_time) {
-        updateData.actual_start_time = new Date().toISOString();
+        const { error: orderError } = await supabase
+          .from("orders")
+          .update(updateData)
+          .eq("id", order.id);
+
+        if (orderError) throw orderError;
+
+        Alert.alert("Success", "Status updated successfully");
+
+        // Ensure tracking when transit starts
+        if (newStatus === "in_transit" && !isTracking) {
+          await startTracking();
+        }
+      } catch (e: any) {
+        console.error("Update status error:", e);
+        Alert.alert("Error", e?.message || "Failed to update status");
+      } finally {
+        setStatusUpdating(false);
       }
-
-      if (newStatus === "completed") {
-        updateData.actual_end_time = new Date().toISOString();
-        await stopTracking();
-      }
-
-      const { error: orderError } = await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("id", order.id);
-
-      if (orderError) throw orderError;
-
-      Alert.alert("Success", "Status updated successfully");
-
-      // Start tracking on transit
-      if (newStatus === "in_transit" && !isTracking) {
-        await startTracking();
-      }
-    } catch (error: any) {
-      console.error("Error updating status:", error);
-      Alert.alert("Error", "Failed to update status");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [order?.id, order?.actual_start_time, isTracking, startTracking, stopTracking, navigation]
+  );
 
   const reportIncident = () => {
-    navigation.navigate(
-      "ReportIncident" as never,
-      { orderId: order.id } as never
-    );
+    if (!order) return;
+    navigation.navigate("ReportIncident" as never, { orderId: order.id } as never);
   };
 
   const sendMessage = () => {
+    if (!order) return;
     navigation.navigate("Messages" as never, { orderId: order.id } as never);
   };
 
-  const getNextActions = () => {
-    const currentIndex = STATUS_ACTIONS.findIndex(
-      (action) => action.status === order.status
-    );
-    return STATUS_ACTIONS.slice(currentIndex + 1);
+  const makePhoneCall = (phoneNumber: string) => {
+    const url = `tel:${phoneNumber}`;
+    Linking.openURL(url).catch((err) => {
+      console.error("Error making phone call:", err);
+      Alert.alert("Error", "Unable to make phone call.");
+    });
   };
 
+  // Render loading state - Mobile loading UI
+  if (loading || !order) {
+    return (
+      <View style={styles.loadingWrap}>
+        <ActivityIndicator size="large" color="#2563eb" />
+        <Text style={styles.loadingText}>Loading order...</Text>
+      </View>
+    );
+  }
+
+  const loadingPoint = useMemo(
+    () => parsePostGISPoint(order.loading_point_location),
+    [order.loading_point_location]
+  );
+  const unloadingPoint = useMemo(
+    () => parsePostGISPoint(order.unloading_point_location),
+    [order.unloading_point_location]
+  );
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Order Header */}
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(order.status) },
-          ]}
-        >
-          <Text style={styles.statusText}>{order.status.toUpperCase()}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+          <Text style={styles.statusText}>{order.status.replace("_", " ").toUpperCase()}</Text>
         </View>
       </View>
 
@@ -208,22 +298,13 @@ export const OrderDetailsScreen: React.FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Loading Point</Text>
         <Text style={styles.locationName}>{order.loading_point_name}</Text>
-        <Text style={styles.locationAddress}>
-          {order.loading_point_address}
-        </Text>
+        <Text style={styles.locationAddress}>{order.loading_point_address}</Text>
 
         <TouchableOpacity
           style={styles.navigateButton}
-          onPress={() =>
-            openGoogleMaps(
-              parsePostGISPoint(order.loading_point_location),
-              order.loading_point_name
-            )
-          }
+          onPress={() => openMaps(loadingPoint, order.loading_point_name)}
         >
-          <Text style={styles.navigateButtonText}>
-            Navigate to Loading Point
-          </Text>
+          <Text style={styles.navigateButtonText}>Navigate to Loading Point</Text>
         </TouchableOpacity>
       </View>
 
@@ -231,27 +312,18 @@ export const OrderDetailsScreen: React.FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Unloading Point</Text>
         <Text style={styles.locationName}>{order.unloading_point_name}</Text>
-        <Text style={styles.locationAddress}>
-          {order.unloading_point_address}
-        </Text>
+        <Text style={styles.locationAddress}>{order.unloading_point_address}</Text>
 
         <TouchableOpacity
           style={styles.navigateButton}
-          onPress={() =>
-            openGoogleMaps(
-              parsePostGISPoint(order.unloading_point_location),
-              order.unloading_point_name
-            )
-          }
+          onPress={() => openMaps(unloadingPoint, order.unloading_point_name)}
         >
-          <Text style={styles.navigateButtonText}>
-            Navigate to Unloading Point
-          </Text>
+          <Text style={styles.navigateButtonText}>Navigate to Unloading Point</Text>
         </TouchableOpacity>
       </View>
 
       {/* Delivery Instructions */}
-      {order.delivery_instructions && (
+      {!!order.delivery_instructions && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Instructions</Text>
           <Text style={styles.instructions}>{order.delivery_instructions}</Text>
@@ -259,24 +331,20 @@ export const OrderDetailsScreen: React.FC = () => {
       )}
 
       {/* Special Handling */}
-      {order.special_handling_instructions && (
+      {!!order.special_handling_instructions && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Special Handling</Text>
-          <Text style={styles.instructions}>
-            {order.special_handling_instructions}
-          </Text>
+          <Text style={styles.instructions}>{order.special_handling_instructions}</Text>
         </View>
       )}
 
       {/* Contact Info */}
-      {order.contact_name && (
+      {!!order.contact_name && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact</Text>
           <Text style={styles.contactName}>{order.contact_name}</Text>
-          {order.contact_phone && (
-            <TouchableOpacity
-              onPress={() => Linking.openURL(`tel:${order.contact_phone}`)}
-            >
+          {!!order.contact_phone && (
+            <TouchableOpacity onPress={() => makePhoneCall(order.contact_phone!)}>
               <Text style={styles.contactPhone}>{order.contact_phone}</Text>
             </TouchableOpacity>
           )}
@@ -286,18 +354,17 @@ export const OrderDetailsScreen: React.FC = () => {
       {/* Tracking Control */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Location Tracking</Text>
+        <Text style={styles.trackingDescription}>
+          {isTracking
+            ? "Your location is being tracked for this order"
+            : "Location tracking is currently disabled"}
+        </Text>
         {isTracking ? (
-          <TouchableOpacity
-            style={styles.stopTrackingButton}
-            onPress={stopTracking}
-          >
+          <TouchableOpacity style={styles.stopTrackingButton} onPress={stopTracking}>
             <Text style={styles.stopTrackingButtonText}>Stop Tracking</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            style={styles.startTrackingButton}
-            onPress={startTracking}
-          >
+          <TouchableOpacity style={styles.startTrackingButton} onPress={startTracking}>
             <Text style={styles.startTrackingButtonText}>Start Tracking</Text>
           </TouchableOpacity>
         )}
@@ -307,32 +374,51 @@ export const OrderDetailsScreen: React.FC = () => {
       {order.status !== "completed" && order.status !== "cancelled" && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Update Status</Text>
-          {getNextActions().map((action) => (
-            <TouchableOpacity
-              key={action.status}
-              style={[styles.actionButton, { backgroundColor: action.color }]}
-              onPress={() => updateStatus(action.status)}
-              disabled={loading}
-            >
-              <Text style={styles.actionButtonText}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
+          {getNextActions().length > 0 ? (
+            getNextActions().map((action) => (
+              <TouchableOpacity
+                key={action.status}
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: action.color },
+                  statusUpdating && styles.actionButtonDisabled,
+                ]}
+                onPress={() => updateStatus(action.status)}
+                disabled={statusUpdating}
+              >
+                <Text style={styles.actionButtonText}>
+                  {statusUpdating ? "Updating..." : action.label}
+                </Text>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.noActionsText}>No further actions available.</Text>
+          )}
+        </View>
+      )}
+
+      {/* Completed/Cancelled Message */}
+      {(order.status === "completed" || order.status === "cancelled") && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Order Status</Text>
+          <Text
+            style={[
+              styles.completedText,
+              { color: order.status === "completed" ? "#059669" : "#EF4444" },
+            ]}
+          >
+            This order has been {order.status === "completed" ? "completed" : "cancelled"}.
+          </Text>
         </View>
       )}
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={reportIncident}
-        >
+        <TouchableOpacity style={styles.quickActionButton} onPress={reportIncident}>
           <Text style={styles.quickActionText}>Report Incident</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={sendMessage}
-        >
+        <TouchableOpacity style={styles.quickActionButton} onPress={sendMessage}>
           <Text style={styles.quickActionText}>Send Message</Text>
         </TouchableOpacity>
       </View>
@@ -352,14 +438,13 @@ const getStatusColor = (status: OrderStatus): string => {
     completed: "#059669",
     cancelled: "#EF4444",
   };
-  return colors[status];
+  return colors[status] ?? "#6B7280";
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
+  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  loadingWrap: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#fff" },
+  loadingText: { marginTop: 12, fontSize: 16, color: "#2563eb" },
   header: {
     backgroundColor: "#fff",
     padding: 20,
@@ -369,108 +454,33 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  orderNumber: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  orderNumber: { fontSize: 20, fontWeight: "bold", color: "#111827" },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  statusText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   section: {
     backgroundColor: "#fff",
     padding: 20,
     marginTop: 12,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 12,
-  },
-  locationName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  locationAddress: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginBottom: 12,
-  },
-  navigateButton: {
-    backgroundColor: "#3B82F6",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  navigateButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  instructions: {
-    fontSize: 14,
-    color: "#374151",
-    lineHeight: 20,
-  },
-  contactName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  contactPhone: {
-    fontSize: 16,
-    color: "#3B82F6",
-  },
-  startTrackingButton: {
-    backgroundColor: "#10B981",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  startTrackingButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  stopTrackingButton: {
-    backgroundColor: "#EF4444",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  stopTrackingButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  actionButton: {
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  actionButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  quickActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 20,
-    paddingBottom: 40,
-  },
+  sectionTitle: { fontSize: 16, fontWeight: "600", color: "#111827", marginBottom: 12 },
+  locationName: { fontSize: 18, fontWeight: "600", color: "#111827", marginBottom: 4 },
+  locationAddress: { fontSize: 14, color: "#6B7280", marginBottom: 12, lineHeight: 20 },
+  navigateButton: { backgroundColor: "#3B82F6", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  navigateButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  instructions: { fontSize: 14, color: "#374151", lineHeight: 20 },
+  contactName: { fontSize: 16, fontWeight: "600", color: "#111827", marginBottom: 4 },
+  contactPhone: { fontSize: 16, color: "#3B82F6", textDecorationLine: "underline" },
+  trackingDescription: { fontSize: 14, color: "#6B7280", marginBottom: 12, lineHeight: 20 },
+  startTrackingButton: { backgroundColor: "#10B981", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  startTrackingButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  stopTrackingButton: { backgroundColor: "#EF4444", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  stopTrackingButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  actionButton: { paddingVertical: 12, borderRadius: 8, alignItems: "center", marginBottom: 8 },
+  actionButtonDisabled: { opacity: 0.6 },
+  actionButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  noActionsText: { fontSize: 14, color: "#6B7280", textAlign: "center", fontStyle: "italic" },
+  completedText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
+  quickActions: { flexDirection: "row", justifyContent: "space-between", padding: 20, paddingBottom: 40 },
   quickActionButton: {
     flex: 1,
     backgroundColor: "#fff",
@@ -481,11 +491,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#3B82F6",
   },
-  quickActionText: {
-    color: "#3B82F6",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  quickActionText: { color: "#3B82F6", fontSize: 14, fontWeight: "600" },
 });
 
 export default OrderDetailsScreen;

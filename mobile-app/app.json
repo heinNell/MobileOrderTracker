@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.logistics.ordertracker",
-      "associatedDomains": ["applinks:ordertracker.app"],
+      "associatedDomains": ["applinks:ordertracker.app", "applinks:magnificent-snickerdoodle-018e86.netlify.app"],
       "infoPlist": {
         "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
         "NSLocationWhenInUseUsageDescription": "This app requires location access to track deliveries",
@@ -39,10 +39,11 @@
       "intentFilters": [
         {
           "action": "VIEW",
+          "autoVerify": true,
           "data": [
-            {
-              "scheme": "ordertracker"
-            }
+            { "scheme": "https", "host": "ordertracker.app" },
+            { "scheme": "https", "host": "magnificent-snickerdoodle-018e86.netlify.app" },
+            { "scheme": "ordertracker" }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
@@ -52,10 +53,7 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE"
       ]
     },
     "web": {
@@ -74,17 +72,19 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to track your delivery location."
         }
-      ]
+      ],
+      "expo-barcode-scanner"
     ],
-    "sdkVersion": "51.0.0",
     "description": "Logistics QR Code Mobile Application for Drivers",
-    "packagerOpts": {
-      "dev": true,
-      "hostType": "tunnel",
-      "hot": true
-    },
     "updates": {
-      "fallbackToCacheTimeout": 0
+      "enabled": true,
+      "fallbackToCacheTimeout": 30000,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#2563eb",
+      "iosDisplayInForeground": true
     },
     "extra": {
       "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
@@ -94,7 +94,10 @@
       "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
       "EXPO_PUBLIC_GOOGLE_MAPS_EMBED_URL": "https://maps.googleapis.com/maps/api/js?key=AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg&libraries=places&callback=initMap",
       "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "liagltqpeilbswuqcahp",
-      "EXPO_PUBLIC_QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo="
+      "EXPO_PUBLIC_QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+      "mobileDomain": "magnificent-snickerdoodle-018e86.netlify.app",
+      "dashboardUrl": "https://regal-quokka-de7e35.netlify.app",
+      "tenantId": "your-tenant-id"  
     }
   }
 }

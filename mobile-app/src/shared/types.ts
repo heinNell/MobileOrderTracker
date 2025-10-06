@@ -1,4 +1,5 @@
-// Shared TypeScript types for the logistics system
+// src/shared/types.ts
+// Shared TypeScript types for the mobile logistics app
 
 export type UserRole = "admin" | "dispatcher" | "driver";
 
@@ -28,42 +29,19 @@ export type NotificationType =
   | "incident"
   | "message";
 
+/** Simple location coordinates for mobile (compatible with Expo location). */
 export interface Location {
   latitude: number;
   longitude: number;
 }
 
-/**
- * IMPORTANT: PostGIS Geography Columns
- *
- * The database stores locations as PostGIS GEOGRAPHY(POINT) which Supabase
- * returns as WKT strings: "SRID=4326;POINT(longitude latitude)"
- *
- * When fetching orders from Supabase, location fields will be strings!
- * Use the locationUtils helper functions to convert:
- *
- * ```typescript
- * import { parsePostGISPoint } from './locationUtils';
- *
- * const location = parsePostGISPoint(order.loading_point_location);
- * console.log(location.latitude, location.longitude);
- * ```
- *
- * When creating/updating orders, use toPostGISPoint():
- *
- * ```typescript
- * import { toPostGISPoint } from './locationUtils';
- *
- * const wkt = toPostGISPoint({ latitude: -26.2041, longitude: 28.0473 });
- * // Inserts as: "SRID=4326;POINT(28.0473 -26.2041)"
- * ```
- */
-
+/** Time window for deliveries. */
 export interface TimeWindow {
   start: string;
   end: string;
 }
 
+/** Delivery point details. */
 export interface DeliveryPoint {
   name: string;
   address: string;
@@ -71,6 +49,7 @@ export interface DeliveryPoint {
   timeWindow?: TimeWindow;
 }
 
+/** User profile. */
 export interface User {
   id: string;
   email: string;
@@ -86,6 +65,7 @@ export interface User {
   updated_at: string;
 }
 
+/** Tenant (organization) details. */
 export interface Tenant {
   id: string;
   name: string;
@@ -96,6 +76,10 @@ export interface Tenant {
   updated_at: string;
 }
 
+/**
+ * Order details.
+ * Note: Location fields are WKT strings from Supabase; use parsePostGISPoint() to convert.
+ */
 export interface Order {
   id: string;
   tenant_id: string;
@@ -112,12 +96,12 @@ export interface Order {
   };
   loading_point_name: string;
   loading_point_address: string;
-  loading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
+  loading_point_location: string | Location; // WKT string from Supabase
   loading_time_window_start?: string;
   loading_time_window_end?: string;
   unloading_point_name: string;
   unloading_point_address: string;
-  unloading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
+  unloading_point_location: string | Location; // WKT string from Supabase
   unloading_time_window_start?: string;
   unloading_time_window_end?: string;
   waypoints?: DeliveryPoint[];
@@ -135,6 +119,7 @@ export interface Order {
   updated_at: string;
 }
 
+/** Location update log. */
 export interface LocationUpdate {
   id: string;
   order_id: string;
@@ -148,6 +133,7 @@ export interface LocationUpdate {
   created_at: string;
 }
 
+/** Status update log. */
 export interface StatusUpdate {
   id: string;
   order_id: string;
@@ -160,6 +146,7 @@ export interface StatusUpdate {
   created_at: string;
 }
 
+/** Incident report. */
 export interface Incident {
   id: string;
   order_id: string;
@@ -179,6 +166,7 @@ export interface Incident {
   updated_at: string;
 }
 
+/** Message between users. */
 export interface Message {
   id: string;
   order_id: string;
@@ -194,6 +182,7 @@ export interface Message {
   created_at: string;
 }
 
+/** Notification for users. */
 export interface Notification {
   id: string;
   tenant_id: string;
@@ -208,6 +197,7 @@ export interface Notification {
   created_at: string;
 }
 
+/** Geofence area. */
 export interface Geofence {
   id: string;
   tenant_id: string;
@@ -220,6 +210,7 @@ export interface Geofence {
   updated_at: string;
 }
 
+/** Audit log entry. */
 export interface AuditLog {
   id: string;
   tenant_id: string;

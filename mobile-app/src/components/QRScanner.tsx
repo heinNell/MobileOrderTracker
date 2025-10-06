@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import { useNavigation } from '@react-navigation/native';
-import * as Linking as ExpoLinking from 'expo-linking';
+import * as Linking from 'expo-linking';
 
 interface QRScannerProps {
   onQRScanned?: (data: string) => void;
@@ -30,74 +30,28 @@ export default function QRScanner({ onQRScanned }: QRScannerProps) {
     };
 
     getBarCodeScannerPermissions();
-
-    // Listen for deep links
-    const handleUrl = (url: string) => {
-      console.log('📱 Deep link received:', url);
-      handleDeepLink(url);
-    };
-
-    // Listen for app being opened with a URL
-    const handleInitialUrl = async () => {
-      const initialUrl = await ExpoLinking.getInitialURL();
-      if (initialUrl) {
-        console.log('📱 Initial URL:', initialUrl);
-        handleDeepLink(initialUrl);
-      }
-    };
-
-    // Set up listeners
-    const subscription = ExpoLinking.addEventListener('url', (event) => {
-      handleUrl(event.url);
-    });
-
-    handleInitialUrl();
-
-    return () => {
-      subscription?.remove();
-    };
   }, []);
 
-  const handleDeepLink = (url: string) => {
+  const navigateToOrder = (orderId: string, orderNumber?: string) => {
     try {
-      console.log('🔗 Processing deep link:', url);
-      
-      // Parse the URL
-      const parsedUrl = ExpoLinking.parse(url);
-      console.log('🔗 Parsed URL:', parsedUrl);
-      
-      if (parsedUrl.scheme === 'ordertracker' && parsedUrl.path) {
-        // Extract order ID from path like "/order/uuid"
-        const pathParts = parsedUrl.path.split('/');
-        const orderId = pathParts[pathParts.length - 1];
-        
-        if (orderId && orderId.length > 0) {
-          console.log('🎯 Navigating to order:', orderId);
-          navigateToOrder(orderId);
-        } else {
-          console.error('❌ No order ID found in deep link');
-          Alert.alert('Error', 'Invalid order link');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error processing deep link:', error);
-      Alert.alert('Error', 'Failed to process order link');
-    }
-  };
-
-  const navigateToOrder = (orderId: string) => {
-    try {
-      // Navigate to order details screen
-      navigation.navigate('OrderDetails' as never, { orderId } as never);
-      
       Alert.alert(
         'Order Found!',
-        `Opening order: ${orderId}`,
-        [{ text: 'OK' }]
+        `Opening order: ${orderNumber || orderId}`,
+        [
+          { text: 'Cancel', onPress: () => setScanned(false), style: 'cancel' },
+          { 
+            text: 'Open Order', 
+            onPress: () => {
+              navigation.navigate('OrderDetails' as never, { orderId } as never);
+            }
+          }
+        ]
       );
     } catch (navError) {
       console.error('❌ Navigation error:', navError);
-      Alert.alert('Error', 'Failed to open order details');
+      Alert.alert('Error', 'Failed to open order details', [
+        { text: 'OK', onPress: () => setScanned(false) }
+      ]);
     }
   };
 
@@ -121,46 +75,23 @@ export default function QRScanner({ onQRScanned }: QRScannerProps) {
         Alert.alert(
           'QR Code Expired',
           'This QR code has expired. Please request a new one.',
-          [
-            { text: 'OK', onPress: () => setScanned(false) }
-          ]
+          [{ text: 'OK', onPress: () => setScanned(false) }]
         );
         return;
       }
 
       // Show success and navigate
-      Alert.alert(
-        'QR Code Scanned Successfully!',
-        `Order: ${qrPayload.orderNumber || qrPayload.orderId}`,
-        [
-          { text: 'Cancel', onPress: () => setScanned(false) },
-          { 
-            text: 'Open Order', 
-            onPress: () => {
-              navigateToOrder(qrPayload.orderId);
-              if (onQRScanned) {
-                onQRScanned(data);
-              }
-            }
-          }
-        ]
-      );
-
+      navigateToOrder(qrPayload.orderId, qrPayload.orderNumber);
+      if (onQRScanned) {
+        onQRScanned(data);
+      }
     } catch (parseError) {
       console.error('❌ QR Code parsing error:', parseError);
-      
-      // Check if it's a URL format
-      if (data.startsWith('ordertracker://')) {
-        handleDeepLink(data);
-      } else {
-        Alert.alert(
-          'Invalid QR Code',
-          'This QR code is not recognized as a valid order code.',
-          [
-            { text: 'Try Again', onPress: () => setScanned(false) }
-          ]
-        );
-      }
+      Alert.alert(
+        'Invalid QR Code',
+        'This QR code is not recognized as a valid order code.',
+        [{ text: 'Try Again', onPress: () => setScanned(false) }]
+      );
     }
   };
 
