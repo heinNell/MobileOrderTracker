@@ -1,11 +1,73 @@
-// Order Detail Page - Comprehensive Order Information
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabase";
-import type { Order, StatusUpdate, Incident, LocationUpdate } from "../../../../shared/types";
 import { useRouter } from "next/navigation";
-import { parsePostGISPoint } from "../../../../shared/locationUtils";
+
+// Define local interfaces for type safety
+interface LocationPoint {
+  latitude: number;
+  longitude: number;
+}
+
+interface Order {
+  id: string;
+  order_number: string;
+  status: string;
+  created_at: string;
+  sku?: string;
+  actual_start_time?: string;
+  actual_end_time?: string;
+  loading_point_name: string;
+  loading_point_address: string;
+  unloading_point_name: string;
+  unloading_point_address: string;
+  estimated_distance_km?: number;
+  estimated_duration_minutes?: number;
+  delivery_instructions?: string;
+  special_handling_instructions?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  assigned_driver_id?: string;
+  assigned_driver?: {
+    id: string;
+    full_name: string;
+    phone?: string; // Added phone as an optional property to fix the type error
+  };
+}
+
+interface StatusUpdate {
+  id: string;
+  order_id: string;
+  status: string;
+  notes?: string;
+  created_at: string;
+  driver?: {
+    full_name: string;
+  };
+}
+
+interface Incident {
+  id: string;
+  order_id: string;
+  title: string;
+  description: string;
+  severity: number;
+  is_resolved: boolean;
+  created_at: string;
+  driver?: {
+    full_name: string;
+  };
+}
+
+interface LocationUpdate {
+  id: string;
+  order_id: string;
+  location: LocationPoint;
+  speed_kmh?: number;
+  accuracy_meters?: number;
+  timestamp: string;
+}
 
 export default function OrderDetailPage({ params }: { params: { id: string } }) {
   const [order, setOrder] = useState<Order | null>(null);

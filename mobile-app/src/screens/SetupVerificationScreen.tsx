@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { StatusIndicator, ProgressBar, StatusBadge } from '../components/StatusIndicators';
-import { useNavigation } from '@react-navigation/native';
 
 interface VerificationItem {
   id: string;
