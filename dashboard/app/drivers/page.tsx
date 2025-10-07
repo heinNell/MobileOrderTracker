@@ -18,7 +18,15 @@ export default function DriversPage() {
     full_name: "",
     email: "",
     phone: "",
+    password: "",
+    generatePassword: true,
   });
+  const [isCreating, setIsCreating] = useState(false);
+  const [creationResult, setCreationResult] = useState<{
+    success: boolean;
+    message: string;
+    temporaryPassword?: string;
+  } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -109,22 +117,70 @@ export default function DriversPage() {
 
   const handleCreateDriver = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsCreating(true);
+    setCreationResult(null);
 
     try {
-      // In a real application, you would create the user in Supabase Auth
-      // and then insert the user profile in the users table
-      // For this example, we'll just show an alert
-      alert("In a real application, this would create a new driver account");
+      // Get current session for authorization
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      setShowCreateModal(false);
+      if (sessionError || !session) {
+        throw new Error('Authentication required');
+      }
+
+      // Prepare driver data
+      const driverData = {
+        email: newDriver.email.trim(),
+        full_name: newDriver.full_name.trim(),
+        phone: newDriver.phone.trim() || null,
+        password: newDriver.generatePassword ? null : newDriver.password, // null means auto-generate
+      };
+
+      // Call the Edge Function to create driver account
+      const { data, error } = await supabase.functions.invoke('create-driver-account', {
+        body: driverData,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to create driver account');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Unknown error occurred');
+      }
+
+      // Success! Show result to user
+      setCreationResult({
+        success: true,
+        message: `Driver account created successfully for ${data.data.full_name}`,
+        temporaryPassword: data.data.temporary_password,
+      });
+
+      // Reset form
       setNewDriver({
         full_name: "",
         email: "",
         phone: "",
+        password: "",
+        generatePassword: true,
       });
-    } catch (error) {
+
+      // Refresh drivers list
+      fetchDrivers();
+
+      console.log('Driver account created:', data.data);
+
+    } catch (error: any) {
       console.error("Error creating driver:", error);
-      alert("Failed to create driver");
+      setCreationResult({
+        success: false,
+        message: error.message || 'Failed to create driver account',
+      });
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -369,14 +425,37 @@ export default function DriversPage() {
             </div>
 
             <form onSubmit={handleCreateDriver} className="p-6 space-y-4">
+              {/* Creation Result Display */}
+              {creationResult && (
+                <div className={`p-4 rounded-md ${
+                  creationResult.success 
+                    ? 'bg-green-50 border border-green-200 text-green-800' 
+                    : 'bg-red-50 border border-red-200 text-red-800'
+                }`}>
+                  <p className="font-medium">{creationResult.message}</p>
+                  {creationResult.success && creationResult.temporaryPassword && (
+                    <div className="mt-2">
+                      <p className="text-sm font-medium">Temporary Password:</p>
+                      <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
+                        {creationResult.temporaryPassword}
+                      </code>
+                      <p className="text-xs mt-1 text-gray-600">
+                        Please share this with the driver securely. They should change it on first login.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name
+                  Full Name *
                 </label>
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isCreating}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.full_name}
                   onChange={(e) => setNewDriver({...newDriver, full_name: e.target.value})}
                 />
@@ -384,12 +463,13 @@ export default function DriversPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
+                  Email *
                 </label>
                 <input
                   type="email"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isCreating}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.email}
                   onChange={(e) => setNewDriver({...newDriver, email: e.target.value})}
                 />
@@ -401,25 +481,97 @@ export default function DriversPage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isCreating}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.phone}
                   onChange={(e) => setNewDriver({...newDriver, phone: e.target.value})}
                 />
               </div>
 
+              {/* Password Options */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password Setup
+                </label>
+                
+                <div className="space-y-3">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="passwordOption"
+                      disabled={isCreating}
+                      checked={newDriver.generatePassword}
+                      onChange={() => setNewDriver({...newDriver, generatePassword: true, password: ""})}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Generate secure password automatically (Recommended)</span>
+                  </label>
+                  
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="passwordOption"
+                      disabled={isCreating}
+                      checked={!newDriver.generatePassword}
+                      onChange={() => setNewDriver({...newDriver, generatePassword: false})}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Set custom password</span>
+                  </label>
+                </div>
+
+                {!newDriver.generatePassword && (
+                  <div className="mt-3">
+                    <input
+                      type="password"
+                      required={!newDriver.generatePassword}
+                      disabled={isCreating}
+                      placeholder="Enter password (min 8 characters)"
+                      minLength={8}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                      value={newDriver.password}
+                      onChange={(e) => setNewDriver({...newDriver, password: e.target.value})}
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  disabled={isCreating}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreationResult(null);
+                    setNewDriver({
+                      full_name: "",
+                      email: "",
+                      phone: "",
+                      password: "",
+                      generatePassword: true,
+                    });
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={isCreating}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                 >
-                  Add Driver
+                  {isCreating ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Creating Account...
+                    </>
+                  ) : (
+                    'Create Driver Account'
+                  )}
                 </button>
               </div>
             </form>
