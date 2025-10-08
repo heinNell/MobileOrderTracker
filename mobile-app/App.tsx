@@ -6,7 +6,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import * as Notifications from "expo-notifications";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { storage } from "./src/lib/storage";
 
 // Screens
 import OrderDetailsScreen from "./src/screens/OrderDetailsScreen";
@@ -232,7 +232,7 @@ export default function App() {
   const initializeApp = async () => {
     try {
       // Gate the app behind setup verification if desired
-      const setupComplete = await AsyncStorage.getItem("setup_verification_complete");
+      const setupComplete = await storage.getItem("setup_verification_complete");
       if (!setupComplete) {
         setInitialRoute("SetupVerification");
       }

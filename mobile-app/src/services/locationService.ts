@@ -2,7 +2,7 @@
 // Background location tracking service for order delivery
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { storage } from "../lib/storage";
 import { supabase } from "../lib/supabase";
 
 const LOCATION_TASK_NAME = "background-location-task";
@@ -23,7 +23,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
 
   try {
     // Get tracked order ID from persistent storage (module state can be unreliable)
-    const orderId = await AsyncStorage.getItem(STORAGE_KEY_ORDER_ID);
+    const orderId = await storage.getItem(STORAGE_KEY_ORDER_ID);
     if (!orderId) {
       console.warn("[LocationService] No order ID found in storage, skipping update");
       return;
@@ -100,7 +100,7 @@ export class LocationService {
 
   /**
    * Start tracking location for a specific order.
-   * Persists order ID to AsyncStorage for background task access.
+   * Persists order ID to storage for background task access.
    */
   static async startTracking(orderId: string): Promise<boolean> {
     try {
@@ -111,7 +111,7 @@ export class LocationService {
       }
 
       // Check if already tracking this order
-      const currentOrderId = await AsyncStorage.getItem(STORAGE_KEY_ORDER_ID);
+      const currentOrderId = await storage.getItem(STORAGE_KEY_ORDER_ID);
       if (currentOrderId === orderId) {
         console.log("[LocationService] Already tracking this order");
         return true;
@@ -123,7 +123,7 @@ export class LocationService {
       }
 
       // Persist order ID for background task
-      await AsyncStorage.setItem(STORAGE_KEY_ORDER_ID, orderId);
+      await storage.setItem(STORAGE_KEY_ORDER_ID, orderId);
 
       // Start background location updates
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
@@ -158,7 +158,7 @@ export class LocationService {
         console.log("[LocationService] Stopped background location updates");
       }
 
-      await AsyncStorage.removeItem(STORAGE_KEY_ORDER_ID);
+      await storage.removeItem(STORAGE_KEY_ORDER_ID);
       console.log("[LocationService] Cleared tracking order ID");
     } catch (error) {
       console.error("[LocationService] Error stopping tracking:", error);
@@ -229,7 +229,7 @@ export class LocationService {
    */
   static async isTracking(): Promise<boolean> {
     try {
-      const orderId = await AsyncStorage.getItem(STORAGE_KEY_ORDER_ID);
+      const orderId = await storage.getItem(STORAGE_KEY_ORDER_ID);
       const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
       return !!orderId && isTaskRegistered;
     } catch (error) {
@@ -243,7 +243,7 @@ export class LocationService {
    */
   static async getCurrentOrderId(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem(STORAGE_KEY_ORDER_ID);
+      return await storage.getItem(STORAGE_KEY_ORDER_ID);
     } catch (error) {
       console.error("[LocationService] Error getting current order ID:", error);
       return null;
