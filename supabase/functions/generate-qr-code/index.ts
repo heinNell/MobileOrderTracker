@@ -89,11 +89,55 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(timestamp + 24 * 60 * 60 * 1000).toISOString();
 
-    // Update order via REST (PATCH)
+    // Check if qr_codes record already exists
+    const checkQR = await fetch(`${supabaseUrl}/rest/v1/qr_codes?order_id=eq.${orderId}`, {
+      headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}` },
+    });
+    const existingQRs = await checkQR.json();
+    
+    let qrCodeId = null;
+    if (Array.isArray(existingQRs) && existingQRs.length > 0) {
+      // Update existing QR code
+      qrCodeId = existingQRs[0].id;
+      await fetch(`${supabaseUrl}/rest/v1/qr_codes?id=eq.${qrCodeId}`, {
+        method: "PATCH",
+        headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          qr_code_data: qrCodeData, 
+          qr_code_image_url: qrCodeImage,
+          status: 'active',
+          expires_at: expiresAt,
+          metadata: { regenerated_at: new Date().toISOString(), signature }
+        }),
+      });
+    } else {
+      // Insert new QR code record
+      const insertQR = await fetch(`${supabaseUrl}/rest/v1/qr_codes`, {
+        method: "POST",
+        headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify({ 
+          order_id: orderId,
+          qr_code_data: qrCodeData, 
+          qr_code_image_url: qrCodeImage,
+          status: 'active',
+          expires_at: expiresAt,
+          metadata: { created_by: userData.id, signature }
+        }),
+      });
+      const newQRs = await insertQR.json();
+      qrCodeId = Array.isArray(newQRs) && newQRs[0]?.id;
+    }
+
+    // Update order via REST (PATCH) - keep backward compatibility
     await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${orderId}`, {
       method: "PATCH",
       headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ qr_code_data: qrCodeData, qr_code_signature: signature, qr_code_expires_at: expiresAt }),
+      body: JSON.stringify({ 
+        qr_code_data: qrCodeData, 
+        qr_code_signature: signature, 
+        qr_code_expires_at: expiresAt,
+        qr_code_id: qrCodeId 
+      }),
     });
 
     // Insert audit row
@@ -107,7 +151,15 @@ Deno.serve(async (req) => {
       console.error("Audit insert failed", e);
     }
 
-    return new Response(JSON.stringify({ success: true, qrCode: { data: qrCodeData, image: qrCodeImage, expiresAt } }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ 
+      success: true, 
+      qrCode: { 
+        id: qrCodeId,
+        data: qrCodeData, 
+        image: qrCodeImage, 
+        expiresAt 
+      } 
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     console.error("Error generating QR code:", err);
     const message = err instanceof Error ? err.message : String(err);
