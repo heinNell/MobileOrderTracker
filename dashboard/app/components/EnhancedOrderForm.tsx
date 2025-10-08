@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
-import type { Order, TransporterSupplier } from "../../../shared/types";
+import React, { useState, useEffect } from "react";
+import type { Order, TransporterSupplier, User } from "../../../shared/types";
+import { supabase } from "../../lib/supabase";
 
 interface OrderFormProps {
   order?: Order;
@@ -16,8 +17,11 @@ export default function EnhancedOrderForm({
   onCancel,
   isEditing = false,
 }: OrderFormProps) {
+  const [availableDrivers, setAvailableDrivers] = useState<User[]>([]);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [formData, setFormData] = useState({
     // Basic order info
+    assigned_driver_id: order?.assigned_driver_id || "",
     sku: order?.sku || "",
     loading_point_name: order?.loading_point_name || "",
     loading_point_address: order?.loading_point_address || "",
@@ -45,9 +49,53 @@ export default function EnhancedOrderForm({
   });
 
   const [activeTab, setActiveTab] = useState<
-    "basic" | "locations" | "transporter" | "additional"
+    "basic" | "driver" | "locations" | "transporter" | "additional"
   >("basic");
   const [loading, setLoading] = useState(false);
+
+  // Fetch available drivers on component mount
+  useEffect(() => {
+    fetchDrivers();
+  }, []);
+
+  const fetchDrivers = async () => {
+    try {
+      setLoadingDrivers(true);
+      
+      // Get current user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Get user's tenant_id
+      const { data: userData } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!userData?.tenant_id) return;
+
+      // Fetch active drivers in the same tenant
+      const { data: drivers, error } = await supabase
+        .from('users')
+        .select('id, full_name, phone, email')
+        .eq('role', 'driver')
+        .eq('is_active', true)
+        .eq('tenant_id', userData.tenant_id)
+        .order('full_name');
+
+      if (error) {
+        console.error('Error fetching drivers:', error);
+        return;
+      }
+
+      setAvailableDrivers(drivers || []);
+    } catch (error) {
+      console.error('Error in fetchDrivers:', error);
+    } finally {
+      setLoadingDrivers(false);
+    }
+  };
 
   // Initialize coordinates if editing
   React.useEffect(() => {
@@ -143,6 +191,7 @@ export default function EnhancedOrderForm({
 
       // Build order data
       const orderData: Partial<Order> = {
+        assigned_driver_id: formData.assigned_driver_id || undefined,
         sku: formData.sku || undefined,
         loading_point_name: formData.loading_point_name,
         loading_point_address: formData.loading_point_address,
@@ -174,6 +223,7 @@ export default function EnhancedOrderForm({
 
   const tabs = [
     { id: "basic", label: "Basic Info", icon: "📋" },
+    { id: "driver", label: "Driver", icon: "👤" },
     { id: "locations", label: "Locations", icon: "📍" },
     { id: "transporter", label: "Transporter", icon: "🚚" },
     { id: "additional", label: "Additional", icon: "📝" },
@@ -315,6 +365,117 @@ export default function EnhancedOrderForm({
                       placeholder="60"
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Driver Assignment Tab */}
+            {activeTab === "driver" && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Driver Assignment
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Assign a driver to this order. The driver will receive a notification
+                  and can activate the load in the mobile app.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Driver
+                    </label>
+                    {loadingDrivers ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <span className="ml-2 text-gray-600">Loading drivers...</span>
+                      </div>
+                    ) : availableDrivers.length === 0 ? (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p className="text-sm text-yellow-800">
+                          No active drivers available in your organization.
+                          Please add drivers first or leave unassigned.
+                        </p>
+                      </div>
+                    ) : (
+                      <select
+                        value={formData.assigned_driver_id}
+                        onChange={(e) =>
+                          handleInputChange("assigned_driver_id", e.target.value)
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Unassigned (will be pending status)</option>
+                        {availableDrivers.map((driver) => (
+                          <option key={driver.id} value={driver.id}>
+                            {driver.full_name}
+                            {driver.phone && ` - ${driver.phone}`}
+                            {driver.email && ` (${driver.email})`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {formData.assigned_driver_id && (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="flex items-start">
+                        <svg
+                          className="w-5 h-5 text-blue-600 mt-0.5 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-blue-900">
+                            Driver will be notified
+                          </p>
+                          <p className="text-sm text-blue-700 mt-1">
+                            When you create this order, the selected driver will receive
+                            a push notification and the order status will be set to
+                            "assigned". The driver can then activate the load and start
+                            the delivery process.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!formData.assigned_driver_id && (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
+                      <div className="flex items-start">
+                        <svg
+                          className="w-5 h-5 text-gray-600 mt-0.5 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            Unassigned Order
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            The order will be created with "pending" status and you can
+                            assign a driver later from the orders list.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

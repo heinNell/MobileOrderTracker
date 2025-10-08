@@ -447,13 +447,16 @@ export default function EnhancedOrdersPage() {
       const orderNumber = `ORD-${Date.now()}`;
       const qrCodeData = `${orderNumber}-${Date.now()}`;
 
+      // Determine status based on driver assignment
+      const status = orderData.assigned_driver_id ? 'assigned' : 'pending';
+
       // Build the insert object
       const insertData: any = {
         tenant_id: userData.tenant_id,
         order_number: orderNumber,
         qr_code_data: qrCodeData,
         qr_code_signature: "pending",
-        status: "pending",
+        status: status,
         created_by: session.user.id,
         ...orderData,
       };
@@ -472,20 +475,43 @@ export default function EnhancedOrdersPage() {
         throw new Error("Order was not created");
       }
 
+      // Send notification if driver assigned
+      if (orderData.assigned_driver_id) {
+        try {
+          await supabase.from('notifications').insert({
+            tenant_id: userData.tenant_id,
+            user_id: orderData.assigned_driver_id,
+            order_id: order.id,
+            notification_type: 'status_change',
+            title: 'New Order Assigned',
+            message: `Order ${order.order_number} has been assigned to you. Please review the details and activate the load when ready.`,
+            metadata: {
+              order_number: order.order_number,
+              created_at: new Date().toISOString()
+            }
+          });
+          console.log('✅ Notification sent to driver');
+        } catch (notifError) {
+          console.warn('Failed to send notification:', notifError);
+          // Don't fail the order creation if notification fails
+        }
+      }
+
       // Try to generate QR code (optional - don't fail if this errors)
       try {
         await generateQRCode(order.id);
-        handleSuccess(
-          "Order created successfully! QR code has been generated and downloaded."
-        );
+        const successMessage = orderData.assigned_driver_id
+          ? "Order created and assigned to driver successfully! QR code has been generated. The driver has been notified."
+          : "Order created successfully! QR code has been generated and downloaded.";
+        handleSuccess(successMessage);
       } catch (qrError: any) {
         console.warn("QR generation failed:", qrError);
-        toast(
-          "Order created successfully! (QR code generation failed - you can generate it later)",
-          {
-            icon: "⚠️",
-          }
-        );
+        const warningMessage = orderData.assigned_driver_id
+          ? "Order created and assigned to driver! (QR code generation failed - you can generate it later)"
+          : "Order created successfully! (QR code generation failed - you can generate it later)";
+        toast(warningMessage, {
+          icon: "⚠️",
+        });
       }
 
       setShowCreateModal(false);

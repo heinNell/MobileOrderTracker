@@ -1,9 +1,24 @@
-// Supabase client for dashboard
 import { createClient } from "@supabase/supabase-js";
-import { handleApiError, handleSuccess } from "./utils";
+import { handleApiError } from "./utils/api-helpers";
+import { 
+  QRCodeResult, 
+  ValidationResult, 
+  TaskResult, 
+  SwiftActionResult, 
+  MapsServiceResult,
+  Location,
+  HandlerResult,
+  TaskConfig
+} from "./types/supabase";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// Type safety for environment variables
+interface EnvironmentVariables {
+  NEXT_PUBLIC_SUPABASE_URL: string;
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // Validation for required environment variables
 if (!supabaseUrl) {
@@ -22,11 +37,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // Base function to call Edge Functions with authentication
-const callEdgeFunction = async (
+const callEdgeFunction = async <T = any>(
   functionName: string,
   payload?: any,
   method: string = "POST"
-): Promise<any> => {
+): Promise<T> => {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -48,9 +63,15 @@ const callEdgeFunction = async (
       }
     );
 
+    // Handle different response types
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
     const result = await response.json();
 
-    if (!response.ok || !result.success) {
+    if (!result.success) {
       throw new Error(result.error || `Failed to call ${functionName}`);
     }
 
@@ -61,27 +82,51 @@ const callEdgeFunction = async (
   }
 };
 
-// 1. Generate QR Code (your existing function)
-export const generateQRCode = async (
-  orderId: string
-): Promise<{
-  data: string;
-  image: string;
-  expiresAt: string;
-}> => {
-  const result = await callEdgeFunction("generate-qr-code", { orderId });
+// Function with retry logic for critical operations
+const callEdgeFunctionWithRetry = async <T = any>(
+  functionName: string,
+  payload?: any,
+  method: string = "POST",
+  maxRetries: number = 3
+): Promise<T> => {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await callEdgeFunction<T>(functionName, payload, method);
+    } catch (error) {
+      lastError = error;
+      
+      // Don't retry on authentication errors
+      if (error instanceof Error && error.message === "Not authenticated") {
+        throw error;
+      }
+      
+      if (attempt === maxRetries) break;
+      
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+  
+  throw lastError;
+};
+
+// 1. Generate QR Code
+export const generateQRCode = async (orderId: string): Promise<QRCodeResult> => {
+  const result = await callEdgeFunctionWithRetry<{ qrCode: QRCodeResult }>(
+    "generate-qr-code", 
+    { orderId }
+  );
   return result.qrCode;
 };
 
 // 2. Validate QR Code
-export const validateQRCode = async (
-  qrCodeData: string
-): Promise<{
-  valid: boolean;
-  orderId?: string;
-  orderData?: any;
-}> => {
-  const result = await callEdgeFunction("validate-qr-code", { qrCodeData });
+export const validateQRCode = async (qrCodeData: string): Promise<ValidationResult> => {
+  const result = await callEdgeFunction<{ validation: ValidationResult }>(
+    "validate-qr-code", 
+    { qrCodeData }
+  );
   return result.validation;
 };
 
@@ -90,21 +135,23 @@ export const executeRapidTask = async (taskData: {
   taskType: string;
   orderId?: string;
   data?: any;
-}): Promise<{
-  taskId: string;
-  status: string;
-  result?: any;
-}> => {
-  const result = await callEdgeFunction("rapid-task", taskData);
+}): Promise<TaskResult> => {
+  const result = await callEdgeFunction<{ task: TaskResult }>(
+    "rapid-task", 
+    taskData
+  );
   return result.task;
 };
 
 // 4. Swift API - General purpose API for fast operations
-export const callSwiftApi = async (apiData: {
+export const callSwiftApi = async <T = any>(apiData: {
   action: string;
   payload?: any;
-}): Promise<any> => {
-  const result = await callEdgeFunction("swift-api", apiData);
+}): Promise<T> => {
+  const result = await callEdgeFunction<{ data: T }>(
+    "swift-api", 
+    apiData
+  );
   return result.data;
 };
 
@@ -113,36 +160,38 @@ export const processSmoothHandler = async (handlerData: {
   event: string;
   orderId: string;
   data?: any;
-}): Promise<{
-  processed: boolean;
-  newState?: string;
-  message?: string;
-}> => {
-  const result = await callEdgeFunction("smooth-handler", handlerData);
+}): Promise<HandlerResult> => {
+  const result = await callEdgeFunctionWithRetry<{ handler: HandlerResult }>(
+    "smooth-handler", 
+    handlerData
+  );
   return result.handler;
 };
 
 // 6. Swift Function - For executing quick functions
-export const executeSwiftFunction = async (functionData: {
+export const executeSwiftFunction = async <T = any>(functionData: {
   functionName: string;
   parameters?: any;
-}): Promise<any> => {
-  const result = await callEdgeFunction("swift-function", functionData);
+}): Promise<T> => {
+  const result = await callEdgeFunction<{ execution: T }>(
+    "swift-function", 
+    functionData
+  );
   return result.execution;
 };
 
 // 7. Maps Service - For location and mapping operations
 export const callMapsService = async (mapsData: {
   action: "geocode" | "route" | "nearby" | "distance";
-  origin?: { lat: number; lng: number };
-  destination?: { lat: number; lng: number };
+  origin?: Location;
+  destination?: Location;
   address?: string;
   radius?: number;
-}): Promise<{
-  success: boolean;
-  data: any;
-}> => {
-  const result = await callEdgeFunction("maps-service", mapsData);
+}): Promise<MapsServiceResult> => {
+  const result = await callEdgeFunction<{ maps: MapsServiceResult }>(
+    "maps-service", 
+    mapsData
+  );
   return result.maps;
 };
 
@@ -151,12 +200,11 @@ export const executeSwiftAction = async (actionData: {
   action: string;
   orderId: string;
   parameters?: any;
-}): Promise<{
-  executed: boolean;
-  result?: any;
-  message?: string;
-}> => {
-  const result = await callEdgeFunction("swift-action", actionData);
+}): Promise<SwiftActionResult> => {
+  const result = await callEdgeFunction<{ action: SwiftActionResult }>(
+    "swift-action", 
+    actionData
+  );
   return result.action;
 };
 
@@ -164,21 +212,20 @@ export const executeSwiftAction = async (actionData: {
 export const manageSwiftTask = async (taskData: {
   operation: "create" | "update" | "delete" | "execute";
   taskId?: string;
-  taskConfig?: any;
-}): Promise<{
-  taskId: string;
-  status: string;
-  result?: any;
-}> => {
-  const result = await callEdgeFunction("swift-task", taskData);
+  taskConfig?: TaskConfig;
+}): Promise<TaskResult> => {
+  const result = await callEdgeFunction<{ task: TaskResult }>(
+    "swift-task", 
+    taskData
+  );
   return result.task;
 };
 
 // Convenience functions for common operations
 export const trackOrderLocation = async (
   orderId: string,
-  location: { lat: number; lng: number }
-) => {
+  location: Location
+): Promise<SwiftActionResult> => {
   return await executeSwiftAction({
     action: "update_location",
     orderId,
@@ -186,7 +233,10 @@ export const trackOrderLocation = async (
   });
 };
 
-export const updateOrderStatus = async (orderId: string, status: string) => {
+export const updateOrderStatus = async (
+  orderId: string, 
+  status: string
+): Promise<HandlerResult> => {
   return await processSmoothHandler({
     event: "status_change",
     orderId,
@@ -195,9 +245,9 @@ export const updateOrderStatus = async (orderId: string, status: string) => {
 };
 
 export const calculateDeliveryRoute = async (
-  origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
-) => {
+  origin: Location,
+  destination: Location
+): Promise<MapsServiceResult> => {
   return await callMapsService({
     action: "route",
     origin,
@@ -206,9 +256,9 @@ export const calculateDeliveryRoute = async (
 };
 
 export const findNearbyOrders = async (
-  location: { lat: number; lng: number },
+  location: Location,
   radius: number = 5
-) => {
+): Promise<MapsServiceResult> => {
   return await callMapsService({
     action: "nearby",
     origin: location,
@@ -220,7 +270,7 @@ export const findNearbyOrders = async (
 export const batchProcessOrders = async (
   orderIds: string[],
   action: string
-) => {
+): Promise<TaskResult> => {
   const tasks = orderIds.map((orderId) => ({
     taskType: "batch_process",
     orderId,

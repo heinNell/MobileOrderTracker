@@ -1,211 +1,285 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// create-driver-account (Edge Function) with CORS and temp password generation - Open Access
+import { createClient } from "npm:@supabase/supabase-js@2.26.0";
+import { randomBytes } from "node:crypto";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "*"; // set to specific origin for production
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: {
+    persistSession: false,
+  },
+});
+
+function corsHeaders() {
+  return new Headers({
+    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, x-supabase-auth",
+    "Access-Control-Allow-Credentials": "true",
+    "Content-Type": "application/json",
+  });
 }
 
-serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+function generateTempPassword(length = 12) {
+  const buf = randomBytes(Math.max(8, length));
+  return buf
+    .toString("base64")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, length);
+}
 
-  try {
-    // Create Supabase client with service role key for admin operations
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
-
-    // Create regular client for user session validation
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    )
-
-    // Get the authorization header
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      throw new Error('Missing authorization header')
-    }
-
-    // Verify the requesting user is authenticated and is admin/dispatcher
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-
-    if (authError || !user) {
-      throw new Error('Unauthorized')
-    }
-
-    // Check if user has permission to create drivers
-    const { data: requestingUser, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('role, tenant_id')
-      .eq('id', user.id)
-      .single()
-
-    if (userError || !requestingUser) {
-      throw new Error('User not found')
-    }
-
-    if (!['admin', 'dispatcher'].includes(requestingUser.role)) {
-      throw new Error('Insufficient permissions')
-    }
-
-    // Parse request body
-    const { email, full_name, phone, password } = await req.json()
-
-    // Validate required fields
-    if (!email || !full_name || !password) {
-      throw new Error('Missing required fields: email, full_name, password')
-    }
-
-    // Generate a secure password if not provided
-    const driverPassword = password || generateSecurePassword()
-
-    // Create the user in Supabase Auth
-    const { data: authUser, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: driverPassword,
-      email_confirm: true, // Auto-confirm email for admin-created accounts
-      user_metadata: {
-        full_name: full_name,
-        role: 'driver',
-        created_by: user.id,
-        tenant_id: requestingUser.tenant_id
-      }
-    })
-
-    if (createAuthError) {
-      throw new Error(`Failed to create auth user: ${createAuthError.message}`)
-    }
-
-    if (!authUser.user) {
-      throw new Error('Auth user creation failed')
-    }
-
-    // Create the user profile in the users table
-    const { data: userProfile, error: profileError } = await supabaseAdmin
-      .from('users')
-      .insert({
-        id: authUser.user.id,
-        email: email,
-        full_name: full_name,
-        phone: phone || null,
-        role: 'driver',
-        tenant_id: requestingUser.tenant_id,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-
-    if (profileError) {
-      // If profile creation fails, we should clean up the auth user
-      console.error('Profile creation failed:', profileError)
-      
-      // Attempt to delete the auth user
-      try {
-        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
-      } catch (cleanupError) {
-        console.error('Failed to cleanup auth user:', cleanupError)
-      }
-      
-      throw new Error(`Failed to create user profile: ${profileError.message}`)
-    }
-
-    // Send welcome email to the new driver with credentials
-    // In production, you might want to use a proper email service
-    const welcomeEmailSent = await sendWelcomeEmail(email, full_name, driverPassword)
-
-    console.log(`Successfully created driver account: ${email}`)
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Driver account created successfully',
-        data: {
-          id: authUser.user.id,
-          email: email,
-          full_name: full_name,
-          phone: phone,
-          role: 'driver',
-          tenant_id: requestingUser.tenant_id,
-          is_active: true,
-          welcome_email_sent: welcomeEmailSent,
-          temporary_password: driverPassword // In production, don't return this
-        }
-      }),
-      {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-        status: 200,
-      }
-    )
-
-  } catch (error) {
-    console.error('Error creating driver account:', error)
+Deno.serve(async (req) => {
+  const headers = corsHeaders();
+  
+  if (req.method === "OPTIONS")
+    return new Response(null, {
+      status: 204,
+      headers,
+    });
     
+  if (req.method !== "POST")
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'An unexpected error occurred'
+        error: "Method not allowed",
       }),
       {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-        status: 400,
+        status: 405,
+        headers,
       }
-    )
-  }
-})
-
-// Helper function to generate a secure password
-function generateSecurePassword(): string {
-  const length = 12
-  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
-  let password = ""
-  
-  for (let i = 0; i < length; i++) {
-    password += charset.charAt(Math.floor(Math.random() * charset.length))
-  }
-  
-  return password
-}
-
-// Helper function to send welcome email
-async function sendWelcomeEmail(email: string, fullName: string, password: string): Promise<boolean> {
+    );
+    
   try {
-    // In a real implementation, you would integrate with an email service like:
-    // - SendGrid
-    // - AWS SES
-    // - Resend
-    // - Supabase Edge Functions with email templates
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Expected application/json",
+        }),
+        {
+          status: 415,
+          headers,
+        }
+      );
+    }
     
-    console.log(`Welcome email would be sent to ${email} with credentials`)
-    console.log(`Name: ${fullName}`)
-    console.log(`Temporary Password: ${password}`)
-    console.log(`Login URL: ${Deno.env.get('MOBILE_APP_URL') || 'https://magnificent-snickerdoodle-018e86.netlify.app'}`)
+    const body = await req.json();
+    const email = (body.email || "").trim().toLowerCase();
+    const full_name = body.full_name ? String(body.full_name).trim() : null;
+    const phone = body.phone ? String(body.phone).trim() : null;
+    let password = body.password ?? null; // null means generate
     
-    // For now, just return true
-    // In production, implement actual email sending here
-    return true
-  } catch (error) {
-    console.error('Failed to send welcome email:', error)
-    return false
+    if (!email)
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "email is required",
+        }),
+        {
+          status: 422,
+          headers,
+        }
+      );
+      
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Invalid email format",
+        }),
+        {
+          status: 422,
+          headers,
+        }
+      );
+    }
+      
+    if (
+      password !== null &&
+      typeof password === "string" &&
+      password.length < 8
+    ) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "password must be at least 8 characters",
+        }),
+        {
+          status: 422,
+          headers,
+        }
+      );
+    }
+    
+    let temporary_password = null;
+    if (password === null) {
+      temporary_password = generateTempPassword(12);
+      password = temporary_password;
+    }
+    
+    // Create user via admin API
+    const { data: createData, error: createError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+      
+    if (createError) {
+      if (
+        createError.status === 409 ||
+        (createError.message &&
+          createError.message.toLowerCase().includes("already"))
+      ) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Email already exists",
+          }),
+          {
+            status: 409,
+            headers,
+          }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to create auth user",
+          detail: createError.message,
+        }),
+        {
+          status: 500,
+          headers,
+        }
+      );
+    }
+    
+    const authUser = createData.user;
+    if (!authUser || !authUser.id) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Auth user creation failed",
+        }),
+        {
+          status: 500,
+          headers,
+        }
+      );
+    }
+    
+    const userId = authUser.id;
+    
+    // Upsert into public.users
+    const profile = {
+      id: userId,
+      email,
+      full_name,
+      phone,
+      role: "driver",
+      tenant_id: body.tenant_id || null,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+    
+    const { error: upsertError } = await supabaseAdmin
+      .from("users")
+      .upsert(profile, {
+        onConflict: "id",
+      });
+      
+    if (upsertError) {
+      // rollback auth user
+      try {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+      } catch (e) {
+        console.error("rollback deleteUser failed", e);
+      }
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to create user profile",
+          detail: upsertError.message,
+        }),
+        {
+          status: 500,
+          headers,
+        }
+      );
+    }
+    
+    // Insert into drivers table
+    const driverRow = {
+      id: userId,
+      full_name,
+      phone,
+      license_number: body.license_number || null,
+      license_expiry: body.license_expiry || null,
+      tenant_id: body.tenant_id || null,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+    
+    const { error: driverError } = await supabaseAdmin
+      .from("drivers")
+      .insert(driverRow);
+      
+    if (driverError) {
+      console.error("Driver row insertion failed:", driverError);
+      // Return success with warning since user was created successfully
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            id: userId,
+            full_name,
+            email,
+            temporary_password,
+          },
+          warning: "Driver row insertion failed - user created but not added to drivers table",
+        }),
+        {
+          status: 201,
+          headers,
+        }
+      );
+    }
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          id: userId,
+          full_name,
+          email,
+          phone,
+          temporary_password,
+          message: temporary_password ? "Driver created with temporary password" : "Driver created successfully",
+        },
+      }),
+      {
+        status: 201,
+        headers,
+      }
+    );
+  } catch (err) {
+    console.error("create-driver-account unexpected error", err);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Internal server error",
+        detail: err.message,
+      }),
+      {
+        status: 500,
+        headers: corsHeaders(),
+      }
+    );
   }
-}
+});

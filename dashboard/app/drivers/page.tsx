@@ -12,7 +12,9 @@ export default function DriversPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newDriver, setNewDriver] = useState({
     full_name: "",
@@ -107,7 +109,7 @@ export default function DriversPage() {
 
     // Apply status filter
     if (statusFilter !== "all") {
-      result = result.filter((driver) => 
+      result = result.filter((driver) =>
         statusFilter === "active" ? driver.is_active : !driver.is_active
       );
     }
@@ -122,10 +124,24 @@ export default function DriversPage() {
 
     try {
       // Get current session for authorization
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
       if (sessionError || !session) {
-        throw new Error('Authentication required');
+        throw new Error("Authentication required");
+      }
+
+      // Get current user's tenant_id
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", session.user.id)
+        .single();
+
+      if (userError || !userData?.tenant_id) {
+        throw new Error("Unable to determine tenant. Please ensure you're logged in correctly.");
       }
 
       // Prepare driver data
@@ -133,30 +149,46 @@ export default function DriversPage() {
         email: newDriver.email.trim(),
         full_name: newDriver.full_name.trim(),
         phone: newDriver.phone.trim() || null,
-        password: newDriver.generatePassword ? null : newDriver.password, // null means auto-generate
+        password: newDriver.generatePassword ? null : newDriver.password, // null triggers auto-generation in function
+        tenant_id: userData.tenant_id, // Include tenant_id from current user
       };
 
-      // Call the Edge Function to create driver account
-      const { data, error } = await supabase.functions.invoke('create-driver-account', {
-        body: driverData,
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Failed to create driver account');
+      // Use direct fetch for better error handling
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-driver-account`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(driverData),
+        }
+      );
+      
+      const responseData = await response.json();
+      
+      if (!response.ok) {
+        // Handle specific status codes
+        if (response.status === 409) {
+          throw new Error(responseData.error || "Email already exists. Please use a different email address.");
+        } else if (response.status === 422) {
+          throw new Error(responseData.error || "Invalid input. Please check required fields.");
+        } else if (response.status === 401 || response.status === 403) {
+          throw new Error("Authentication failed. Please log in again.");
+        }
+        throw new Error(responseData.error || `Error: ${response.status}`);
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Unknown error occurred');
+      if (!responseData.success) {
+        throw new Error(responseData.error || "Unknown error occurred");
       }
 
       // Success! Show result to user
       setCreationResult({
         success: true,
-        message: `Driver account created successfully for ${data.data.full_name}`,
-        temporaryPassword: data.data.temporary_password,
+        message: `Driver account created successfully for ${responseData.data.full_name}`,
+        temporaryPassword: responseData.data.temporary_password,
       });
 
       // Reset form
@@ -171,20 +203,22 @@ export default function DriversPage() {
       // Refresh drivers list
       fetchDrivers();
 
-      console.log('Driver account created:', data.data);
-
+      console.log("Driver account created:", responseData.data);
     } catch (error: any) {
       console.error("Error creating driver:", error);
       setCreationResult({
         success: false,
-        message: error.message || 'Failed to create driver account',
+        message: error.message || "Failed to create driver account",
       });
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleToggleDriverStatus = async (driverId: string, currentStatus: boolean) => {
+  const handleToggleDriverStatus = async (
+    driverId: string,
+    currentStatus: boolean
+  ) => {
     try {
       const { error } = await supabase
         .from("users")
@@ -241,7 +275,9 @@ export default function DriversPage() {
       <div className="p-4 md:p-6">
         <div className="mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Driver Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Driver Management
+            </h1>
             <div className="mt-4 md:mt-0 flex space-x-3">
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -266,7 +302,10 @@ export default function DriversPage() {
         <div className="bg-white shadow rounded-lg p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="search"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Search Drivers
               </label>
               <input
@@ -279,14 +318,21 @@ export default function DriversPage() {
               />
             </div>
             <div>
-              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="status"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Filter by Status
               </label>
               <select
                 id="status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+                onChange={(e) =>
+                  setStatusFilter(
+                    e.target.value as "all" | "active" | "inactive"
+                  )
+                }
               >
                 <option value="all">All Statuses</option>
                 <option value="active">Active</option>
@@ -322,7 +368,10 @@ export default function DriversPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredDrivers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                    <td
+                      colSpan={5}
+                      className="px-6 py-4 text-center text-gray-500"
+                    >
                       No drivers found matching your criteria
                     </td>
                   </tr>
@@ -335,20 +384,27 @@ export default function DriversPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{driver.email}</div>
+                        <div className="text-sm text-gray-900">
+                          {driver.email}
+                        </div>
                         {driver.phone && (
-                          <div className="text-sm text-gray-500">{driver.phone}</div>
+                          <div className="text-sm text-gray-500">
+                            {driver.phone}
+                          </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {driver.last_location_update ? (
                           <div>
                             <div>
-                              {new Date(driver.last_location_update).toLocaleString()}
+                              {new Date(
+                                driver.last_location_update
+                              ).toLocaleString()}
                             </div>
                             {driver.last_location && (
                               <div className="text-xs">
-                                {driver.last_location.latitude.toFixed(6)}, {driver.last_location.longitude.toFixed(6)}
+                                {driver.last_location.latitude.toFixed(6)},{" "}
+                                {driver.last_location.longitude.toFixed(6)}
                               </div>
                             )}
                           </div>
@@ -369,7 +425,12 @@ export default function DriversPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
-                          onClick={() => handleToggleDriverStatus(driver.id, driver.is_active)}
+                          onClick={() =>
+                            handleToggleDriverStatus(
+                              driver.id,
+                              driver.is_active
+                            )
+                          }
                           className={`mr-3 ${
                             driver.is_active
                               ? "text-red-600 hover:text-red-900"
@@ -427,23 +488,29 @@ export default function DriversPage() {
             <form onSubmit={handleCreateDriver} className="p-6 space-y-4">
               {/* Creation Result Display */}
               {creationResult && (
-                <div className={`p-4 rounded-md ${
-                  creationResult.success 
-                    ? 'bg-green-50 border border-green-200 text-green-800' 
-                    : 'bg-red-50 border border-red-200 text-red-800'
-                }`}>
+                <div
+                  className={`p-4 rounded-md ${
+                    creationResult.success
+                      ? "bg-green-50 border border-green-200 text-green-800"
+                      : "bg-red-50 border border-red-200 text-red-800"
+                  }`}
+                >
                   <p className="font-medium">{creationResult.message}</p>
-                  {creationResult.success && creationResult.temporaryPassword && (
-                    <div className="mt-2">
-                      <p className="text-sm font-medium">Temporary Password:</p>
-                      <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
-                        {creationResult.temporaryPassword}
-                      </code>
-                      <p className="text-xs mt-1 text-gray-600">
-                        Please share this with the driver securely. They should change it on first login.
-                      </p>
-                    </div>
-                  )}
+                  {creationResult.success &&
+                    creationResult.temporaryPassword && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium">
+                          Temporary Password:
+                        </p>
+                        <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
+                          {creationResult.temporaryPassword}
+                        </code>
+                        <p className="text-xs mt-1 text-gray-600">
+                          Please share this with the driver securely. They
+                          should change it on first login.
+                        </p>
+                      </div>
+                    )}
                 </div>
               )}
 
@@ -457,7 +524,9 @@ export default function DriversPage() {
                   disabled={isCreating}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.full_name}
-                  onChange={(e) => setNewDriver({...newDriver, full_name: e.target.value})}
+                  onChange={(e) =>
+                    setNewDriver({ ...newDriver, full_name: e.target.value })
+                  }
                 />
               </div>
 
@@ -471,7 +540,9 @@ export default function DriversPage() {
                   disabled={isCreating}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.email}
-                  onChange={(e) => setNewDriver({...newDriver, email: e.target.value})}
+                  onChange={(e) =>
+                    setNewDriver({ ...newDriver, email: e.target.value })
+                  }
                 />
               </div>
 
@@ -485,7 +556,9 @@ export default function DriversPage() {
                   placeholder="Optional"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.phone}
-                  onChange={(e) => setNewDriver({...newDriver, phone: e.target.value})}
+                  onChange={(e) =>
+                    setNewDriver({ ...newDriver, phone: e.target.value })
+                  }
                 />
               </div>
 
@@ -494,7 +567,7 @@ export default function DriversPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Password Setup
                 </label>
-                
+
                 <div className="space-y-3">
                   <label className="flex items-center">
                     <input
@@ -502,19 +575,29 @@ export default function DriversPage() {
                       name="passwordOption"
                       disabled={isCreating}
                       checked={newDriver.generatePassword}
-                      onChange={() => setNewDriver({...newDriver, generatePassword: true, password: ""})}
+                      onChange={() =>
+                        setNewDriver({
+                          ...newDriver,
+                          generatePassword: true,
+                          password: "",
+                        })
+                      }
                       className="mr-2"
                     />
-                    <span className="text-sm">Generate secure password automatically (Recommended)</span>
+                    <span className="text-sm">
+                      Generate secure password automatically (Recommended)
+                    </span>
                   </label>
-                  
+
                   <label className="flex items-center">
                     <input
                       type="radio"
                       name="passwordOption"
                       disabled={isCreating}
                       checked={!newDriver.generatePassword}
-                      onChange={() => setNewDriver({...newDriver, generatePassword: false})}
+                      onChange={() =>
+                        setNewDriver({ ...newDriver, generatePassword: false })
+                      }
                       className="mr-2"
                     />
                     <span className="text-sm">Set custom password</span>
@@ -531,7 +614,9 @@ export default function DriversPage() {
                       minLength={8}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                       value={newDriver.password}
-                      onChange={(e) => setNewDriver({...newDriver, password: e.target.value})}
+                      onChange={(e) =>
+                        setNewDriver({ ...newDriver, password: e.target.value })
+                      }
                     />
                   </div>
                 )}
@@ -563,14 +648,30 @@ export default function DriversPage() {
                 >
                   {isCreating ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
                       </svg>
                       Creating Account...
                     </>
                   ) : (
-                    'Create Driver Account'
+                    "Create Driver Account"
                   )}
                 </button>
               </div>

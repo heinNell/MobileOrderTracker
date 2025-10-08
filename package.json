@@ -1,1 +1,1 @@
-{"type":"module","devDependencies":{"@types/google.maps":"^3.58.1"}}
+{"type":"module","devDependencies":{"@types/google.maps":"^3.58.1"},"dependencies":{"@supabase/supabase-js":"^2.74.0"}}

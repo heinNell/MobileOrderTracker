@@ -118,7 +118,11 @@ export interface Order {
   assigned_driver?: {
     id: string;
     full_name: string;
+    phone?: string;
   };
+  load_activated_at?: string;
+  load_activated_by?: string;
+  load_activation_location?: string | Location;
   loading_point_name: string;
   loading_point_address: string;
   loading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
@@ -229,6 +233,17 @@ export interface Geofence {
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+export interface LoadActivation {
+  id: string;
+  order_id: string;
+  driver_id: string;
+  activated_at: string;
+  activation_location?: Location;
+  device_info?: Record<string, any>;
+  metadata?: Record<string, any>;
+  created_at: string;
 }
 
 export interface AuditLog {
