@@ -48,7 +48,9 @@ export function parsePostGISPoint(wkt: string | Location): Location {
 
   const normalized = normalizeWkt(wkt);
   // Enhanced regex to handle scientific notation and more flexible whitespace
-  const match = normalized.match(/POINT\s*\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\)/i);
+  const match = normalized.match(
+    /POINT\s*\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\)/i
+  );
 
   if (!match) {
     throw new Error(`Invalid PostGIS POINT format: ${wkt}`);
@@ -124,7 +126,9 @@ export function parseLocation(value: string | Location | any): Location {
     // GeoJSON Point
     if (value.type === "Point" && Array.isArray(value.coordinates)) {
       if (value.coordinates.length < 2) {
-        throw new Error("Invalid GeoJSON: coordinates array must have at least 2 elements");
+        throw new Error(
+          "Invalid GeoJSON: coordinates array must have at least 2 elements"
+        );
       }
       const [lng, lat] = value.coordinates;
       if (typeof lat !== "number" || typeof lng !== "number") {
@@ -181,7 +185,9 @@ export function calculateBearing(from: Location, to: Location): number {
   const lat2 = toRadians(to.latitude);
 
   const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
 
   let bearing = toDegrees(Math.atan2(y, x));
   return (bearing + 360) % 360;
@@ -191,7 +197,24 @@ export function calculateBearing(from: Location, to: Location): number {
  * Get cardinal direction from bearing
  */
 export function getCardinalDirection(bearing: number): string {
-  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const directions = [
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
+  ];
   const index = Math.round(bearing / 22.5) % 16;
   return directions[index];
 }
@@ -216,15 +239,24 @@ export function isWithinSouthAfrica(location: Location): boolean {
   const { latitude, longitude } = location;
   // Approximate bounds for South Africa
   return (
-    latitude >= -35.0 && latitude <= -22.0 &&
-    longitude >= 16.0 && longitude <= 33.0
+    latitude >= -35.0 &&
+    latitude <= -22.0 &&
+    longitude >= 16.0 &&
+    longitude <= 33.0
   );
 }
 
 /* ---------------- Helpers ---------------- */
 
 function isValidLatLng(lat: number, lng: number): boolean {
-  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
 }
 
 function toRadians(degrees: number): number {

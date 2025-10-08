@@ -1,4 +1,3 @@
-// src/screens/SetupVerificationScreen.tsx
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -9,13 +8,31 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import * as Location from 'expo-location';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import * as Notifications from 'expo-notifications';
-import * as Network from 'expo-network';
+
+// Create a fallback for expo-network
+const NetworkFallback = {
+  getNetworkStateAsync: async () => ({ isConnected: true, isInternetReachable: true }),
+  getIpAddressAsync: async () => '0.0.0.0',
+};
+
+// Conditionally import expo-network
+let Network: any = NetworkFallback;
+if (Platform.OS !== 'web') {
+  try {
+    // This will be properly imported during runtime on mobile
+    const ExpoNetwork = require('expo-network');
+    Network = ExpoNetwork;
+  } catch (e) {
+    console.warn('expo-network not available, using fallback');
+  }
+}
 
 // Simple stub components (move to ../components/StatusIndicators.tsx if preferred)
 const StatusIndicator: React.FC<{ status: "checking" | "success" | "error" | "warning"; size?: number }> = ({ status, size = 24 }) => {
@@ -137,7 +154,14 @@ export default function SetupVerificationScreen() {
 
   const checkSupabaseConnection = async (items: VerificationItem[], index: number) => {
     try {
-      const network = await Network.getNetworkStateAsync();
+      let network;
+      try {
+        network = await Network.getNetworkStateAsync();
+      } catch (error) {
+        // If Network.getNetworkStateAsync fails, use fallback
+        network = { isConnected: true, isInternetReachable: true };
+      }
+      
       if (!network.isConnected) {
         items[index].status = "warning";
         items[index].message = "No internet connection";

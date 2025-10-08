@@ -69,37 +69,39 @@ export default function EnhancedOrderForm({
   const fetchDrivers = async () => {
     try {
       setLoadingDrivers(true);
-      
+
       // Get current user's session
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) return;
 
       // Get user's tenant_id
       const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', session.user.id)
+        .from("users")
+        .select("tenant_id")
+        .eq("id", session.user.id)
         .maybeSingle();
 
       if (!userData?.tenant_id) return;
 
       // Fetch active drivers in the same tenant
       const { data: drivers, error } = await supabase
-        .from('users')
-        .select('id, full_name, phone, email')
-        .eq('role', 'driver')
-        .eq('is_active', true)
-        .eq('tenant_id', userData.tenant_id)
-        .order('full_name');
+        .from("users")
+        .select("id, full_name, phone, email")
+        .eq("role", "driver")
+        .eq("is_active", true)
+        .eq("tenant_id", userData.tenant_id)
+        .order("full_name");
 
       if (error) {
-        console.error('Error fetching drivers:', error);
+        console.error("Error fetching drivers:", error);
         return;
       }
 
       setAvailableDrivers(drivers || []);
     } catch (error) {
-      console.error('Error in fetchDrivers:', error);
+      console.error("Error in fetchDrivers:", error);
     } finally {
       setLoadingDrivers(false);
     }
@@ -384,8 +386,8 @@ export default function EnhancedOrderForm({
                   Driver Assignment
                 </h3>
                 <p className="text-sm text-gray-600">
-                  Assign a driver to this order. The driver will receive a notification
-                  and can activate the load in the mobile app.
+                  Assign a driver to this order. The driver will receive a
+                  notification and can activate the load in the mobile app.
                 </p>
 
                 <div className="space-y-4">
@@ -396,7 +398,9 @@ export default function EnhancedOrderForm({
                     {loadingDrivers ? (
                       <div className="flex items-center justify-center py-4">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        <span className="ml-2 text-gray-600">Loading drivers...</span>
+                        <span className="ml-2 text-gray-600">
+                          Loading drivers...
+                        </span>
                       </div>
                     ) : availableDrivers.length === 0 ? (
                       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -409,11 +413,16 @@ export default function EnhancedOrderForm({
                       <select
                         value={formData.assigned_driver_id}
                         onChange={(e) =>
-                          handleInputChange("assigned_driver_id", e.target.value)
+                          handleInputChange(
+                            "assigned_driver_id",
+                            e.target.value
+                          )
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="">Unassigned (will be pending status)</option>
+                        <option value="">
+                          Unassigned (will be pending status)
+                        </option>
                         {availableDrivers.map((driver) => (
                           <option key={driver.id} value={driver.id}>
                             {driver.full_name}
@@ -446,10 +455,10 @@ export default function EnhancedOrderForm({
                             Driver will be notified
                           </p>
                           <p className="text-sm text-blue-700 mt-1">
-                            When you create this order, the selected driver will receive
-                            a push notification and the order status will be set to
-                            "assigned". The driver can then activate the load and start
-                            the delivery process.
+                            When you create this order, the selected driver will
+                            receive a push notification and the order status
+                            will be set to "assigned". The driver can then
+                            activate the load and start the delivery process.
                           </p>
                         </div>
                       </div>
@@ -477,8 +486,8 @@ export default function EnhancedOrderForm({
                             Unassigned Order
                           </p>
                           <p className="text-sm text-gray-600 mt-1">
-                            The order will be created with "pending" status and you can
-                            assign a driver later from the orders list.
+                            The order will be created with "pending" status and
+                            you can assign a driver later from the orders list.
                           </p>
                         </div>
                       </div>

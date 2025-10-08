@@ -181,10 +181,7 @@ export default function AnalyticsPage() {
     const inProgressOrders = Object.values(statusCounts).reduce(
       (sum, count, index) => {
         const status = Object.keys(statusCounts)[index] as OrderStatus;
-        if (
-          status !== "completed" &&
-          status !== "cancelled"
-        ) {
+        if (status !== "completed" && status !== "cancelled") {
           return sum + count;
         }
         return sum;
@@ -247,9 +244,7 @@ export default function AnalyticsPage() {
 
   // Calculate KPIs
   const totalOrders = orders.length;
-  const completedOrders = orders.filter(
-    (o) => o.status === "completed"
-  ).length;
+  const completedOrders = orders.filter((o) => o.status === "completed").length;
   const completionRate =
     totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0;
   const inTransitOrders = orders.filter(

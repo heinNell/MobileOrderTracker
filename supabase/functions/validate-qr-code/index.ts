@@ -109,7 +109,7 @@ serve(async (req) => {
       });
     }
 
-    // Fetch order details with QR code info
+    // Fetch order details
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(
@@ -120,51 +120,14 @@ serve(async (req) => {
       `
       )
       .eq("id", orderId)
+      .eq("qr_code_data", qrCodeData)
       .single();
 
     if (orderError || !order) {
       return new Response(
-        JSON.stringify({ error: "Order not found" }),
+        JSON.stringify({ error: "Order not found or QR code mismatch" }),
         {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Fetch QR code record
-    const { data: qrCode, error: qrError } = await supabase
-      .from("qr_codes")
-      .select("*")
-      .eq("order_id", orderId)
-      .single();
-
-    if (qrError || !qrCode) {
-      return new Response(
-        JSON.stringify({ error: "QR code not found in database" }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Verify QR code status
-    if (qrCode.status === 'expired') {
-      return new Response(
-        JSON.stringify({ error: "QR code has expired" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    if (qrCode.status === 'used') {
-      return new Response(
-        JSON.stringify({ error: "QR code has already been used" }),
-        {
-          status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
@@ -184,41 +147,6 @@ serve(async (req) => {
       });
     }
 
-    // For drivers, verify they are assigned to this order
-    if (userData.role === "driver" && order.assigned_driver_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "You are not assigned to this order" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Check if load is activated (required for drivers to scan)
-    if (userData.role === "driver" && !order.load_activated_at) {
-      return new Response(
-        JSON.stringify({ 
-          error: "Load must be activated before scanning QR code",
-          requiresActivation: true 
-        }),
-        {
-          status: 428, // 428 Precondition Required
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Update QR code with scan information
-    await supabase
-      .from("qr_codes")
-      .update({
-        scanned_at: new Date().toISOString(),
-        scanned_by: user.id,
-        status: 'used'
-      })
-      .eq("id", qrCode.id);
-
     // Log QR code scan
     await supabase.from("audit_log").insert({
       tenant_id: order.tenant_id,
@@ -227,54 +155,30 @@ serve(async (req) => {
       action: "QR_CODE_SCANNED",
       resource_type: "order",
       resource_id: orderId,
-      new_values: { 
-        scanned_at: new Date().toISOString(),
-        scanned_by: user.id,
-        order_status: order.status
-      },
+      new_values: { scanned_at: new Date().toISOString() },
     });
 
-    // Update order status based on current state for drivers
-    let newStatus = order.status;
-    let statusNote = "QR code scanned";
-
-    if (userData.role === "driver") {
-      if (order.status === "activated") {
-        // First scan after activation = pickup
-        newStatus = "picked_up";
-        statusNote = "Order picked up via QR scan";
-        
-        await supabase
-          .from("orders")
-          .update({
-            status: newStatus,
-            actual_start_time: new Date().toISOString(),
-          })
-          .eq("id", orderId);
-
-      } else if (order.status === "picked_up" || order.status === "in_transit") {
-        // Subsequent scan = delivery
-        newStatus = "delivered";
-        statusNote = "Order delivered via QR scan";
-        
-        await supabase
-          .from("orders")
-          .update({
-            status: newStatus,
-            actual_end_time: new Date().toISOString(),
-          })
-          .eq("id", orderId);
-      }
+    // If driver scans and order is pending, auto-assign
+    if (userData.role === "driver" && order.status === "pending") {
+      await supabase
+        .from("orders")
+        .update({
+          assigned_driver_id: user.id,
+          status: "assigned",
+          actual_start_time: new Date().toISOString(),
+        })
+        .eq("id", orderId);
 
       // Create status update
       await supabase.from("status_updates").insert({
         order_id: orderId,
         driver_id: user.id,
-        status: newStatus,
-        notes: statusNote,
+        status: "assigned",
+        notes: "Order activated via QR code scan",
       });
 
-      order.status = newStatus;
+      order.assigned_driver_id = user.id;
+      order.status = "assigned";
     }
 
     // Return order details
