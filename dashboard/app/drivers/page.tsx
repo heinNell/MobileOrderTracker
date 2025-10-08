@@ -1,29 +1,43 @@
-// Drivers Page - Driver Management Interface
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
-import type { User } from "../../../shared/types";
+import { supabase } from "../../lib/supabase"; // Assuming this is typed or needs import adjustment
+import type { User } from "../../../shared/types"; // Assuming User type is defined here
 import { useRouter } from "next/navigation";
+
+// Define a more specific type for user instead of any (based on Supabase session.user)
+interface SessionUser {
+  id: string;
+  email?: string;
+  // Add other properties as needed from your auth setup
+}
 
 export default function DriversPage() {
   const [drivers, setDrivers] = useState<User[]>([]);
   const [filteredDrivers, setFilteredDrivers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "active" | "inactive"
-  >("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newDriver, setNewDriver] = useState({
+  const [loading, setLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [newDriver, setNewDriver] = useState<{
+    full_name: string;
+    email: string;
+    phone: string;
+    license_number: string;
+    license_expiry: string;
+    password: string;
+    generatePassword: boolean;
+  }>({
     full_name: "",
     email: "",
     phone: "",
+    license_number: "",
+    license_expiry: "",
     password: "",
     generatePassword: true,
   });
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
   const [creationResult, setCreationResult] = useState<{
     success: boolean;
     message: string;
@@ -49,7 +63,7 @@ export default function DriversPage() {
       return;
     }
 
-    setUser(session.user);
+    setUser(session.user as SessionUser); // Cast to our type
     fetchDrivers();
     subscribeToUsers();
   };
@@ -117,10 +131,47 @@ export default function DriversPage() {
     setFilteredDrivers(result);
   };
 
-  const handleCreateDriver = async (e: React.FormEvent) => {
+  const handleCreateDriver = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsCreating(true);
     setCreationResult(null);
+
+    // Client-side validation
+    if (!newDriver.full_name.trim()) {
+      setCreationResult({
+        success: false,
+        message: "Full name is required.",
+      });
+      setIsCreating(false);
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!newDriver.email.trim() || !emailRegex.test(newDriver.email.trim())) {
+      setCreationResult({
+        success: false,
+        message: "A valid email is required.",
+      });
+      setIsCreating(false);
+      return;
+    }
+    if (!newDriver.generatePassword && (!newDriver.password || newDriver.password.length < 8)) {
+      setCreationResult({
+        success: false,
+        message: "Custom password must be at least 8 characters.",
+      });
+      setIsCreating(false);
+      return;
+    }
+    // Optional: Phone validation (basic)
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/; // E.164 format
+    if (newDriver.phone.trim() && !phoneRegex.test(newDriver.phone.trim())) {
+      setCreationResult({
+        success: false,
+        message: "Invalid phone number format (e.g., +1234567890).",
+      });
+      setIsCreating(false);
+      return;
+    }
 
     try {
       // Get current session for authorization
@@ -133,15 +184,15 @@ export default function DriversPage() {
         throw new Error("Authentication required");
       }
 
-      // Get current user's tenant_id
+      // Get current user's tenant_id with fallback
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("tenant_id")
         .eq("id", session.user.id)
         .single();
 
-      if (userError || !userData?.tenant_id) {
-        throw new Error("Unable to determine tenant. Please ensure you're logged in correctly.");
+      if (userError) {
+        console.error("Error fetching tenant_id:", userError);
       }
 
       // Prepare driver data
@@ -149,8 +200,10 @@ export default function DriversPage() {
         email: newDriver.email.trim(),
         full_name: newDriver.full_name.trim(),
         phone: newDriver.phone.trim() || null,
+        license_number: newDriver.license_number.trim() || null,
+        license_expiry: newDriver.license_expiry || null,
         password: newDriver.generatePassword ? null : newDriver.password, // null triggers auto-generation in function
-        tenant_id: userData.tenant_id, // Include tenant_id from current user
+        tenant_id: userData?.tenant_id || null, // Fallback to null
       };
 
       // Use direct fetch for better error handling
@@ -196,6 +249,8 @@ export default function DriversPage() {
         full_name: "",
         email: "",
         phone: "",
+        license_number: "",
+        license_expiry: "",
         password: "",
         generatePassword: true,
       });
@@ -204,11 +259,12 @@ export default function DriversPage() {
       fetchDrivers();
 
       console.log("Driver account created:", responseData.data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating driver:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to create driver account";
       setCreationResult({
         success: false,
-        message: error.message || "Failed to create driver account",
+        message: errorMessage,
       });
     } finally {
       setIsCreating(false);
@@ -553,11 +609,42 @@ export default function DriversPage() {
                 <input
                   type="text"
                   disabled={isCreating}
-                  placeholder="Optional"
+                  placeholder="Optional (e.g., +1234567890)"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   value={newDriver.phone}
                   onChange={(e) =>
                     setNewDriver({ ...newDriver, phone: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  License Number
+                </label>
+                <input
+                  type="text"
+                  disabled={isCreating}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  value={newDriver.license_number}
+                  onChange={(e) =>
+                    setNewDriver({ ...newDriver, license_number: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  License Expiry
+                </label>
+                <input
+                  type="date"
+                  disabled={isCreating}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  value={newDriver.license_expiry}
+                  onChange={(e) =>
+                    setNewDriver({ ...newDriver, license_expiry: e.target.value })
                   }
                 />
               </div>
@@ -633,6 +720,8 @@ export default function DriversPage() {
                       full_name: "",
                       email: "",
                       phone: "",
+                      license_number: "",
+                      license_expiry: "",
                       password: "",
                       generatePassword: true,
                     });
@@ -682,3 +771,4 @@ export default function DriversPage() {
     </div>
   );
 }
+```

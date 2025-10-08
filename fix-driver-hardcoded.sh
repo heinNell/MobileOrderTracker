@@ -1,36 +1,16 @@
 #!/bin/bash
-# fix-driver-database.sh
 
-echo "🔧 Starting driver database fix..."
+echo "🔧 Starting driver database fix with hardcoded credentials..."
 
-# Load environment variables if not already set
-if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-  if [ -f .env ]; then
-    echo "Loading environment variables from .env file..."
-    export $(grep -v '^#' .env | xargs)
-  fi
-fi
+# Hardcoded values
+SUPABASE_URL="https://liagltqpeilbswuqcahp.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM1NzE4NSwiZXhwIjoyMDczOTMzMTg1fQ.dtEl-YMJZ-YmEaS9B7Loy7I3bRcf-2sHjpHRF8sCD8o"
 
-# Check for required environment variables
-if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ]; then
-  echo "❌ Missing NEXT_PUBLIC_SUPABASE_URL environment variable"
-  echo "Please ensure your .env file contains this variable"
-  echo "Trying to use hardcoded value..."
-  export NEXT_PUBLIC_SUPABASE_URL="https://liagltqpeilbswuqcahp.supabase.co"
-fi
-
-if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-  echo "❌ Missing SUPABASE_SERVICE_ROLE_KEY environment variable"
-  echo "Please ensure your .env file contains this variable"
-  echo "Trying to use hardcoded value..."
-  export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM1NzE4NSwiZXhwIjoyMDczOTMzMTg1fQ.dtEl-YMJZ-YmEaS9B7Loy7I3bRcf-2sHjpHRF8sCD8o"
-fi
-
-echo "Using Supabase URL: $NEXT_PUBLIC_SUPABASE_URL"
+echo "Using Supabase URL: $SUPABASE_URL"
 
 # Create SQL file for the policy
 echo "Creating SQL policy file..."
-cat > fix_users_insert_policy.sql << 'EOL'
+cat > fix_users_insert_policy.sql << 'EOSQL'
 -- Fix for users insert policy
 DO $$
 BEGIN
@@ -67,15 +47,17 @@ BEGIN
   -- Make sure RLS is enabled
   ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 END $$;
-EOL
+EOSQL
 
 # Apply SQL policy using REST API
 echo "Applying RLS policies via REST API..."
-curl -X POST "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/exec_sql" \
+curl -X POST "$SUPABASE_URL/rest/v1/rpc/exec_sql" \
   -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
-  --data "{\"sql\": \"$(cat fix_users_insert_policy.sql | tr '\n' ' ')\"}"
+  --data @- << EOF
+{"sql": "$(cat fix_users_insert_policy.sql | tr '\n' ' ')"}
+EOF
 
 echo -e "\n✅ Database fix completed!"
 echo "You should now be able to create driver accounts."
