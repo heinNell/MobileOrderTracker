@@ -43,6 +43,12 @@ export default function AnalyticsPage() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      fetchOrders();
+    }
+  }, [timeRange, user]);
+
   const checkAuth = async () => {
     const {
       data: { session },
@@ -139,13 +145,13 @@ export default function AnalyticsPage() {
     });
 
     const sortedDates = Object.keys(ordersByDate).sort();
-    
+
     return {
       labels: sortedDates,
       datasets: [
         {
           label: "Orders Created",
-          data: sortedDates.map(date => ordersByDate[date]),
+          data: sortedDates.map((date) => ordersByDate[date]),
           borderColor: "#3B82F6",
           backgroundColor: "rgba(59, 130, 246, 0.1)",
           tension: 0.4,
@@ -175,7 +181,10 @@ export default function AnalyticsPage() {
     const inProgressOrders = Object.values(statusCounts).reduce(
       (sum, count, index) => {
         const status = Object.keys(statusCounts)[index] as OrderStatus;
-        if (status !== "completed" && status !== "cancelled") {
+        if (
+          status !== "completed" &&
+          status !== "cancelled"
+        ) {
           return sum + count;
         }
         return sum;
@@ -238,10 +247,15 @@ export default function AnalyticsPage() {
 
   // Calculate KPIs
   const totalOrders = orders.length;
-  const completedOrders = orders.filter(o => o.status === "completed").length;
-  const completionRate = totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0;
-  const inTransitOrders = orders.filter(o => o.status === "in_transit").length;
-  const pendingOrders = orders.filter(o => o.status === "pending").length;
+  const completedOrders = orders.filter(
+    (o) => o.status === "completed"
+  ).length;
+  const completionRate =
+    totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0;
+  const inTransitOrders = orders.filter(
+    (o) => o.status === "in_transit"
+  ).length;
+  const pendingOrders = orders.filter((o) => o.status === "pending").length;
 
   if (loading) {
     return (
@@ -272,7 +286,9 @@ export default function AnalyticsPage() {
       <div className="p-4 md:p-6">
         <div className="mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Analytics & Reporting</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Analytics & Reporting
+            </h1>
             <div className="mt-4 md:mt-0 flex space-x-3">
               <button
                 onClick={handleLogout}
@@ -361,7 +377,9 @@ export default function AnalyticsPage() {
             <Pie options={pieChartOptions} data={getStatusDistributionData()} />
           </div>
           <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Recent Orders</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Recent Orders
+            </h2>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -395,7 +413,10 @@ export default function AnalyticsPage() {
                   ))}
                   {orders.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
+                      <td
+                        colSpan={3}
+                        className="px-6 py-4 text-center text-gray-500"
+                      >
                         No orders found
                       </td>
                     </tr>

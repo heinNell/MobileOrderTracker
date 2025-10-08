@@ -4,6 +4,14 @@ import React, { useState, useEffect } from "react";
 import type { Order, TransporterSupplier, User } from "../../../shared/types";
 import { supabase } from "../../lib/supabase";
 
+// Simplified driver type for form selection
+interface DriverOption {
+  id: string;
+  full_name: string;
+  phone?: string;
+  email?: string;
+}
+
 interface OrderFormProps {
   order?: Order;
   onSubmit: (orderData: Partial<Order>) => Promise<void>;
@@ -17,7 +25,7 @@ export default function EnhancedOrderForm({
   onCancel,
   isEditing = false,
 }: OrderFormProps) {
-  const [availableDrivers, setAvailableDrivers] = useState<User[]>([]);
+  const [availableDrivers, setAvailableDrivers] = useState<DriverOption[]>([]);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [formData, setFormData] = useState({
     // Basic order info
