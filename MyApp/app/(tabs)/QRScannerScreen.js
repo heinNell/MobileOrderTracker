@@ -11,9 +11,9 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { supabase } from "../../src/lib/supabase";
-import { LocationService } from "../../src/services/locationService";
-import { parsePostGISPoint } from "../../src/shared/locationUtils";
+import { supabase } from "../lib/supabase";
+import { LocationService } from "../services/locationService";
+import { parsePostGISPoint } from "../locationUtils";
 
 const STATUS_ACTIONS = [
   { status: "in_transit", label: "Start Transit", color: "#8B5CF6" },

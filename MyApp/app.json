@@ -1,0 +1,151 @@
+{
+  "expo": {
+    "name": "Mobile Order Tracker",
+    "slug": "mobile-order-tracker",
+    "owner": "heina1",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "ordertracker",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.logistics.ordertracker",
+      "associatedDomains": [
+        "applinks:ordertracker.app",
+        "applinks:magnificent-snickerdoodle-018e86.netlify.app"
+      ],
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
+        "NSLocationWhenInUseUsageDescription": "This app requires location access to track deliveries",
+        "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background",
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "background-processing"
+        ],
+        "NSLocationTemporaryUsageDescriptionDictionary": {
+          "DeliveryTracking": "Required for live ETA calculations"
+        },
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "com.logistics.ordertracker",
+            "CFBundleURLSchemes": [
+              "ordertracker"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.logistics.ordertracker",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "ordertracker.app"
+            },
+            {
+              "scheme": "https",
+              "host": "magnificent-snickerdoodle-018e86.netlify.app"
+            },
+            {
+              "scheme": "ordertracker"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "static",
+      "staticRendering": false,
+      "build": {
+        "babel": {
+          "include": [
+            "@expo/vector-icons"
+          ]
+        }
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Mobile Order Tracker to track your delivery location."
+        }
+      ],
+      "expo-barcode-scanner",
+      "expo-router"
+    ],
+    "description": "Logistics QR Code Mobile Application for Drivers",
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 30000,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#2563eb",
+      "iosDisplayInForeground": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+      "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",
+      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+      "EXPO_PUBLIC_GOOGLE_MAPS_EMBED_URL": "https://maps.googleapis.com/maps/api/js?key=AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg&libraries=places&callback=initMap",
+      "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "liagltqpeilbswuqcahp",
+      "EXPO_PUBLIC_QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+      "mobileDomain": "https://magnificent-snickerdoodle-018e86.netlify.app",
+      "dashboardUrl": "https://regal-quokka-de7e35.netlify.app",
+      "SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+      "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM1NzE4NSwiZXhwIjoyMDczOTMzMTg1fQ.dtEl-YMJZ-YmEaS9B7Loy7I3bRcf-2sHjpHRF8sCD8o",
+      "SUPABASE_JWT_SECRET": "oB9p8WiuJgDayPWf/fpHrqk5w8cmNvxwQYZynRV+D5cisYQ+O64Ve7kXEq1UTxQHbQ5kjddd+OjwmmOfgHUeqA==",
+      "SUPABASE_SECRET_KEY": "sb_secret_qlosxpfAH-Z6oUxF_zn6-w_M4rF05A7",
+      "SUPABASE_ACCESS_TOKEN": "sbp_a9002a89a88009fc9632fe2f7dfbcc959b05d72e",
+      "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+      "VERSION": "2.0.0",
+      "TENANT_ID": "default-tenant",
+      "IS_PRODUCTION": true,
+      "router": {},
+      "eas": {
+        "projectId": "eaf0b3d0-676e-49a9-8be0-a78caa966f5b"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}

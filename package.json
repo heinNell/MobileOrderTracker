@@ -1,1 +1,9 @@
-{"type":"module","devDependencies":{"@types/google.maps":"^3.58.1"},"dependencies":{"@supabase/supabase-js":"^2.74.0","dotenv":"^17.2.3"}}
+{
+  "name": "mobile-order-tracker-android",
+  "version": "1.0.0",
+  "scripts": {
+    "expo:start": "cd .. && npx expo start --clear",
+    "expo:android": "cd .. && npx expo run:android --no-build-cache",
+    "clean": "rm -rf .gradle app/build ../.expo"
+  }
+}

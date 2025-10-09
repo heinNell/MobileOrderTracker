@@ -1,20 +1,21 @@
-// app/(tabs)/scanner.js
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { QRCodeScanner } from "../components/QRCodeScanner";
-import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 
 export default function ScannerScreen() {
+  const router = useRouter();
   const [scanning, setScanning] = useState(false);
 
   const handleScanSuccess = (order) => {
+    console.log("✅ Scan successful:", order);
     setScanning(false);
     router.push(`/order-details?orderId=${order.id}`);
   };
 
   const handleScanError = (error) => {
-    console.error("Scan error:", error);
+    console.error("❌ Scan error:", error);
     setScanning(false);
   };
 
@@ -36,12 +37,15 @@ export default function ScannerScreen() {
         />
       ) : (
         <View style={styles.centered}>
+          <MaterialIcons name="qr-code-scanner" size={80} color="#2563eb" />
           <Text style={styles.title}>QR Scanner</Text>
-          <Text style={styles.subtitle}>Scan QR codes to access orders</Text>
+          <Text style={styles.subtitle}>
+            Scan QR codes to quickly access order details
+          </Text>
 
           <TouchableOpacity style={styles.scanButton} onPress={startScanning}>
-            <Ionicons
-              name="qr-code"
+            <MaterialIcons
+              name="qr-code-scanner"
               size={24}
               color="#fff"
               style={styles.buttonIcon}
@@ -51,19 +55,21 @@ export default function ScannerScreen() {
 
           <View style={styles.infoContainer}>
             <View style={styles.infoItem}>
-              <Ionicons
-                name="information-circle-outline"
-                size={20}
-                color="#64748b"
-              />
+              <MaterialIcons name="info-outline" size={20} color="#64748b" />
               <Text style={styles.infoText}>
                 Point camera at a valid order QR code
               </Text>
             </View>
             <View style={styles.infoItem}>
-              <Ionicons name="time-outline" size={20} color="#64748b" />
+              <MaterialIcons name="timer" size={20} color="#64748b" />
               <Text style={styles.infoText}>
                 QR codes expire after 24 hours
+              </Text>
+            </View>
+            <View style={styles.infoItem}>
+              <MaterialIcons name="check-circle" size={20} color="#64748b" />
+              <Text style={styles.infoText}>
+                Supports both simple and secure QR codes
               </Text>
             </View>
           </View>
@@ -87,6 +93,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "bold",
+    marginTop: 20,
     marginBottom: 12,
     color: "#0f172a",
   },
@@ -95,6 +102,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     marginBottom: 40,
+    paddingHorizontal: 20,
   },
   scanButton: {
     backgroundColor: "#2563eb",
@@ -122,16 +130,18 @@ const styles = StyleSheet.create({
   infoContainer: {
     marginTop: 40,
     width: "100%",
-    maxWidth: 320,
+    maxWidth: 350,
   },
   infoItem: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
+    paddingHorizontal: 10,
   },
   infoText: {
     fontSize: 14,
     color: "#64748b",
-    marginLeft: 10,
+    marginLeft: 12,
+    flex: 1,
   },
 });

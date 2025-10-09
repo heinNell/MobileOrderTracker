@@ -9,12 +9,14 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
-import { supabase } from "../../src/lib/supabase";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { supabase } from "../lib/supabase";
 import * as Location from "expo-location";
 import { MaterialIcons } from "@expo/vector-icons";
 
-export default function LoadActivationScreen({ route, navigation }) {
-  const { orderId, orderNumber } = route.params;
+export default function LoadActivationScreen() {
+  const { orderId, orderNumber } = useLocalSearchParams();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [orderDetails, setOrderDetails] = useState(null);
   const [location, setLocation] = useState(null);
@@ -72,7 +74,6 @@ export default function LoadActivationScreen({ route, navigation }) {
 
   const handleActivateLoad = async () => {
     try {
-      // Check if location is available
       if (!location && locationPermission) {
         Alert.alert(
           "Location Required",
@@ -84,7 +85,6 @@ export default function LoadActivationScreen({ route, navigation }) {
         setLocation(currentLocation);
       }
 
-      // Confirm activation
       Alert.alert(
         "Activate Load",
         `Are you sure you want to activate load for order ${orderNumber}?\n\nThis will:\n• Mark the order as activated\n• Enable QR code scanning\n• Start tracking your location`,
@@ -112,7 +112,6 @@ export default function LoadActivationScreen({ route, navigation }) {
     try {
       setLoading(true);
 
-      // Get current session
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -121,19 +120,16 @@ export default function LoadActivationScreen({ route, navigation }) {
         throw new Error("Not authenticated");
       }
 
-      // Prepare activation data
       const activationData = {
         order_id: orderId,
       };
 
-      // Add location if available
       if (location) {
         activationData.location = {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         };
 
-        // Try to reverse geocode
         try {
           const addresses = await Location.reverseGeocodeAsync({
             latitude: location.coords.latitude,
@@ -156,14 +152,12 @@ export default function LoadActivationScreen({ route, navigation }) {
         }
       }
 
-      // Add device info
       activationData.device_info = {
         platform: Platform.OS,
         app_version: "1.0.0",
         os_version: Platform.Version,
       };
 
-      // Call activate-load Edge Function
       const { data, error } = await supabase.functions.invoke("activate-load", {
         body: activationData,
       });
@@ -179,7 +173,6 @@ export default function LoadActivationScreen({ route, navigation }) {
 
       console.log("Load activated successfully:", data);
 
-      // Show success message
       Alert.alert(
         "Load Activated!",
         `Order ${orderNumber} has been activated successfully.\n\nYou can now scan QR codes for pickup and delivery.`,
@@ -187,16 +180,15 @@ export default function LoadActivationScreen({ route, navigation }) {
           {
             text: "OK",
             onPress: () => {
-              // Navigate back to order details or scanner
-              navigation.goBack();
+              router.back();
             },
           },
           {
             text: "Scan QR Code",
             onPress: () => {
-              navigation.navigate("QRScanner", {
-                orderId,
-                orderNumber,
+              router.push({
+                pathname: "/QRScanner",
+                params: { orderId, orderNumber },
               });
             },
           },
@@ -234,14 +226,12 @@ export default function LoadActivationScreen({ route, navigation }) {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        {/* Header */}
         <View style={styles.header}>
           <MaterialIcons name="local-shipping" size={64} color="#2563eb" />
           <Text style={styles.title}>Activate Load</Text>
           <Text style={styles.subtitle}>Order {orderNumber}</Text>
         </View>
 
-        {/* Order Information */}
         {orderDetails && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Order Details</Text>
@@ -295,7 +285,6 @@ export default function LoadActivationScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Location Status */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Location Services</Text>
 
@@ -329,7 +318,6 @@ export default function LoadActivationScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Activation Instructions */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Before You Activate</Text>
           <View style={styles.instructionsList}>
@@ -376,7 +364,6 @@ export default function LoadActivationScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Action Buttons */}
         <View style={styles.actionContainer}>
           <TouchableOpacity
             style={[
@@ -411,7 +398,7 @@ export default function LoadActivationScreen({ route, navigation }) {
 
           <TouchableOpacity
             style={styles.cancelButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
             disabled={loading}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
