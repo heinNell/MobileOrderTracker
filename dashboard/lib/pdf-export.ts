@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
-import type { Order } from "../../shared/types";
 import { parsePostGISPoint } from "../../shared/locationUtils";
+import type { Order } from "../../shared/types";
 
 export interface PDFExportOptions {
   includeQR?: boolean;
@@ -66,7 +66,7 @@ export class OrderPDFExporter {
     this.pdf.setFontSize(20);
     this.pdf.setFont("helvetica", "bold");
     this.pdf.text(
-      options.companyName || "Mobile Order Tracker",
+      options.companyName || "Matanuska Load Confirmation",
       this.margin,
       this.currentY
     );
@@ -434,8 +434,7 @@ export async function exportOrderToPDF(
   const pdfBlob = await exporter.exportOrderToPDF(order, {
     includeQR: true,
     includeTransporter: true,
-    companyName: "Mobile Order Tracker",
-    companyAddress: "Professional Logistics Management System",
+    companyName: "Matanuska Load Confirmation",
     ...options,
   });
 
