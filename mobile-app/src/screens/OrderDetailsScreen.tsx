@@ -1,5 +1,4 @@
-// src/screens/OrderDetailsScreen.tsx
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -11,13 +10,34 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import MapViewDirections from "react-native-maps-directions";
+import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { v4 as uuidv4 } from "uuid";
 import { useRoute, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { supabase } from "../lib/supabase";
 import { LocationService } from "../services/locationService";
-import { Order, OrderStatus } from "../shared/types";
-import { parsePostGISPoint } from "../shared/locationUtils";
+import { Order, OrderStatus, Location as AppLocation, LocationUpdate } from "../shared/types";
+import { parsePostGISPoint, toPostGISPoint } from "../shared/locationUtils";
 
-type Params = { order?: Order; orderId?: string };
+// Define navigation prop
+type RootStackParamList = {
+  OrderDetails: { order?: Order; orderId?: string };
+  ReportIncident: { orderId: string };
+  Messages: { orderId: string };
+  Login: undefined;
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "OrderDetails">;
+
+// Define route params
+type RouteParams = {
+  order?: Order;
+  orderId?: string;
+};
 
 const STATUS_ACTIONS: { status: OrderStatus; label: string; color: string }[] = [
   { status: "in_transit", label: "Start Transit", color: "#8B5CF6" },
@@ -29,16 +49,52 @@ const STATUS_ACTIONS: { status: OrderStatus; label: string; color: string }[] = 
 ];
 
 export const OrderDetailsScreen: React.FC = () => {
-  const route = useRoute();
-  const navigation = useNavigation();
-  const { order: initialOrder, orderId } = route.params as Params;
+  const route = useRoute<RouteParams>();
+  const navigation = useNavigation<NavigationProp>();
+  const { order: initialOrder, orderId } = route.params;
 
   const [order, setOrder] = useState<Order | null>(initialOrder || null);
   const [loading, setLoading] = useState<boolean>(!!orderId && !initialOrder);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isTracking, setIsTracking] = useState<boolean>(false);
+  const [currentLocation, setCurrentLocation] = useState<AppLocation | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<AppLocation[]>([]);
+  const [eta, setEta] = useState<number | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [lastSignificantLocation, setLastSignificantLocation] = useState<AppLocation | null>(null);
+  const [geofenceStatus, setGeofenceStatus] = useState<"off" | "loading" | "unloading" | "both">("off");
+  const mapRef = useRef<MapView>(null);
+  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
-  // Fetch the order if only orderId was provided (e.g., from QR scan or internal navigation)
+  const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+  // Request notification permissions
+  useEffect(() => {
+    let isMounted = true;
+
+    const requestNotificationPermissions = async () => {
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (isMounted && status !== "granted") {
+          Alert.alert("Notifications Required", "Geofence alerts require notification permissions.");
+        }
+      } catch (error) {
+        console.error("Error requesting notification permissions:", error);
+        if (isMounted) {
+          Alert.alert("Error", "Failed to request notification permissions");
+        }
+      }
+    };
+
+    requestNotificationPermissions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch order if only orderId provided
   useEffect(() => {
     let isMounted = true;
 
@@ -48,7 +104,7 @@ export const OrderDetailsScreen: React.FC = () => {
           setLoading(true);
           const { data, error } = await supabase
             .from("orders")
-            .select("*")
+            .select("*, assigned_driver:assigned_driver_id(id, full_name)")
             .eq("id", orderId)
             .single();
 
@@ -80,7 +136,7 @@ export const OrderDetailsScreen: React.FC = () => {
     };
   }, [orderId, order, navigation]);
 
-  // Subscribe to live order updates - Supabase realtime for mobile
+  // Subscribe to live order updates
   useEffect(() => {
     if (!order?.id) return;
     const channel = supabase
@@ -95,6 +151,13 @@ export const OrderDetailsScreen: React.FC = () => {
         },
         (payload) => {
           setOrder(payload.new as Order);
+          // Update geofence status based on order status
+          if (payload.new.status === "arrived" || payload.new.status === "loading") {
+            setGeofenceStatus((prev) => (prev === "both" ? "unloading" : prev));
+          } else if (payload.new.status === "completed" || payload.new.status === "cancelled") {
+            setGeofenceStatus("off");
+            setIsTracking(false);
+          }
         }
       )
       .subscribe();
@@ -104,15 +167,163 @@ export const OrderDetailsScreen: React.FC = () => {
     };
   }, [order?.id]);
 
-  // Track whether location tracking is enabled for this order - Mobile location service (async)
+  // Check if location tracking and geofences are enabled
   useEffect(() => {
+    let isMounted = true;
+
     const checkTracking = async () => {
       if (!order?.id) return;
       const currentTracked = await LocationService.getCurrentOrderId();
-      setIsTracking(currentTracked === order.id);
+      const isTrackingActive = currentTracked === order.id;
+      setIsTracking(isTrackingActive);
+
+      // Check geofence status
+      const raw = await AsyncStorage.getItem("active_geofences");
+      if (raw && isTrackingActive) {
+        const geofences = JSON.parse(raw);
+        if (geofences[order.id]) {
+          const { loading, unloading } = geofences[order.id];
+          if (loading && unloading) {
+            setGeofenceStatus("both");
+          } else if (loading) {
+            setGeofenceStatus("loading");
+          } else if (unloading) {
+            setGeofenceStatus("unloading");
+          } else {
+            setGeofenceStatus("off");
+          }
+        } else {
+          setGeofenceStatus("off");
+        }
+      } else {
+        setGeofenceStatus("off");
+      }
     };
+
     checkTracking();
+
+    return () => {
+      isMounted = false;
+    };
   }, [order?.id]);
+
+  // Start real-time location watching (foreground)
+  useEffect(() => {
+    let isMounted = true;
+
+    const startLocationWatch = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Location access is needed for real-time routing.");
+        setIsTracking(false);
+        setGeofenceStatus("off");
+        return;
+      }
+
+      locationSubscription.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 30000, // Update every 30 seconds
+          distanceInterval: 50, // Or on 50m movement
+        },
+        async (newLocation) => {
+          if (!isMounted) return;
+
+          const newLoc: AppLocation = {
+            latitude: newLocation.coords.latitude,
+            longitude: newLocation.coords.longitude,
+          };
+          setCurrentLocation(newLoc);
+
+          // Log location update to Supabase (foreground)
+          if (order?.id && isTracking) {
+            const locationUpdate: LocationUpdate = {
+              id: uuidv4(),
+              order_id: order.id,
+              driver_id: order.assigned_driver_id || "",
+              location: toPostGISPoint(newLoc),
+              accuracy_meters: newLocation.coords.accuracy ?? undefined,
+              speed_kmh: newLocation.coords.speed ? newLocation.coords.speed * 3.6 : undefined,
+              heading: newLocation.coords.heading ?? undefined,
+              battery_level: undefined,
+              timestamp: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+            };
+
+            const { error } = await supabase.from("location_updates").insert([locationUpdate]);
+            if (error) {
+              console.error("Error saving location update:", error);
+            }
+          }
+        }
+      );
+    };
+
+    startLocationWatch();
+
+    return () => {
+      isMounted = false;
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+      }
+    };
+  }, [order?.id, order?.assigned_driver_id, isTracking]);
+
+  // Fetch and update route
+  useEffect(() => {
+    if (!order || !currentLocation || !GOOGLE_MAPS_APIKEY || !isTracking) return;
+
+    const fetchRoute = async () => {
+      setRouteLoading(true);
+      try {
+        // Parse locations
+        const loadingPoint = parsePostGISPoint(order.loading_point_location);
+        const unloadingPoint = parsePostGISPoint(order.unloading_point_location);
+        const waypoints = order.waypoints ? order.waypoints.map(wp => wp.location) : [];
+
+        // Check if location changed significantly (simple distance check)
+        if (lastSignificantLocation) {
+          const dx = currentLocation.latitude - lastSignificantLocation.latitude;
+          const dy = currentLocation.longitude - lastSignificantLocation.longitude;
+          const distanceMoved = Math.sqrt(dx * dx + dy * dy) * 111000; // Approx meters
+          if (distanceMoved < 50) {
+            setRouteLoading(false);
+            return; // Skip if moved less than 50m
+          }
+        }
+
+        setLastSignificantLocation(currentLocation);
+
+        // MapViewDirections handles the API call
+      } catch (error) {
+        console.error("Error fetching route:", error);
+        Alert.alert("Error", "Failed to load route.");
+      } finally {
+        setRouteLoading(false);
+      }
+    };
+
+    fetchRoute();
+  }, [order, currentLocation, GOOGLE_MAPS_APIKEY, lastSignificantLocation, isTracking]);
+
+  // Deviation detection
+  useEffect(() => {
+    if (!currentLocation || routeCoordinates.length === 0 || !isTracking) return;
+
+    // Simple deviation check: find closest point on route
+    const distances = routeCoordinates.map(coord => {
+      const dx = currentLocation.latitude - coord.latitude;
+      const dy = currentLocation.longitude - coord.longitude;
+      return Math.sqrt(dx * dx + dy * dy) * 111000; // Approx meters
+    });
+    const minDistance = Math.min(...distances);
+
+    if (minDistance > 100) { // 100m deviation threshold
+      Alert.alert("Deviation Detected", "You are off route. Recalculating...");
+      // Trigger route re-fetch by resetting lastSignificantLocation
+      setLastSignificantLocation(null);
+    }
+  }, [currentLocation, routeCoordinates, isTracking]);
 
   const getNextActions = useCallback(() => {
     if (!order) return [];
@@ -123,32 +334,34 @@ export const OrderDetailsScreen: React.FC = () => {
   const startTracking = useCallback(async () => {
     if (!order?.id) return;
     try {
-      const ok = await LocationService.startTracking(order.id);
+      const ok = await LocationService.startTracking(order.id, order);
       if (ok) {
         setIsTracking(true);
-        Alert.alert("Success", "Location tracking started");
+        setGeofenceStatus("both");
+        Alert.alert("Success", "Location tracking and geofence alerts started");
       } else {
-        Alert.alert("Error", "Failed to start location tracking");
+        Alert.alert("Error", "Failed to start location tracking and geofences");
       }
     } catch (e) {
       console.error("Start tracking error:", e);
-      Alert.alert("Error", "Failed to start location tracking");
+      Alert.alert("Error", "Failed to start location tracking and geofences");
     }
-  }, [order?.id]);
+  }, [order?.id, order]);
 
   const stopTracking = useCallback(async () => {
     try {
       await LocationService.stopTracking();
       setIsTracking(false);
-      Alert.alert("Success", "Location tracking stopped");
+      setGeofenceStatus("off");
+      Alert.alert("Success", "Location tracking and geofence alerts stopped");
     } catch (e) {
       console.error("Stop tracking error:", e);
-      Alert.alert("Error", "Failed to stop tracking");
+      Alert.alert("Error", "Failed to stop tracking and geofences");
     }
   }, []);
 
   const openMaps = useCallback(
-    (destination: { latitude: number; longitude: number } | null, label: string) => {
+    (destination: AppLocation | null, label: string) => {
       try {
         if (!destination) {
           Alert.alert("Error", "Missing coordinates for this location");
@@ -181,7 +394,7 @@ export const OrderDetailsScreen: React.FC = () => {
       try {
         setStatusUpdating(true);
 
-        // Check auth - Mobile auth check
+        // Check auth
         const { data: auth } = await supabase.auth.getUser();
         const user = auth?.user;
         if (!user) {
@@ -190,13 +403,13 @@ export const OrderDetailsScreen: React.FC = () => {
             "You need to be logged in to update status.",
             [
               { text: "Cancel", style: "cancel" },
-              { text: "Login", onPress: () => navigation.navigate("Login" as never) },
+              { text: "Login", onPress: () => navigation.navigate("Login") },
             ]
           );
           return;
         }
 
-        // Current location (optional) - Mobile location fetch
+        // Current location (optional)
         const location = await LocationService.getCurrentLocation().catch(() => null);
 
         // Insert status update
@@ -206,7 +419,7 @@ export const OrderDetailsScreen: React.FC = () => {
           status: newStatus,
           location:
             location && location.coords
-              ? `SRID=4326;POINT(${location.coords.longitude} ${location.coords.latitude})`
+              ? toPostGISPoint(location.coords as AppLocation)
               : null,
           notes: notes || null,
           created_at: new Date().toISOString(),
@@ -215,12 +428,12 @@ export const OrderDetailsScreen: React.FC = () => {
         if (statusError) throw statusError;
 
         // Update order record
-        const updateData: Partial<Order> = { status: newStatus } as Partial<Order>;
+        const updateData: Partial<Order> = { status: newStatus };
         if (newStatus === "in_transit" && !order.actual_start_time) {
-          (updateData as any).actual_start_time = new Date().toISOString();
+          updateData.actual_start_time = new Date().toISOString();
         }
         if (newStatus === "completed") {
-          (updateData as any).actual_end_time = new Date().toISOString();
+          updateData.actual_end_time = new Date().toISOString();
           await stopTracking();
         }
 
@@ -233,7 +446,7 @@ export const OrderDetailsScreen: React.FC = () => {
 
         Alert.alert("Success", "Status updated successfully");
 
-        // Ensure tracking when transit starts
+        // Ensure tracking and geofences when transit starts
         if (newStatus === "in_transit" && !isTracking) {
           await startTracking();
         }
@@ -247,29 +460,29 @@ export const OrderDetailsScreen: React.FC = () => {
     [order?.id, order?.actual_start_time, isTracking, startTracking, stopTracking, navigation]
   );
 
-  const reportIncident = () => {
+  const reportIncident = useCallback(() => {
     if (!order) return;
-    navigation.navigate("ReportIncident" as never, { orderId: order.id } as never);
-  };
+    navigation.navigate("ReportIncident", { orderId: order.id });
+  }, [order, navigation]);
 
-  const sendMessage = () => {
+  const sendMessage = useCallback(() => {
     if (!order) return;
-    navigation.navigate("Messages" as never, { orderId: order.id } as never);
-  };
+    navigation.navigate("Messages", { orderId: order.id });
+  }, [order, navigation]);
 
-  const makePhoneCall = (phoneNumber: string) => {
+  const makePhoneCall = useCallback((phoneNumber: string) => {
     const url = `tel:${phoneNumber}`;
     Linking.openURL(url).catch((err) => {
       console.error("Error making phone call:", err);
       Alert.alert("Error", "Unable to make phone call.");
     });
-  };
+  }, []);
 
-  // Render loading state - Mobile loading UI
+  // Render loading state
   if (loading || !order) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#EF4444" />
         <Text style={styles.loadingText}>Loading order...</Text>
       </View>
     );
@@ -283,6 +496,20 @@ export const OrderDetailsScreen: React.FC = () => {
     () => parsePostGISPoint(order.unloading_point_location),
     [order.unloading_point_location]
   );
+  const waypoints = useMemo(
+    () => (order.waypoints ? order.waypoints.map((wp) => wp.location) : []),
+    [order.waypoints]
+  );
+
+  const initialRegion = useMemo(
+    () => ({
+      latitude: currentLocation ? currentLocation.latitude : loadingPoint.latitude,
+      longitude: currentLocation ? currentLocation.longitude : loadingPoint.longitude,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    }),
+    [currentLocation, loadingPoint]
+  );
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -294,12 +521,108 @@ export const OrderDetailsScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Route Map and Optimization */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Route to Destination</Text>
+        {routeLoading || !GOOGLE_MAPS_APIKEY ? (
+          <ActivityIndicator size="large" color="#EF4444" style={styles.routeLoading} />
+        ) : (
+          <View style={styles.mapContainer}>
+            <MapView
+              ref={mapRef}
+              provider={PROVIDER_GOOGLE}
+              style={styles.map}
+              initialRegion={initialRegion}
+              showsUserLocation={true}
+              followsUserLocation={true}
+            >
+              {currentLocation && (
+                <Marker
+                  coordinate={currentLocation}
+                  title="Your Location"
+                  pinColor="blue"
+                />
+              )}
+              <Marker
+                coordinate={loadingPoint}
+                title="Loading Point"
+                description={order.loading_point_name}
+                pinColor="green"
+              />
+              {waypoints.map((wp, index) => (
+                <Marker
+                  key={index}
+                  coordinate={wp}
+                  title={`Waypoint ${index + 1}`}
+                  pinColor="orange"
+                />
+              ))}
+              <Marker
+                coordinate={unloadingPoint}
+                title="Unloading Point"
+                description={order.unloading_point_name}
+                pinColor="red"
+              />
+              <MapViewDirections
+                origin={currentLocation || loadingPoint}
+                destination={unloadingPoint}
+                waypoints={waypoints}
+                apikey={GOOGLE_MAPS_APIKEY}
+                strokeWidth={4}
+                strokeColor="#EF4444"
+                optimizeWaypoints={true}
+                mode="DRIVING"
+                onReady={(result) => {
+                  setRouteCoordinates(result.coordinates.map((c: any) => ({
+                    latitude: c.latitude,
+                    longitude: c.longitude,
+                  })));
+                  setEta(result.duration);
+                  setDistance(result.distance);
+                  mapRef.current?.fitToCoordinates(result.coordinates, {
+                    edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+                  });
+                }}
+                onError={(errorMessage) => {
+                  console.error("Directions error:", errorMessage);
+                  Alert.alert("Error", "Failed to load route. Check API key.");
+                }}
+              />
+              {routeCoordinates.length > 0 && (
+                <Polyline
+                  coordinates={routeCoordinates}
+                  strokeColor="#EF4444"
+                  strokeWidth={4}
+                />
+              )}
+            </MapView>
+          </View>
+        )}
+        {eta !== null && distance !== null && (
+          <View style={styles.routeInfo}>
+            <Text style={styles.routeText}>ETA: {Math.round(eta)} min</Text>
+            <Text style={styles.routeText}>Distance: {distance.toFixed(1)} km</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Geofence Status */}
+      {geofenceStatus !== "off" && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Geofence Alerts</Text>
+          <View style={styles.geofenceBadge}>
+            <Text style={styles.geofenceBadgeText}>
+              Geofence Active: {geofenceStatus === "both" ? "Loading & Unloading" : geofenceStatus.charAt(0).toUpperCase() + geofenceStatus.slice(1)}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Loading Point */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Loading Point</Text>
         <Text style={styles.locationName}>{order.loading_point_name}</Text>
         <Text style={styles.locationAddress}>{order.loading_point_address}</Text>
-
         <TouchableOpacity
           style={styles.navigateButton}
           onPress={() => openMaps(loadingPoint, order.loading_point_name)}
@@ -313,7 +636,6 @@ export const OrderDetailsScreen: React.FC = () => {
         <Text style={styles.sectionTitle}>Unloading Point</Text>
         <Text style={styles.locationName}>{order.unloading_point_name}</Text>
         <Text style={styles.locationAddress}>{order.unloading_point_address}</Text>
-
         <TouchableOpacity
           style={styles.navigateButton}
           onPress={() => openMaps(unloadingPoint, order.unloading_point_name)}
@@ -417,7 +739,6 @@ export const OrderDetailsScreen: React.FC = () => {
         <TouchableOpacity style={styles.quickActionButton} onPress={reportIncident}>
           <Text style={styles.quickActionText}>Report Incident</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.quickActionButton} onPress={sendMessage}>
           <Text style={styles.quickActionText}>Send Message</Text>
         </TouchableOpacity>
@@ -492,6 +813,18 @@ const styles = StyleSheet.create({
     borderColor: "#3B82F6",
   },
   quickActionText: { color: "#3B82F6", fontSize: 14, fontWeight: "600" },
+  mapContainer: { height: 300, borderRadius: 8, overflow: "hidden", marginBottom: 12 },
+  map: { flex: 1 },
+  routeInfo: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 8 },
+  routeText: { fontSize: 14, color: "#6B7280" },
+  routeLoading: { marginVertical: 20 },
+  geofenceBadge: {
+    backgroundColor: "#10B981",
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  geofenceBadgeText: { color: "#fff", fontSize: 13, fontWeight: "600" },
 });
-
-export default OrderDetailsScreen;

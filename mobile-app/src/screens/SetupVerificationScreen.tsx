@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,50 +11,40 @@ import {
   Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { supabase } from "../lib/supabase";
-import * as Location from 'expo-location';
-import { BarCodeScanner } from 'expo-barcode-scanner';
-import * as Notifications from 'expo-notifications';
+import * as Location from "expo-location";
+import { BarCodeScanner } from "expo-barcode-scanner";
+import * as Notifications from "expo-notifications";
+
+// Define navigation param list
+type RootStackParamList = {
+  QRScanner: undefined;
+  // Add other routes as needed
+};
+
+// Define navigation prop
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 // Create a fallback for expo-network
 const NetworkFallback = {
   getNetworkStateAsync: async () => ({ isConnected: true, isInternetReachable: true }),
-  getIpAddressAsync: async () => '0.0.0.0',
+  getIpAddressAsync: async () => "0.0.0.0",
 };
 
 // Conditionally import expo-network
 let Network: any = NetworkFallback;
-if (Platform.OS !== 'web') {
+if (Platform.OS !== "web") {
   try {
     // This will be properly imported during runtime on mobile
-    const ExpoNetwork = require('expo-network');
+    const ExpoNetwork = require("expo-network");
     Network = ExpoNetwork;
   } catch (e) {
-    console.warn('expo-network not available, using fallback');
+    console.warn("expo-network not available, using fallback");
   }
 }
 
-// Simple stub components (move to ../components/StatusIndicators.tsx if preferred)
-const StatusIndicator: React.FC<{ status: "checking" | "success" | "error" | "warning"; size?: number }> = ({ status, size = 24 }) => {
-  const icons = { checking: '⏳', success: '✅', error: '❌', warning: '⚠️' };
-  return <Text style={{ fontSize: size }}>{icons[status]}</Text>;
-};
-
-const ProgressBar: React.FC<{ progress: number; color: string }> = ({ progress, color }) => (
-  <View style={{ height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
-    <View style={{ width: `${progress}%`, height: '100%', backgroundColor: color }} />
-  </View>
-);
-
-const StatusBadge: React.FC<{ status: string; message: string }> = ({ status, message }) => {
-  const colors = { success: '#34C759', error: '#FF3B30', warning: '#FF9500', checking: '#007AFF' };
-  return (
-    <View style={{ backgroundColor: colors[status], padding: 8, borderRadius: 16 }}>
-      <Text style={{ color: '#fff', fontSize: 12 }}>{message}</Text>
-    </View>
-  );
-};
-
+// Define types for verification items and components
 interface VerificationItem {
   id: string;
   name: string;
@@ -64,14 +54,226 @@ interface VerificationItem {
   action?: () => void;
 }
 
-export default function SetupVerificationScreen() {
-  const navigation = useNavigation();
+interface StatusIndicatorProps {
+  status: "checking" | "success" | "error" | "warning";
+  size?: number;
+}
+
+interface ProgressBarProps {
+  progress: number;
+  color: string;
+}
+
+interface StatusBadgeProps {
+  status: "checking" | "success" | "error" | "warning";
+  message: string;
+}
+
+// Simple stub components (move to ../components/StatusIndicators.tsx if preferred)
+const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, size = 24 }) => {
+  const icons: Record<StatusIndicatorProps["status"], string> = {
+    checking: "⏳",
+    success: "✅",
+    error: "❌",
+    warning: "⚠️",
+  };
+  return <Text style={{ fontSize: size }}>{icons[status]}</Text>;
+};
+
+const ProgressBar: React.FC<ProgressBarProps> = ({ progress, color }) => (
+  <View style={{ height: 4, backgroundColor: "#E5E7EB", borderRadius: 2, overflow: "hidden" }}>
+    <View style={{ width: `${progress}%`, height: "100%", backgroundColor: color }} />
+  </View>
+);
+
+const StatusBadge: React.FC<StatusBadgeProps> = ({ status, message }) => {
+  const colors: Record<StatusBadgeProps["status"], string> = {
+    checking: "#007AFF",
+    success: "#34C759",
+    error: "#FF3B30",
+    warning: "#FF9500",
+  };
+  return (
+    <View style={{ backgroundColor: colors[status], padding: 8, borderRadius: 16 }}>
+      <Text style={{ color: "#fff", fontSize: 12 }}>{message}</Text>
+    </View>
+  );
+};
+
+const SetupVerificationScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp>();
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [overallStatus, setOverallStatus] = useState<"checking" | "success" | "error" | "warning">("checking");
+  const [overallStatus, setOverallStatus] = useState<StatusIndicatorProps["status"]>("checking");
   const [progress, setProgress] = useState(0);
 
-  const runVerification = async () => {
+  const checkEnvironmentVariables = useCallback(async (items: VerificationItem[], index: number) => {
+    const requiredVars = [
+      "EXPO_PUBLIC_SUPABASE_URL",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY",
+    ];
+    const missing = requiredVars.filter((varName) => !process.env[varName]);
+
+    if (missing.length === 0) {
+      items[index].status = "success";
+      items[index].message = "All environment variables configured";
+      items[index].details = `✓ ${requiredVars.length} variables found`;
+    } else {
+      items[index].status = "error";
+      items[index].message = `Missing ${missing.length} environment variables`;
+      items[index].details = `Missing: ${missing.join(", ")}`;
+    }
+  }, []);
+
+  const checkSupabaseConnection = useCallback(async (items: VerificationItem[], index: number) => {
+    try {
+      let network;
+      try {
+        network = await Network.getNetworkStateAsync();
+      } catch (error) {
+        network = { isConnected: true, isInternetReachable: true };
+      }
+
+      if (!network.isConnected) {
+        items[index].status = "warning";
+        items[index].message = "No internet connection";
+        items[index].details = "Please connect to the internet and try again";
+        return;
+      }
+
+      const { data, error } = await supabase.from("tenants").select("count").limit(1);
+      if (error) throw error;
+
+      items[index].status = "success";
+      items[index].message = "Connected successfully";
+      items[index].details = "Database responding normally";
+    } catch (error: any) {
+      items[index].status = "error";
+      items[index].message = "Connection failed";
+      items[index].details = error.message;
+    }
+  }, []);
+
+  const checkAuthentication = useCallback(async (items: VerificationItem[], index: number) => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+
+      if (session) {
+        items[index].status = "success";
+        items[index].message = "User authenticated";
+        items[index].details = `Logged in as: ${session.user.email}`;
+      } else {
+        items[index].status = "warning";
+        items[index].message = "Auth system available (not logged in)";
+        items[index].details = "Ready for user authentication";
+        items[index].action = () => Alert.alert("Authentication", "Please log in to access full features.");
+      }
+    } catch (error: any) {
+      items[index].status = "error";
+      items[index].message = "Auth system error";
+      items[index].details = error.message;
+    }
+  }, []);
+
+  const checkDatabaseAccess = useCallback(async (items: VerificationItem[], index: number) => {
+    try {
+      const tables = ["orders", "users", "tenants"];
+      const results = await Promise.allSettled(
+        tables.map((table) => supabase.from(table).select("count").limit(1))
+      );
+
+      const successful = results.filter((r) => r.status === "fulfilled").length;
+
+      if (successful === tables.length) {
+        items[index].status = "success";
+        items[index].message = "All tables accessible";
+        items[index].details = `✓ ${successful}/${tables.length} tables verified`;
+      } else if (successful > 0) {
+        items[index].status = "warning";
+        items[index].message = "Partial database access";
+        items[index].details = `✓ ${successful}/${tables.length} tables accessible`;
+      } else {
+        throw new Error("No tables accessible");
+      }
+    } catch (error: any) {
+      items[index].status = "error";
+      items[index].message = "Database access denied";
+      items[index].details = error.message || "Check permissions and RLS policies";
+    }
+  }, []);
+
+  const checkLocationServices = useCallback(async (items: VerificationItem[], index: number) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        items[index].status = "success";
+        items[index].message = "Location permissions granted";
+        items[index].details = "GPS services ready";
+      } else {
+        items[index].status = "warning";
+        items[index].message = "Location permissions not granted";
+        items[index].details = "Permissions will be requested when needed";
+        items[index].action = async () => {
+          const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+          Alert.alert("Location Services", `Status: ${newStatus}`);
+        };
+      }
+    } catch (error: any) {
+      items[index].status = "error";
+      items[index].message = "Location services unavailable";
+      items[index].details = error.message;
+    }
+  }, []);
+
+  const checkQRScanner = useCallback(async (items: VerificationItem[], index: number) => {
+    try {
+      const { status } = await BarCodeScanner.requestPermissionsAsync();
+      if (status === "granted") {
+        items[index].status = "success";
+        items[index].message = "Camera permissions granted";
+        items[index].details = "QR scanner ready";
+      } else {
+        items[index].status = "warning";
+        items[index].message = "Camera permissions not granted";
+        items[index].details = "Permissions will be requested when scanning";
+        items[index].action = async () => {
+          const { status: newStatus } = await BarCodeScanner.requestPermissionsAsync();
+          Alert.alert("QR Scanner", `Camera permission status: ${newStatus}`);
+        };
+      }
+    } catch (error: any) {
+      items[index].status = "error";
+      items[index].message = "Camera unavailable";
+      items[index].details = error.message;
+    }
+  }, []);
+
+  const checkPushNotifications = useCallback(async (items: VerificationItem[], index: number) => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status === "granted") {
+        items[index].status = "success";
+        items[index].message = "Push notifications enabled";
+        items[index].details = "Ready for alerts";
+      } else {
+        items[index].status = "warning";
+        items[index].message = "Push notifications not enabled";
+        items[index].details = "Permissions will be requested during onboarding";
+        items[index].action = async () => {
+          const { status: newStatus } = await Notifications.requestPermissionsAsync();
+          Alert.alert("Push Notifications", `Permission status: ${newStatus}`);
+        };
+      }
+    } catch (error: any) {
+      items[index].status = "error";
+      items[index].message = "Notifications unavailable";
+      items[index].details = error.message;
+    }
+  }, []);
+
+  const runVerification = useCallback(async () => {
     setIsRefreshing(true);
     setProgress(0);
     setOverallStatus("checking");
@@ -131,198 +333,49 @@ export default function SetupVerificationScreen() {
     setOverallStatus(hasErrors ? "error" : hasWarnings ? "warning" : "success");
 
     setIsRefreshing(false);
-  };
-
-  const checkEnvironmentVariables = async (items: VerificationItem[], index: number) => {
-    const requiredVars = [
-      "EXPO_PUBLIC_SUPABASE_URL",
-      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
-      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY",
-    ];
-    const missing = requiredVars.filter((varName) => !process.env[varName]);
-
-    if (missing.length === 0) {
-      items[index].status = "success";
-      items[index].message = "All environment variables configured";
-      items[index].details = `✓ ${requiredVars.length} variables found`;
-    } else {
-      items[index].status = "error";
-      items[index].message = `Missing ${missing.length} environment variables`;
-      items[index].details = `Missing: ${missing.join(", ")}`;
-    }
-  };
-
-  const checkSupabaseConnection = async (items: VerificationItem[], index: number) => {
-    try {
-      let network;
-      try {
-        network = await Network.getNetworkStateAsync();
-      } catch (error) {
-        // If Network.getNetworkStateAsync fails, use fallback
-        network = { isConnected: true, isInternetReachable: true };
-      }
-      
-      if (!network.isConnected) {
-        items[index].status = "warning";
-        items[index].message = "No internet connection";
-        items[index].details = "Please connect to the internet and try again";
-        return;
-      }
-
-      const { data, error } = await supabase.from("tenants").select("count").limit(1);
-      if (error) throw error;
-
-      items[index].status = "success";
-      items[index].message = "Connected successfully";
-      items[index].details = "Database responding normally";
-    } catch (error: any) {
-      items[index].status = "error";
-      items[index].message = "Connection failed";
-      items[index].details = error.message;
-    }
-  };
-
-  const checkAuthentication = async (items: VerificationItem[], index: number) => {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) throw error;
-
-      if (session) {
-        items[index].status = "success";
-        items[index].message = "User authenticated";
-        items[index].details = `Logged in as: ${session.user.email}`;
-      } else {
-        items[index].status = "warning";
-        items[index].message = "Auth system available (not logged in)";
-        items[index].details = "Ready for user authentication";
-        items[index].action = () => Alert.alert("Authentication", "Please log in to access full features.");
-      }
-    } catch (error: any) {
-      items[index].status = "error";
-      items[index].message = "Auth system error";
-      items[index].details = error.message;
-    }
-  };
-
-  const checkDatabaseAccess = async (items: VerificationItem[], index: number) => {
-    try {
-      const tables = ["orders", "users", "tenants"];
-      const results = await Promise.allSettled(
-        tables.map((table) => supabase.from(table).select("count").limit(1))
-      );
-
-      const successful = results.filter((r) => r.status === "fulfilled").length;
-
-      if (successful === tables.length) {
-        items[index].status = "success";
-        items[index].message = "All tables accessible";
-        items[index].details = `✓ ${successful}/${tables.length} tables verified`;
-      } else if (successful > 0) {
-        items[index].status = "warning";
-        items[index].message = "Partial database access";
-        items[index].details = `✓ ${successful}/${tables.length} tables accessible`;
-      } else {
-        throw new Error("No tables accessible");
-      }
-    } catch (error: any) {
-      items[index].status = "error";
-      items[index].message = "Database access denied";
-      items[index].details = error.message || "Check permissions and RLS policies";
-    }
-  };
-
-  const checkLocationServices = async (items: VerificationItem[], index: number) => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        items[index].status = "success";
-        items[index].message = "Location permissions granted";
-        items[index].details = "GPS services ready";
-      } else {
-        items[index].status = "warning";
-        items[index].message = "Location permissions not granted";
-        items[index].details = "Permissions will be requested when needed";
-        items[index].action = async () => {
-          const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
-          Alert.alert("Location Services", `Status: ${newStatus}`);
-        };
-      }
-    } catch (error: any) {
-      items[index].status = "error";
-      items[index].message = "Location services unavailable";
-      items[index].details = error.message;
-    }
-  };
-
-  const checkQRScanner = async (items: VerificationItem[], index: number) => {
-    try {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      if (status === "granted") {
-        items[index].status = "success";
-        items[index].message = "Camera permissions granted";
-        items[index].details = "QR scanner ready";
-      } else {
-        items[index].status = "warning";
-        items[index].message = "Camera permissions not granted";
-        items[index].details = "Permissions will be requested when scanning";
-        items[index].action = async () => {
-          const { status: newStatus } = await BarCodeScanner.requestPermissionsAsync();
-          Alert.alert("QR Scanner", `Camera permission status: ${newStatus}`);
-        };
-      }
-    } catch (error: any) {
-      items[index].status = "error";
-      items[index].message = "Camera unavailable";
-      items[index].details = error.message;
-    }
-  };
-
-  const checkPushNotifications = async (items: VerificationItem[], index: number) => {
-    try {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status === "granted") {
-        items[index].status = "success";
-        items[index].message = "Push notifications enabled";
-        items[index].details = "Ready for alerts";
-      } else {
-        items[index].status = "warning";
-        items[index].message = "Push notifications not enabled";
-        items[index].details = "Permissions will be requested during onboarding";
-        items[index].action = async () => {
-          const { status: newStatus } = await Notifications.requestPermissionsAsync();
-          Alert.alert("Push Notifications", `Permission status: ${newStatus}`);
-        };
-      }
-    } catch (error: any) {
-      items[index].status = "error";
-      items[index].message = "Notifications unavailable";
-      items[index].details = error.message;
-    }
-  };
+  }, [
+    checkEnvironmentVariables,
+    checkSupabaseConnection,
+    checkAuthentication,
+    checkDatabaseAccess,
+    checkLocationServices,
+    checkQRScanner,
+    checkPushNotifications,
+  ]);
 
   useEffect(() => {
     runVerification();
+  }, [runVerification]);
+
+  const getStatusColor = useCallback((status: StatusIndicatorProps["status"]) => {
+    switch (status) {
+      case "checking":
+        return "#007AFF";
+      case "success":
+        return "#34C759";
+      case "error":
+        return "#FF3B30";
+      case "warning":
+        return "#FF9500";
+      default:
+        return "#8E8E93";
+    }
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "checking": return "#007AFF";
-      case "success": return "#34C759";
-      case "error": return "#FF3B30";
-      case "warning": return "#FF9500";
-      default: return "#8E8E93";
-    }
-  };
-
-  const getOverallMessage = () => {
+  const getOverallMessage = useCallback(() => {
     switch (overallStatus) {
-      case "checking": return "Running verification checks...";
-      case "success": return "🎉 All systems are working correctly!";
-      case "error": return "⚠️ Some issues need attention";
-      case "warning": return "✋ Setup is mostly complete with minor warnings";
-      default: return "Checking system status...";
+      case "checking":
+        return "Running verification checks...";
+      case "success":
+        return "🎉 All systems are working correctly!";
+      case "error":
+        return "⚠️ Some issues need attention";
+      case "warning":
+        return "✋ Setup is mostly complete with minor warnings";
+      default:
+        return "Checking system status...";
     }
-  };
+  }, [overallStatus]);
 
   return (
     <ScrollView
@@ -354,10 +407,14 @@ export default function SetupVerificationScreen() {
               <StatusIndicator status={item.status} size={20} />
               <View style={styles.itemContent}>
                 <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={[styles.itemMessage, { color: getStatusColor(item.status) }]}>{item.message}</Text>
+                <Text style={[styles.itemMessage, { color: getStatusColor(item.status) }]}>
+                  {item.message}
+                </Text>
                 {item.details && <Text style={styles.itemDetails}>{item.details}</Text>}
               </View>
-              {item.status === "checking" && <ActivityIndicator size="small" color={getStatusColor(item.status)} />}
+              {item.status === "checking" && (
+                <ActivityIndicator size="small" color={getStatusColor(item.status)} />
+              )}
             </View>
             {item.action && <Text style={styles.tapHint}>Tap for more info</Text>}
           </TouchableOpacity>
@@ -370,7 +427,10 @@ export default function SetupVerificationScreen() {
         </TouchableOpacity>
 
         {(overallStatus === "success" || overallStatus === "warning") && (
-          <TouchableOpacity style={styles.continueButton} onPress={() => navigation.navigate("QRScanner" as never)}>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => navigation.navigate("QRScanner")}
+          >
             <Text style={styles.continueButtonText}>Continue to App</Text>
           </TouchableOpacity>
         )}
@@ -383,7 +443,7 @@ export default function SetupVerificationScreen() {
       </View>
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },

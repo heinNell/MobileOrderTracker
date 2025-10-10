@@ -8,6 +8,7 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "module": "esnext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
@@ -16,10 +17,12 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/*"]
-    }
+      "@shared/*": ["../shared/*"],
+      "*": ["./node_modules/*", "./types/*"]
+    },
+    "typeRoots": ["./node_modules/@types", "./types"]
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"],
+  "include": ["**/*.ts", "**/*.tsx", "types/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"],
   "extends": "expo/tsconfig.base"
 }

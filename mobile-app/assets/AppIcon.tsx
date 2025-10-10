@@ -1,5 +1,5 @@
 import React from 'react';
-import { Svg, Circle, Text } from 'react-native-svg';
+import Svg, { Circle, Text } from 'react-native-svg'; 
 
 export const AppIcon = ({ size = 32 }) => (
   <Svg width={size} height={size} viewBox="0 0 32 32">

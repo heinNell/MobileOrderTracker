@@ -1,4 +1,3 @@
-// components/QRCodeScanner.tsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -8,13 +7,13 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform,
 } from "react-native";
 import { BarCodeScanner } from "expo-barcode-scanner";
-import { Camera } from "expo-camera";
+import { Camera, CameraType, FlashMode } from "expo-camera"; // Correct import
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
 
+// 🔢 Constantes
 const { width } = Dimensions.get("window");
 const SCAN_AREA_SIZE = width * 0.7;
 
@@ -38,9 +37,10 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
   const [loading, setLoading] = useState(false);
   const [scanMode, setScanMode] = useState<ScanMode>("auto");
   const [torchOn, setTorchOn] = useState(false);
-  const [lastScanAttempt, setLastScanAttempt] = useState("");
-  const cameraRef = useRef<Camera>(null);
+  const [lastScanAttempt, setLastScanAttempt] = useState<string>("");
+  const cameraRef = useRef<Camera | null>(null); // Use Camera component type
 
+  // 🔐 Demande de permissions caméra
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -48,6 +48,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     })();
   }, []);
 
+  // 📦 Lecture du QR code
   const handleBarCodeScanned = async ({
     type,
     data,
@@ -55,7 +56,6 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     type: string;
     data: string;
   }) => {
-    // Prevent duplicate scans
     if (scanned || loading || data === lastScanAttempt) return;
 
     setLastScanAttempt(data);
@@ -63,7 +63,6 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     setLoading(true);
 
     try {
-      // Call the edge function to validate the QR code
       const { data: response, error } = await supabase.functions.invoke(
         "validate-qr-code",
         {
@@ -75,31 +74,28 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
         }
       );
 
-      if (error) {
-        throw new Error(error.message);
+      if (error) throw new Error(error.message);
+      if (!response?.success) {
+        throw new Error(response?.error || "Failed to validate QR code");
       }
 
-      if (!response.success) {
-        throw new Error(response.error || "Failed to validate QR code");
-      }
-
-      // Call the success callback with the order data
       onScanSuccess(response.order);
-    } catch (error: any) {
-      // Handle expired QR codes specially
-      if (error.message.includes("expired")) {
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred during scanning.";
+
+      if (message.includes("expired")) {
         Alert.alert(
           "QR Code Expired",
           "This QR code has expired. Please request a new one.",
           [{ text: "OK", onPress: () => setScanned(false) }]
         );
       } else {
-        // Handle other errors
-        const errorMessage = error.message || "Failed to scan QR code";
-        if (onScanError) {
-          onScanError(errorMessage);
-        } else {
-          Alert.alert("Scan Error", errorMessage, [
+        if (onScanError) onScanError(message);
+        else {
+          Alert.alert("Scan Error", message, [
             { text: "Try Again", onPress: () => setScanned(false) },
           ]);
         }
@@ -109,15 +105,13 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     }
   };
 
-  const toggleTorch = () => {
-    setTorchOn(!torchOn);
-  };
-
+  const toggleTorch = () => setTorchOn(!torchOn);
   const resetScanner = () => {
     setScanned(false);
     setLastScanAttempt("");
   };
 
+  // 🟡 Attente de permission
   if (hasPermission === null) {
     return (
       <View style={styles.container}>
@@ -127,94 +121,60 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     );
   }
 
+  // 🔴 Accès refusé
   if (hasPermission === false) {
     return (
       <View style={styles.container}>
-        <Ionicons name="camera-off" size={64} color="#ff0000" />
+        <Ionicons name="camera-outline" size={64} color="#ff0000" />
         <Text style={styles.text}>No access to camera</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => onClose && onClose()}
-        >
+        <TouchableOpacity style={styles.button} onPress={onClose}>
           <Text style={styles.buttonText}>Close</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  // ✅ Interface du Scanner
   return (
     <View style={styles.container}>
       <Camera
         ref={cameraRef}
         style={styles.camera}
-        type={Camera.Constants.Type.back}
-        flashMode={
-          torchOn
-            ? Camera.Constants.FlashMode.torch
-            : Camera.Constants.FlashMode.off
-        }
+        type={CameraType.back} // Use enum value
+        flashMode={torchOn ? FlashMode.torch : FlashMode.off} // Use enum values
         onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
         barCodeScannerSettings={{
           barCodeTypes: [BarCodeScanner.Constants.BarCodeType.qr],
         }}
       >
         <View style={styles.overlay}>
-          {/* Top section */}
+          {/* 🔼 Haut */}
           <View style={styles.topSection}>
             <Text style={styles.headerText}>Scan QR Code</Text>
             <View style={styles.modeSelector}>
-              <TouchableOpacity
-                style={[
-                  styles.modeButton,
-                  scanMode === "auto" && styles.modeButtonActive,
-                ]}
-                onPress={() => setScanMode("auto")}
-              >
-                <Text
+              {(["auto", "simple", "complex"] as ScanMode[]).map((mode) => (
+                <TouchableOpacity
+                  key={mode}
                   style={[
-                    styles.modeButtonText,
-                    scanMode === "auto" && styles.modeButtonTextActive,
+                    styles.modeButton,
+                    scanMode === mode && styles.modeButtonActive,
                   ]}
+                  onPress={() => setScanMode(mode)}
                 >
-                  Auto
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modeButton,
-                  scanMode === "simple" && styles.modeButtonActive,
-                ]}
-                onPress={() => setScanMode("simple")}
-              >
-                <Text
-                  style={[
-                    styles.modeButtonText,
-                    scanMode === "simple" && styles.modeButtonTextActive,
-                  ]}
-                >
-                  Simple
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modeButton,
-                  scanMode === "complex" && styles.modeButtonActive,
-                ]}
-                onPress={() => setScanMode("complex")}
-              >
-                <Text
-                  style={[
-                    styles.modeButtonText,
-                    scanMode === "complex" && styles.modeButtonTextActive,
-                  ]}
-                >
-                  Complex
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.modeButtonText,
+                      scanMode === mode && styles.modeButtonTextActive,
+                    ]}
+                  >
+                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
-          {/* Scan area */}
+          {/* 🔲 Zone de scan */}
           <View style={styles.scanArea}>
             <View style={styles.cornerTL} />
             <View style={styles.cornerTR} />
@@ -228,7 +188,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
             )}
           </View>
 
-          {/* Bottom section */}
+          {/* 🔽 Bas */}
           <View style={styles.bottomSection}>
             <Text style={styles.instructionText}>
               {scanMode === "auto"
@@ -260,10 +220,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => onClose && onClose()}
-              >
+              <TouchableOpacity style={styles.iconButton} onPress={onClose}>
                 <Ionicons name="close-circle" size={28} color="#ffffff" />
                 <Text style={styles.iconButtonText}>Close</Text>
               </TouchableOpacity>
@@ -275,152 +232,147 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
   );
 };
 
+// Optimized styles for performance
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "#000",
   },
   camera: {
     flex: 1,
-    width: "100%",
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "#00000080",
     justifyContent: "space-between",
   },
   topSection: {
-    padding: 20,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    padding: 16,
     alignItems: "center",
   },
   headerText: {
     color: "#fff",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
+    fontSize: 18,
+    fontWeight: "600",
   },
   modeSelector: {
     flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 25,
-    padding: 5,
+    justifyContent: "center",
+    marginTop: 8,
   },
   modeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginHorizontal: 4,
+    borderRadius: 4,
+    backgroundColor: "#ffffff33",
   },
   modeButtonActive: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#007AFF",
   },
   modeButtonText: {
-    color: "#ccc",
-    fontWeight: "600",
+    color: "#fff",
+    fontSize: 13,
   },
   modeButtonTextActive: {
-    color: "#fff",
+    fontWeight: "600",
   },
   scanArea: {
+    alignSelf: "center",
     width: SCAN_AREA_SIZE,
     height: SCAN_AREA_SIZE,
-    alignSelf: "center",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
+    borderWidth: 2,
+    borderColor: "#ffffffcc",
   },
   cornerTL: {
     position: "absolute",
     top: 0,
     left: 0,
-    width: 40,
-    height: 40,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderColor: "#2196F3",
+    width: 16,
+    height: 16,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: "#fff",
   },
   cornerTR: {
     position: "absolute",
     top: 0,
     right: 0,
-    width: 40,
-    height: 40,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderColor: "#2196F3",
+    width: 16,
+    height: 16,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderColor: "#fff",
   },
   cornerBL: {
     position: "absolute",
     bottom: 0,
     left: 0,
-    width: 40,
-    height: 40,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderColor: "#2196F3",
+    width: 16,
+    height: 16,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: "#fff",
   },
   cornerBR: {
     position: "absolute",
     bottom: 0,
     right: 0,
-    width: 40,
-    height: 40,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderColor: "#2196F3",
+    width: 16,
+    height: 16,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderColor: "#fff",
   },
   loadingOverlay: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000000b3",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.7)",
   },
   loadingText: {
     color: "#fff",
-    marginTop: 10,
-    fontSize: 16,
+    fontSize: 14,
+    marginTop: 8,
   },
   bottomSection: {
-    padding: 20,
+    padding: 16,
     alignItems: "center",
   },
   instructionText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 14,
     textAlign: "center",
-    marginBottom: 20,
   },
   buttonRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     width: "100%",
+    paddingTop: 8,
   },
   iconButton: {
     alignItems: "center",
-    padding: 10,
   },
   iconButtonText: {
     color: "#fff",
-    marginTop: 5,
-  },
-  button: {
-    backgroundColor: "#2196F3",
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 11,
+    marginTop: 4,
   },
   text: {
     color: "#fff",
     fontSize: 16,
-    marginTop: 20,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  button: {
+    marginTop: 16,
+    padding: 8,
+    backgroundColor: "#007AFF",
+    borderRadius: 4,
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
