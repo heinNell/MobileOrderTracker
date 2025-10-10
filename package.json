@@ -5,5 +5,14 @@
     "expo:start": "cd .. && npx expo start --clear",
     "expo:android": "cd .. && npx expo run:android --no-build-cache",
     "clean": "rm -rf .gradle app/build ../.expo"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "expo": "^54.0.13",
+    "react-dom": "19.1.0",
+    "react-native-web": "^0.21.0"
   }
 }

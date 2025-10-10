@@ -1,14 +1,20 @@
-const { getDefaultConfig } = require("expo/metro-config");
 const path = require('path');
+const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Add resolver for expo-router
-config.resolver.extraNodeModules = {
-  'expo-router': path.resolve(__dirname, 'node_modules/expo-router'),
+// Resolve the path to the shared directory
+const sharedPath = path.resolve(__dirname, '../shared');
+
+// Add alias for @shared modules
+config.resolver.alias = {
+  '@shared': sharedPath,
 };
 
-// Add any additional project-specific configurations here
-config.resolver.sourceExts = [...config.resolver.sourceExts, 'mjs', 'cjs'];
+// Watch the shared directory for changes
+config.watchFolders = [sharedPath];
+
+// Ensure TypeScript files from shared are transpiled
+config.resolver.sourceExts = [...(config.resolver.sourceExts || []), 'ts', 'tsx'];
 
 module.exports = config;

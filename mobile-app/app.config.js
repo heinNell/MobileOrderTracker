@@ -26,7 +26,7 @@ export default ({ config }) => {
       
       // EAS
       eas: {
-        projectId: config.extra.eas.projectId,
+        projectId: config.extra?.eas?.projectId,
       },
     },
   };

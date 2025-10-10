@@ -1,18 +1,22 @@
-// /workspaces/MobileOrderTracker/mobile-app/src/screens/Login.tsx
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
-import { supabase } from "../lib/supabase";
-import { useNavigation } from "@react-navigation/native";
+// src/screens/Login.tsx
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '@/types/navigation';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 const LoginScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const navigation = useNavigation<NavigationProp>();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Please enter email and password.");
+      Alert.alert('Error', 'Please enter email and password.');
       return;
     }
 
@@ -22,11 +26,11 @@ const LoginScreen: React.FC = () => {
 
       if (error) throw error;
 
-      Alert.alert("Success", "Logged in successfully.");
-      navigation.goBack(); // Or navigate to Home
+      Alert.alert('Success', 'Logged in successfully.');
+      navigation.navigate('Tabs', { screen: 'Home' });
     } catch (e: any) {
-      console.error("Login error:", e);
-      Alert.alert("Error", e?.message || "Failed to login.");
+      console.error('Login error:', e);
+      Alert.alert('Error', e?.message || 'Failed to login.');
     } finally {
       setLoading(false);
     }
@@ -62,23 +66,23 @@ const LoginScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff", justifyContent: "center" },
-  title: { fontSize: 24, fontWeight: "700", color: "#111827", marginBottom: 24, textAlign: "center" },
+  container: { flex: 1, padding: 20, backgroundColor: '#fff', justifyContent: 'center' },
+  title: { fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 24, textAlign: 'center' },
   input: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: '#F9FAFB',
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: '#D1D5DB',
     marginBottom: 16,
   },
   button: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: '#3B82F6',
     paddingVertical: 14,
     borderRadius: 8,
-    alignItems: "center",
+    alignItems: 'center',
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
 
 export default LoginScreen;

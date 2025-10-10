@@ -100,8 +100,7 @@
           "color": "#2563eb",
           "sounds": []
         }
-      ],
-      "expo-router"
+      ]
     ],
     "description": "Logistics QR Code Mobile Application for Drivers - Real-time order tracking and delivery management",
     "updates": {
@@ -118,9 +117,6 @@
       "androidCollapsedTitle": "Order Updates"
     },
     "extra": {
-      "eas": {
-        "projectId": "48c901a8-ab87-4a04-abfc-9a2180c9d282"
-      },
       "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
       "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",
@@ -148,13 +144,12 @@
       "qrSecretKey": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
       "tenantId": "default-tenant",
       "version": "2.0.0",
-      "isProduction": true
+      "isProduction": false,
+      "eas": {
+        "projectId": "eaf0b3d0-676e-49a9-8be0-a78caa966f5b"
+      }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "hooks": {
-      "postPublish": []
-    }
+    "runtimeVersion": "2.0.0",
+    "owner": "heina1"
   }
 }

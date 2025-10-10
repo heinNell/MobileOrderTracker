@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+// src/components/QRCodeScanner.tsx
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,23 +8,29 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-} from "react-native";
-import { BarCodeScanner } from "expo-barcode-scanner";
-import { Camera, CameraType, FlashMode } from "expo-camera"; // Correct import
-import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../lib/supabase";
+} from 'react-native';
+import { CameraView, Camera, BarcodeScanningResult } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '@/lib/supabase';
+import type { Order } from '../../../shared/types';
 
-// 🔢 Constantes
-const { width } = Dimensions.get("window");
+// Constants
+const { width } = Dimensions.get('window');
 const SCAN_AREA_SIZE = width * 0.7;
 
-type ScanMode = "auto" | "simple" | "complex";
+type ScanMode = 'auto' | 'simple' | 'complex';
 
 interface QRCodeScannerProps {
-  onScanSuccess: (order: any) => void;
+  onScanSuccess: (order: Order) => void;
   onScanError?: (error: string) => void;
   onClose?: () => void;
   driverId?: string;
+}
+
+interface ValidateQRResponse {
+  success: boolean;
+  order?: Order;
+  error?: string;
 }
 
 export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
@@ -35,83 +42,79 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [scanMode, setScanMode] = useState<ScanMode>("auto");
-  const [torchOn, setTorchOn] = useState(false);
-  const [lastScanAttempt, setLastScanAttempt] = useState<string>("");
-  const cameraRef = useRef<Camera | null>(null); // Use Camera component type
+  const [scanMode, setScanMode] = useState<ScanMode>('auto');
+  const [flashMode, setFlashMode] = useState<'off' | 'on'>('off');
+  const [lastScanAttempt, setLastScanAttempt] = useState<string>('');
+  const cameraRef = useRef<CameraView>(null);
 
-  // 🔐 Demande de permissions caméra
+  // Request camera permissions
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
+      setHasPermission(status === 'granted');
     })();
   }, []);
 
-  // 📦 Lecture du QR code
-  const handleBarCodeScanned = async ({
-    type,
-    data,
-  }: {
-    type: string;
-    data: string;
-  }) => {
-    if (scanned || loading || data === lastScanAttempt) return;
+  // Handle barcode scan
+  const handleBarCodeScanned = useCallback(
+    async ({ type, data }: BarcodeScanningResult) => {
+      if (scanned || loading || data === lastScanAttempt) return;
 
-    setLastScanAttempt(data);
-    setScanned(true);
-    setLoading(true);
+      setLastScanAttempt(data);
+      setScanned(true);
+      setLoading(true);
 
-    try {
-      const { data: response, error } = await supabase.functions.invoke(
-        "validate-qr-code",
-        {
-          body: {
-            qrData: data,
-            driverId,
-            scanMode,
-          },
-        }
-      );
-
-      if (error) throw new Error(error.message);
-      if (!response?.success) {
-        throw new Error(response?.error || "Failed to validate QR code");
-      }
-
-      onScanSuccess(response.order);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred during scanning.";
-
-      if (message.includes("expired")) {
-        Alert.alert(
-          "QR Code Expired",
-          "This QR code has expired. Please request a new one.",
-          [{ text: "OK", onPress: () => setScanned(false) }]
+      try {
+        const { data: response, error } = await supabase.functions.invoke<ValidateQRResponse>(
+          'validate-qr-code',
+          {
+            body: {
+              qrData: data,
+              driverId,
+              scanMode,
+            },
+          }
         );
-      } else {
-        if (onScanError) onScanError(message);
-        else {
-          Alert.alert("Scan Error", message, [
-            { text: "Try Again", onPress: () => setScanned(false) },
-          ]);
-        }
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const toggleTorch = () => setTorchOn(!torchOn);
+        if (error) throw new Error(error.message);
+        if (!response?.success || !response.order) {
+          throw new Error(response?.error || 'Failed to validate QR code');
+        }
+
+        onScanSuccess(response.order);
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'An unexpected error occurred during scanning.';
+
+        if (message.includes('expired')) {
+          Alert.alert(
+            'QR Code Expired',
+            'This QR code has expired. Please request a new one.',
+            [{ text: 'OK', onPress: () => setScanned(false) }]
+          );
+        } else {
+          if (onScanError) onScanError(message);
+          else {
+            Alert.alert('Scan Error', message, [
+              { text: 'Try Again', onPress: () => setScanned(false) },
+            ]);
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scanned, loading, lastScanAttempt, driverId, scanMode, onScanSuccess, onScanError]
+  );
+
+  const toggleFlash = () => setFlashMode((prev) => (prev === 'off' ? 'on' : 'off'));
   const resetScanner = () => {
     setScanned(false);
-    setLastScanAttempt("");
+    setLastScanAttempt('');
   };
 
-  // 🟡 Attente de permission
   if (hasPermission === null) {
     return (
       <View style={styles.container}>
@@ -121,7 +124,6 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     );
   }
 
-  // 🔴 Accès refusé
   if (hasPermission === false) {
     return (
       <View style={styles.container}>
@@ -134,38 +136,30 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     );
   }
 
-  // ✅ Interface du Scanner
   return (
     <View style={styles.container}>
-      <Camera
+      <CameraView
         ref={cameraRef}
         style={styles.camera}
-        type={CameraType.back} // Use enum value
-        flashMode={torchOn ? FlashMode.torch : FlashMode.off} // Use enum values
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barCodeScannerSettings={{
-          barCodeTypes: [BarCodeScanner.Constants.BarCodeType.qr],
+        facing="back"
+        flash={flashMode}
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        barcodeScannerSettings={{
+          barcodeTypes: ['qr'],
         }}
       >
         <View style={styles.overlay}>
-          {/* 🔼 Haut */}
           <View style={styles.topSection}>
             <Text style={styles.headerText}>Scan QR Code</Text>
             <View style={styles.modeSelector}>
-              {(["auto", "simple", "complex"] as ScanMode[]).map((mode) => (
+              {(['auto', 'simple', 'complex'] as ScanMode[]).map((mode) => (
                 <TouchableOpacity
                   key={mode}
-                  style={[
-                    styles.modeButton,
-                    scanMode === mode && styles.modeButtonActive,
-                  ]}
+                  style={[styles.modeButton, scanMode === mode && styles.modeButtonActive]}
                   onPress={() => setScanMode(mode)}
                 >
                   <Text
-                    style={[
-                      styles.modeButtonText,
-                      scanMode === mode && styles.modeButtonTextActive,
-                    ]}
+                    style={[styles.modeButtonText, scanMode === mode && styles.modeButtonTextActive]}
                   >
                     {mode.charAt(0).toUpperCase() + mode.slice(1)}
                   </Text>
@@ -174,7 +168,6 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
             </View>
           </View>
 
-          {/* 🔲 Zone de scan */}
           <View style={styles.scanArea}>
             <View style={styles.cornerTL} />
             <View style={styles.cornerTR} />
@@ -188,33 +181,29 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
             )}
           </View>
 
-          {/* 🔽 Bas */}
           <View style={styles.bottomSection}>
             <Text style={styles.instructionText}>
-              {scanMode === "auto"
-                ? "Automatically detects QR code type"
-                : scanMode === "simple"
-                ? "Simple mode for basic QR codes"
-                : "Complex mode for secure QR codes"}
+              {scanMode === 'auto'
+                ? 'Automatically detects QR code type'
+                : scanMode === 'simple'
+                ? 'Simple mode for basic QR codes'
+                : 'Complex mode for secure QR codes'}
             </Text>
 
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.iconButton} onPress={toggleTorch}>
+              <TouchableOpacity style={styles.iconButton} onPress={toggleFlash}>
                 <Ionicons
-                  name={torchOn ? "flash" : "flash-off"}
+                  name={flashMode === 'on' ? 'flash' : 'flash-off'}
                   size={28}
                   color="#ffffff"
                 />
                 <Text style={styles.iconButtonText}>
-                  {torchOn ? "Flash On" : "Flash Off"}
+                  {flashMode === 'on' ? 'Flash On' : 'Flash Off'}
                 </Text>
               </TouchableOpacity>
 
               {scanned && (
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={resetScanner}
-                >
+                <TouchableOpacity style={styles.iconButton} onPress={resetScanner}>
                   <Ionicons name="refresh" size={28} color="#ffffff" />
                   <Text style={styles.iconButtonText}>Scan Again</Text>
                 </TouchableOpacity>
@@ -227,37 +216,36 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
             </View>
           </View>
         </View>
-      </Camera>
+      </CameraView>
     </View>
   );
 };
 
-// Optimized styles for performance
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: '#000',
   },
   camera: {
     flex: 1,
   },
   overlay: {
     flex: 1,
-    backgroundColor: "#00000080",
-    justifyContent: "space-between",
+    backgroundColor: '#00000080',
+    justifyContent: 'space-between',
   },
   topSection: {
     padding: 16,
-    alignItems: "center",
+    alignItems: 'center',
   },
   headerText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   modeSelector: {
-    flexDirection: "row",
-    justifyContent: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginTop: 8,
   },
   modeButton: {
@@ -265,114 +253,115 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginHorizontal: 4,
     borderRadius: 4,
-    backgroundColor: "#ffffff33",
+    backgroundColor: '#ffffff33',
   },
   modeButtonActive: {
-    backgroundColor: "#007AFF",
+    backgroundColor: '#007AFF',
   },
   modeButtonText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 13,
   },
   modeButtonTextActive: {
-    fontWeight: "600",
+    fontWeight: '600',
   },
   scanArea: {
-    alignSelf: "center",
+    alignSelf: 'center',
     width: SCAN_AREA_SIZE,
     height: SCAN_AREA_SIZE,
     borderWidth: 2,
-    borderColor: "#ffffffcc",
+    borderColor: '#ffffffcc',
+    position: 'relative',
   },
   cornerTL: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 0,
     width: 16,
     height: 16,
     borderTopWidth: 3,
     borderLeftWidth: 3,
-    borderColor: "#fff",
+    borderColor: '#fff',
   },
   cornerTR: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     right: 0,
     width: 16,
     height: 16,
     borderTopWidth: 3,
     borderRightWidth: 3,
-    borderColor: "#fff",
+    borderColor: '#fff',
   },
   cornerBL: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     left: 0,
     width: 16,
     height: 16,
     borderBottomWidth: 3,
     borderLeftWidth: 3,
-    borderColor: "#fff",
+    borderColor: '#fff',
   },
   cornerBR: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     right: 0,
     width: 16,
     height: 16,
     borderBottomWidth: 3,
     borderRightWidth: 3,
-    borderColor: "#fff",
+    borderColor: '#fff',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#000000b3",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#000000b3',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 14,
     marginTop: 8,
   },
   bottomSection: {
     padding: 16,
-    alignItems: "center",
+    alignItems: 'center',
   },
   instructionText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 14,
-    textAlign: "center",
+    textAlign: 'center',
   },
   buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
     paddingTop: 8,
   },
   iconButton: {
-    alignItems: "center",
+    alignItems: 'center',
   },
   iconButtonText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 11,
     marginTop: 4,
   },
   text: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 16,
     marginTop: 16,
-    textAlign: "center",
+    textAlign: 'center',
   },
   button: {
     marginTop: 16,
     padding: 8,
-    backgroundColor: "#007AFF",
+    backgroundColor: '#007AFF',
     borderRadius: 4,
   },
   buttonText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
 });

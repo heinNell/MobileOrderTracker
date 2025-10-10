@@ -59,7 +59,7 @@ export interface User {
   tenant_id: string;
   is_active: boolean;
   device_token?: string;
-  last_location?: Location;
+  last_location?: string | Location; // WKT string from Supabase or Location object for mobile
   last_location_update?: string;
   created_at: string;
   updated_at: string;
@@ -124,7 +124,7 @@ export interface LocationUpdate {
   id: string;
   order_id: string;
   driver_id: string;
-  location: Location;
+  location: string | Location; // WKT string from Supabase or Location object for mobile
   accuracy_meters?: number;
   speed_kmh?: number;
   heading?: number;
@@ -139,7 +139,7 @@ export interface StatusUpdate {
   order_id: string;
   driver_id: string;
   status: OrderStatus;
-  location?: Location;
+  location?: string | Location; // WKT string from Supabase or Location object for mobile
   notes?: string;
   photo_urls?: string[];
   metadata?: Record<string, any>;
@@ -154,7 +154,7 @@ export interface Incident {
   incident_type: IncidentType;
   title: string;
   description: string;
-  location: Location;
+  location: string | Location; // WKT string from Supabase or Location object for mobile
   severity: number;
   photo_urls?: string[];
   video_urls?: string[];
@@ -202,7 +202,7 @@ export interface Geofence {
   id: string;
   tenant_id: string;
   name: string;
-  location: Location;
+  location: string | Location; // WKT string from Supabase or Location object for mobile
   radius_meters: number;
   is_active: boolean;
   metadata?: Record<string, any>;

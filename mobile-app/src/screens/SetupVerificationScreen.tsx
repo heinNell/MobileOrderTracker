@@ -1,21 +1,21 @@
-import React, { useEffect, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  Platform,
-} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { supabase } from "../lib/supabase";
-import * as Location from "expo-location";
 import { BarCodeScanner } from "expo-barcode-scanner";
+import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { supabase } from "../lib/supabase";
 
 // Define navigation param list
 type RootStackParamList = {
@@ -475,3 +475,5 @@ const styles = StyleSheet.create({
   footer: { padding: 20, backgroundColor: "#FFFFFF", marginTop: 20 },
   footerText: { fontSize: 14, color: "#8E8E93", textAlign: "center", lineHeight: 20 },
 });
+
+export default SetupVerificationScreen;

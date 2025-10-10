@@ -129,6 +129,9 @@ export interface Order {
   unloading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
   unloading_time_window_start?: string;
   unloading_time_window_end?: string;
+  // Legacy coordinate fields for backward compatibility
+  destination_lat?: number | null;
+  destination_lng?: number | null;
   waypoints?: DeliveryPoint[];
   delivery_instructions?: string;
   special_handling_instructions?: string;
@@ -138,6 +141,7 @@ export interface Order {
   estimated_duration_minutes?: number;
   actual_start_time?: string;
   actual_end_time?: string;
+  load_activated_at?: string;
   // Transporter supplier information
   transporter_supplier?: TransporterSupplier;
   metadata?: Record<string, any>;
@@ -158,6 +162,9 @@ export interface LocationUpdate {
   timestamp: string;
   created_at: string;
 }
+
+// Alias for backward compatibility
+export type TrackingUpdate = LocationUpdate;
 
 export interface StatusUpdate {
   id: string;
@@ -300,3 +307,46 @@ export const INCIDENT_SEVERITY = {
   4: "Critical",
   5: "Emergency",
 } as const;
+
+
+// Valid status transitions
+export const VALID_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ['assigned', 'cancelled'],
+  assigned: ['in_transit', 'cancelled'],
+  in_transit: ['arrived', 'cancelled'],
+  arrived: ['loading', 'cancelled'],
+  loading: ['loaded', 'cancelled'],
+  loaded: ['in_transit', 'unloading', 'cancelled'],
+  unloading: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: []
+};
+
+export const canTransitionStatus = (from: OrderStatus, to: OrderStatus): boolean => {
+  return VALID_STATUS_TRANSITIONS[from].includes(to);
+};
+
+
+export interface OrderMetrics {
+  totalDistance: number;
+  totalDuration: number;
+  averageSpeed: number;
+  delayMinutes: number;
+  onTimePercentage: number;
+}
+
+export interface DriverMetrics {
+  totalOrders: number;
+  completedOrders: number;
+  averageRating: number;
+  totalDistanceDriven: number;
+  activeHours: number;
+}
+// Utility type guards
+export const isValidOrderStatus = (status: string): status is OrderStatus => {
+  return ['pending', 'assigned', 'in_transit', 'arrived', 'loading', 'loaded', 'unloading', 'completed', 'cancelled'].includes(status);
+};
+
+export const isValidUserRole = (role: string): role is UserRole => {
+  return ['admin', 'dispatcher', 'driver'].includes(role);
+};

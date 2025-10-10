@@ -1,8 +1,9 @@
 // /workspaces/MobileOrderTracker/shared/utils.ts
 // General shared utilities for order handling and formatting
 
-import { Order, OrderStatus, TrackingUpdate, Location } from "./types";
+import { Order, TrackingUpdate, Location, OrderStatus } from './types';
 import { parsePostGISPoint } from "./locationUtils";
+
 
 /**
  * Format order status for display (e.g., "in_transit" -> "In Transit")

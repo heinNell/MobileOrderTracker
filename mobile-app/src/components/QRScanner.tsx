@@ -1,29 +1,30 @@
-// components/QRCodeScanner.tsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Platform,
-  StatusBar,
-  BackHandler,
-} from "react-native";
-import { CameraView, Camera, BarcodeScanningResult } from "expo-camera";
-import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../lib/supabase";
+// src/components/QRScanner.tsx
+import { Ionicons } from '@expo/vector-icons';
+import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import
+  {
+    ActivityIndicator,
+    Alert,
+    BackHandler,
+    Dimensions,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from 'react-native';
+import { supabase } from '../lib/supabase';
+import type { Order } from '../shared/types';
 
-const { width, height } = Dimensions.get("window");
+const { width, height } = Dimensions.get('window');
 const SCAN_AREA_SIZE = width * 0.7;
 
-type ScanMode = "auto" | "simple" | "complex";
-type FlashMode = "off" | "on" | "auto" | "torch";
+type ScanMode = 'auto' | 'simple' | 'complex';
 
 interface QRCodeScannerProps {
-  onScanSuccess: (order: any) => void;
+  onScanSuccess: (order: Order) => void;
   onScanError?: (error: string) => void;
   onClose?: () => void;
   driverId?: string;
@@ -34,43 +35,44 @@ interface ScanAttempt {
   timestamp: number;
 }
 
-export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
+interface ValidateQRResponse {
+  success: boolean;
+  order?: Order;
+  error?: string;
+}
+
+export const QRScanner: React.FC<QRCodeScannerProps> = ({
   onScanSuccess,
   onScanError,
   onClose,
   driverId,
 }) => {
-  // State management
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [scanMode, setScanMode] = useState<ScanMode>("auto");
-  const [flashMode, setFlashMode] = useState<FlashMode>("off");
+  const [scanMode, setScanMode] = useState<ScanMode>('auto');
+  const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
   const [lastScanAttempt, setLastScanAttempt] = useState<ScanAttempt | null>(null);
   const [isActive, setIsActive] = useState(true);
-
-  // Refs
   const cameraRef = useRef<CameraView>(null);
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Constants
-  const SCAN_COOLDOWN = 2000; // 2 seconds cooldown between scans
-  const SCAN_TIMEOUT = 30000; // 30 seconds timeout for processing
+  const SCAN_COOLDOWN = 2000; // 2 seconds cooldown
+  const SCAN_TIMEOUT = 30000; // 30 seconds timeout
 
   // Request camera permissions
   useEffect(() => {
     const requestPermissions = async () => {
-      try {
-        const { status } = await Camera.requestCameraPermissionsAsync();
-        setHasPermission(status === "granted");
-      } catch (error) {
-        console.error("Error requesting camera permissions:", error);
-        setHasPermission(false);
+      if (!permission) {
+        return;
+      }
+      if (!permission.granted) {
+        await requestPermission();
       }
     };
 
     requestPermissions();
-  }, []);
+  }, [permission, requestPermission]);
 
   // Handle Android back button
   useEffect(() => {
@@ -82,7 +84,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
       return false;
     };
 
-    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [onClose]);
 
@@ -95,19 +97,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     };
   }, []);
 
-  // Handle app state changes
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: string) => {
-      setIsActive(nextAppState === "active");
-    };
-
-    // Note: You might want to add AppState listener here if needed
-    return () => {
-      setIsActive(false);
-    };
-  }, []);
-
-  // Optimized barcode scan handler
+  // Handle barcode scan
   const handleBarcodeScanned = useCallback(
     async (scanningResult: BarcodeScanningResult) => {
       const { type, data } = scanningResult;
@@ -127,7 +117,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
 
       // Validate QR code data
       if (!data || data.trim().length === 0) {
-        Alert.alert("Invalid QR Code", "The scanned QR code appears to be empty.");
+        Alert.alert('Invalid QR Code', 'The scanned QR code appears to be empty.');
         return;
       }
 
@@ -141,16 +131,16 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
         setLoading(false);
         setScanned(false);
         Alert.alert(
-          "Scan Timeout",
-          "The scan is taking too long. Please try again.",
-          [{ text: "OK", onPress: resetScanner }]
+          'Scan Timeout',
+          'The scan is taking too long. Please try again.',
+          [{ text: 'OK', onPress: resetScanner }]
         );
       }, SCAN_TIMEOUT);
 
       try {
         // Call the edge function to validate the QR code
-        const { data: response, error } = await supabase.functions.invoke(
-          "validate-qr-code",
+        const { data: response, error } = await supabase.functions.invoke<ValidateQRResponse>(
+          'validate-qr-code',
           {
             body: {
               qrData: data,
@@ -169,17 +159,17 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
         }
 
         if (error) {
-          throw new Error(error.message || "Network error occurred");
+          throw new Error(error.message || 'Network error occurred');
         }
 
-        if (!response || !response.success) {
-          throw new Error(response?.error || "Failed to validate QR code");
+        if (!response || !response.success || !response.order) {
+          throw new Error(response?.error || 'Failed to validate QR code');
         }
 
         // Success - call the callback with order data
         onScanSuccess(response.order);
       } catch (error: any) {
-        console.error("QR Code scan error:", error);
+        console.error('QR Code scan error:', error);
 
         // Clear timeout on error
         if (scanTimeoutRef.current) {
@@ -188,42 +178,38 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
         }
 
         // Handle specific error types
-        const errorMessage = error.message || "Unknown error occurred";
+        const errorMessage = error.message || 'Unknown error occurred';
 
-        if (errorMessage.toLowerCase().includes("expired")) {
+        if (errorMessage.toLowerCase().includes('expired')) {
           Alert.alert(
-            "QR Code Expired",
-            "This QR code has expired. Please request a new one from the customer.",
-            [{ text: "OK", onPress: resetScanner }]
+            'QR Code Expired',
+            'This QR code has expired. Please request a new one from the customer.',
+            [{ text: 'OK', onPress: resetScanner }]
           );
-        } else if (errorMessage.toLowerCase().includes("network")) {
+        } else if (errorMessage.toLowerCase().includes('network')) {
           Alert.alert(
-            "Network Error",
-            "Unable to connect to the server. Please check your internet connection.",
+            'Network Error',
+            'Unable to connect to the server. Please check your internet connection.',
             [
-              { text: "Retry", onPress: resetScanner },
-              { text: "Cancel", onPress: onClose },
+              { text: 'Retry', onPress: resetScanner },
+              { text: 'Cancel', onPress: onClose },
             ]
           );
-        } else if (errorMessage.toLowerCase().includes("invalid")) {
+        } else if (errorMessage.toLowerCase().includes('invalid')) {
           Alert.alert(
-            "Invalid QR Code",
-            "This QR code is not valid for this application.",
-            [{ text: "OK", onPress: resetScanner }]
+            'Invalid QR Code',
+            'This QR code is not valid for this application.',
+            [{ text: 'OK', onPress: resetScanner }]
           );
         } else {
           // Generic error handling
           if (onScanError) {
             onScanError(errorMessage);
           } else {
-            Alert.alert(
-              "Scan Error",
-              errorMessage,
-              [
-                { text: "Try Again", onPress: resetScanner },
-                { text: "Cancel", onPress: onClose },
-              ]
-            );
+            Alert.alert('Scan Error', errorMessage, [
+              { text: 'Try Again', onPress: resetScanner },
+              { text: 'Cancel', onPress: onClose },
+            ]);
           }
         }
       } finally {
@@ -233,21 +219,12 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
     [isActive, scanned, loading, lastScanAttempt, driverId, scanMode, onScanSuccess, onScanError, onClose]
   );
 
-  // Toggle flash/torch
+  // Toggle flash
   const toggleFlash = useCallback(() => {
-    setFlashMode((prev) => {
-      switch (prev) {
-        case "off":
-          return "torch";
-        case "torch":
-          return "off";
-        default:
-          return "off";
-      }
-    });
+    setFlashMode((prev) => (prev === 'off' ? 'on' : 'off'));
   }, []);
 
-  // Reset scanner state
+  // Reset scanner
   const resetScanner = useCallback(() => {
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
@@ -259,13 +236,16 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
   }, []);
 
   // Change scan mode
-  const changeScanMode = useCallback((mode: ScanMode) => {
-    setScanMode(mode);
-    resetScanner(); // Reset when changing modes
-  }, [resetScanner]);
+  const changeScanMode = useCallback(
+    (mode: ScanMode) => {
+      setScanMode(mode);
+      resetScanner();
+    },
+    [resetScanner]
+  );
 
   // Render permission loading state
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -276,15 +256,13 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
   }
 
   // Render permission denied state
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
         <Ionicons name="camera-outline" size={64} color="#ff0000" />
         <Text style={styles.text}>Camera access is required to scan QR codes</Text>
-        <Text style={styles.subText}>
-          Please enable camera permissions in your device settings
-        </Text>
+        <Text style={styles.subText}>Please enable camera permissions in your device settings</Text>
         <TouchableOpacity style={styles.button} onPress={onClose}>
           <Text style={styles.buttonText}>Close</Text>
         </TouchableOpacity>
@@ -303,7 +281,7 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
         flash={flashMode}
         onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
         barcodeScannerSettings={{
-          barcodeTypes: ["qr"],
+          barcodeTypes: ['qr'],
         }}
       >
         <View style={styles.overlay}>
@@ -311,21 +289,15 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
           <View style={styles.topSection}>
             <Text style={styles.headerText}>Scan QR Code</Text>
             <View style={styles.modeSelector}>
-              {(["auto", "simple", "complex"] as ScanMode[]).map((mode) => (
+              {(['auto', 'simple', 'complex'] as ScanMode[]).map((mode) => (
                 <TouchableOpacity
                   key={mode}
-                  style={[
-                    styles.modeButton,
-                    scanMode === mode && styles.modeButtonActive,
-                  ]}
+                  style={[styles.modeButton, scanMode === mode && styles.modeButtonActive]}
                   onPress={() => changeScanMode(mode)}
                   disabled={loading}
                 >
                   <Text
-                    style={[
-                      styles.modeButtonText,
-                      scanMode === mode && styles.modeButtonTextActive,
-                    ]}
+                    style={[styles.modeButtonText, scanMode === mode && styles.modeButtonTextActive]}
                   >
                     {mode.charAt(0).toUpperCase() + mode.slice(1)}
                   </Text>
@@ -341,12 +313,8 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
               <View style={styles.cornerTR} />
               <View style={styles.cornerBL} />
               <View style={styles.cornerBR} />
-              
               {/* Scanning animation line */}
-              {!scanned && !loading && (
-                <View style={styles.scanLine} />
-              )}
-              
+              {!scanned && !loading && <View style={styles.scanLine} />}
               {loading && (
                 <View style={styles.loadingOverlay}>
                   <ActivityIndicator size="large" color="#ffffff" />
@@ -360,14 +328,14 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
           <View style={styles.bottomSection}>
             <Text style={styles.instructionText}>
               {loading
-                ? "Processing QR code..."
+                ? 'Processing QR code...'
                 : scanned
-                ? "QR code detected"
-                : scanMode === "auto"
-                ? "Point camera at QR code - Auto detection enabled"
-                : scanMode === "simple"
-                ? "Simple mode - Basic QR codes only"
-                : "Complex mode - Secure QR codes"}
+                ? 'QR code detected'
+                : scanMode === 'auto'
+                ? 'Point camera at QR code - Auto detection enabled'
+                : scanMode === 'simple'
+                ? 'Simple mode - Basic QR codes only'
+                : 'Complex mode - Secure QR codes'}
             </Text>
 
             <View style={styles.buttonRow}>
@@ -377,12 +345,12 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
                 disabled={loading}
               >
                 <Ionicons
-                  name={flashMode === "torch" ? "flash" : "flash-off"}
+                  name={flashMode === 'on' ? 'flash' : 'flash-off'}
                   size={28}
-                  color={loading ? "#666" : "#ffffff"}
+                  color={loading ? '#666' : '#ffffff'}
                 />
                 <Text style={[styles.iconButtonText, loading && styles.iconButtonTextDisabled]}>
-                  {flashMode === "torch" ? "Flash On" : "Flash Off"}
+                  {flashMode === 'on' ? 'Flash On' : 'Flash Off'}
                 </Text>
               </TouchableOpacity>
 
@@ -392,21 +360,14 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
                   onPress={resetScanner}
                   disabled={loading}
                 >
-                  <Ionicons 
-                    name="refresh" 
-                    size={28} 
-                    color={loading ? "#666" : "#ffffff"} 
-                  />
+                  <Ionicons name="refresh" size={28} color={loading ? '#666' : '#ffffff'} />
                   <Text style={[styles.iconButtonText, loading && styles.iconButtonTextDisabled]}>
                     Scan Again
                   </Text>
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={onClose}
-              >
+              <TouchableOpacity style={styles.iconButton} onPress={onClose}>
                 <Ionicons name="close-circle" size={28} color="#ffffff" />
                 <Text style={styles.iconButtonText}>Close</Text>
               </TouchableOpacity>
@@ -421,32 +382,32 @@ export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: '#000',
   },
   camera: {
     flex: 1,
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "space-between",
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'space-between',
   },
   topSection: {
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
     paddingBottom: 20,
-    alignItems: "center",
+    alignItems: 'center',
   },
   headerText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginBottom: 20,
-    textAlign: "center",
+    textAlign: 'center',
   },
   modeSelector: {
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.7)",
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     borderRadius: 25,
     padding: 4,
   },
@@ -455,117 +416,117 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 20,
     minWidth: 70,
-    alignItems: "center",
+    alignItems: 'center',
   },
   modeButtonActive: {
-    backgroundColor: "#2196F3",
+    backgroundColor: '#2196F3',
   },
   modeButtonText: {
-    color: "#ccc",
-    fontWeight: "600",
+    color: '#ccc',
+    fontWeight: '600',
     fontSize: 14,
   },
   modeButtonTextActive: {
-    color: "#fff",
+    color: '#fff',
   },
   scanAreaContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scanArea: {
     width: SCAN_AREA_SIZE,
     height: SCAN_AREA_SIZE,
-    position: "relative",
-    justifyContent: "center",
-    alignItems: "center",
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cornerTL: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 0,
     width: 50,
     height: 50,
     borderTopWidth: 4,
     borderLeftWidth: 4,
-    borderColor: "#2196F3",
+    borderColor: '#2196F3',
     borderTopLeftRadius: 8,
   },
   cornerTR: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     right: 0,
     width: 50,
     height: 50,
     borderTopWidth: 4,
     borderRightWidth: 4,
-    borderColor: "#2196F3",
+    borderColor: '#2196F3',
     borderTopRightRadius: 8,
   },
   cornerBL: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     left: 0,
     width: 50,
     height: 50,
     borderBottomWidth: 4,
     borderLeftWidth: 4,
-    borderColor: "#2196F3",
+    borderColor: '#2196F3',
     borderBottomLeftRadius: 8,
   },
   cornerBR: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     right: 0,
     width: 50,
     height: 50,
     borderBottomWidth: 4,
     borderRightWidth: 4,
-    borderColor: "#2196F3",
+    borderColor: '#2196F3',
     borderBottomRightRadius: 8,
   },
   scanLine: {
-    position: "absolute",
-    width: "80%",
+    position: 'absolute',
+    width: '80%',
     height: 2,
-    backgroundColor: "#2196F3",
+    backgroundColor: '#2196F3',
     opacity: 0.8,
   },
   loadingOverlay: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.8)",
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     borderRadius: 12,
   },
   loadingText: {
-    color: "#fff",
+    color: '#fff',
     marginTop: 12,
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   bottomSection: {
     paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 40 : 20,
-    alignItems: "center",
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    alignItems: 'center',
   },
   instructionText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 16,
-    textAlign: "center",
+    textAlign: 'center',
     marginBottom: 30,
     lineHeight: 22,
   },
   buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
     maxWidth: 300,
   },
   iconButton: {
-    alignItems: "center",
+    alignItems: 'center',
     padding: 12,
     borderRadius: 8,
     minWidth: 80,
@@ -574,39 +535,41 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   iconButtonText: {
-    color: "#fff",
+    color: '#fff',
     marginTop: 6,
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   iconButtonTextDisabled: {
-    color: "#666",
+    color: '#666',
   },
   button: {
-    backgroundColor: "#2196F3",
+    backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 12,
     marginTop: 20,
   },
   buttonText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 16,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   text: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 18,
     marginTop: 20,
-    textAlign: "center",
-    fontWeight: "500",
+    textAlign: 'center',
+    fontWeight: '500',
   },
   subText: {
-    color: "#ccc",
+    color: '#ccc',
     fontSize: 14,
     marginTop: 10,
-    textAlign: "center",
+    textAlign: 'center',
     paddingHorizontal: 20,
   },
 });
+
+export default QRScanner;

@@ -1,13 +1,13 @@
 // src/services/LocationService.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Battery from 'expo-battery';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import * as Battery from 'expo-battery';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
-import { Order, Location as AppLocation, LocationUpdate } from '../shared/types';
 import { parsePostGISPoint, toPostGISPoint } from '../shared/locationUtils';
+import { Location as AppLocation, LocationUpdate, Order } from '../shared/types';
 
 // ======================== CONSTANTS ========================
 const LOCATION_TASK_NAME = 'background-location-task';
@@ -32,13 +32,15 @@ interface ActiveGeofences {
 }
 
 // ======================== NOTIFICATION SETUP ========================
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
 
 // ======================== HELPER FUNCTIONS ========================
 
@@ -350,8 +352,6 @@ export const LocationService = {
 
       return await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
-        maximumAge: 10000,
-        timeout: 15000,
       });
     } catch (error) {
       console.error('[LocationService] Error getting current location:', error);

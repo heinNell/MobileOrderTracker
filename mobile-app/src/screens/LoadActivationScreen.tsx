@@ -1,42 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  Platform,
-} from 'react-native';
-import { supabase } from '../lib/supabase';
-import * as Location from 'expo-location';
+// src/screens/LoadActivationScreen.tsx
+import { supabase } from '@/lib/supabase';
+import type { RootStackParamList } from '@/types/navigation';
 import { MaterialIcons } from '@expo/vector-icons';
+import type { RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Location from 'expo-location';
+import React, { useEffect, useState } from 'react';
+import
+  {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from 'react-native';
+import type { Order, OrderStatus } from '../../../shared/types';
 
-interface LoadActivationScreenProps {
-  route: {
-    params: {
-      orderId: string;
-      orderNumber: string;
-    };
+// Status color helper
+const getStatusColor = (status: OrderStatus): string => {
+  const colors: Record<OrderStatus, string> = {
+    pending: '#6B7280',
+    assigned: '#3B82F6',
+    in_transit: '#8B5CF6',
+    arrived: '#10B981',
+    loading: '#F59E0B',
+    loaded: '#10B981',
+    unloading: '#F59E0B',
+    completed: '#059669',
+    cancelled: '#EF4444',
   };
-  navigation: any;
+  return colors[status] ?? '#6B7280';
+};
+
+// Define navigation and route props
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'LoadActivation'>;
+type RoutePropType = RouteProp<RootStackParamList, 'LoadActivation'>;
+
+// Edge function response type
+interface ActivateLoadResponse {
+  success: boolean;
+  message?: string;
 }
 
-export default function LoadActivationScreen({
-  route,
-  navigation,
-}: LoadActivationScreenProps) {
-  const { orderId, orderNumber } = route.params;
+const LoadActivationScreen: React.FC = () => {
+  const { orderId, orderNumber } = useRoute<RoutePropType>().params;
+  const navigation = useNavigation<NavigationProp>();
   const [loading, setLoading] = useState(false);
-  const [orderDetails, setOrderDetails] = useState<any>(null);
-  const [location, setLocation] = useState<any>(null);
+  const [orderDetails, setOrderDetails] = useState<Order | null>(null);
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [locationPermission, setLocationPermission] = useState(false);
 
   useEffect(() => {
     loadOrderDetails();
     requestLocationPermission();
-  }, []);
+  }, [orderId]);
 
   const requestLocationPermission = async () => {
     try {
@@ -57,22 +78,15 @@ export default function LoadActivationScreen({
   const loadOrderDetails = async () => {
     try {
       setLoading(true);
-
       const { data: order, error } = await supabase
         .from('orders')
-        .select(`
-          *,
-          assigned_driver:users!orders_assigned_driver_id_fkey(
-            id,
-            full_name
-          )
-        `)
+        .select('*, assigned_driver:users!orders_assigned_driver_id_fkey(id, full_name)')
         .eq('id', orderId)
         .single();
 
       if (error) throw error;
 
-      setOrderDetails(order);
+      setOrderDetails(order as Order);
     } catch (error: any) {
       console.error('Error loading order:', error);
       Alert.alert('Error', 'Failed to load order details');
@@ -83,7 +97,6 @@ export default function LoadActivationScreen({
 
   const handleActivateLoad = async () => {
     try {
-      // Check if location is available
       if (!location && locationPermission) {
         Alert.alert(
           'Location Required',
@@ -95,15 +108,11 @@ export default function LoadActivationScreen({
         setLocation(currentLocation);
       }
 
-      // Confirm activation
       Alert.alert(
         'Activate Load',
         `Are you sure you want to activate load for order ${orderNumber}?\n\nThis will:\n• Mark the order as activated\n• Enable QR code scanning\n• Start tracking your location`,
         [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
+          { text: 'Cancel', style: 'cancel' },
           {
             text: 'Activate',
             style: 'default',
@@ -123,28 +132,28 @@ export default function LoadActivationScreen({
     try {
       setLoading(true);
 
-      // Get current session
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error('Not authenticated');
+        Alert.alert('Authentication Required', 'You must be logged in to activate the load.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') },
+        ]);
+        return;
       }
 
-      // Prepare activation data
       const activationData: any = {
         order_id: orderId,
       };
 
-      // Add location if available
       if (location) {
         activationData.location = {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         };
 
-        // Try to reverse geocode
         try {
           const addresses = await Location.reverseGeocodeAsync({
             latitude: location.coords.latitude,
@@ -167,15 +176,13 @@ export default function LoadActivationScreen({
         }
       }
 
-      // Add device info
       activationData.device_info = {
         platform: Platform.OS,
         app_version: '1.0.0',
         os_version: Platform.Version,
       };
 
-      // Call activate-load Edge Function
-      const { data, error } = await supabase.functions.invoke('activate-load', {
+      const { data, error } = await supabase.functions.invoke<ActivateLoadResponse>('activate-load', {
         body: activationData,
       });
 
@@ -184,39 +191,30 @@ export default function LoadActivationScreen({
         throw new Error(error.message || 'Failed to activate load');
       }
 
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to activate load');
+      if (!data || !data.success) {
+        throw new Error(data?.message || 'Failed to activate load');
       }
 
       console.log('Load activated successfully:', data);
 
-      // Show success message
       Alert.alert(
         'Load Activated!',
         `Order ${orderNumber} has been activated successfully.\n\nYou can now scan QR codes for pickup and delivery.`,
         [
           {
             text: 'OK',
-            onPress: () => {
-              // Navigate back to order details or scanner
-              navigation.goBack();
-            },
+            onPress: () => navigation.goBack(),
           },
           {
             text: 'Scan QR Code',
-            onPress: () => {
-              navigation.navigate('QRScanner', {
-                orderId,
-                orderNumber,
-              });
-            },
+            onPress: () => navigation.navigate('QRScanner', { orderId, orderNumber }),
           },
         ]
       );
     } catch (error: any) {
       console.error('Error activating load:', error);
       let message = 'Failed to activate load';
-      
+
       if (error.message.includes('not assigned')) {
         message = 'You are not assigned to this order';
       } else if (error.message.includes('already activated')) {
@@ -259,7 +257,7 @@ export default function LoadActivationScreen({
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Status:</Text>
-              <View style={[styles.statusBadge, getStatusStyle(orderDetails.status)]}>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(orderDetails.status) }]}>
                 <Text style={styles.statusText}>
                   {orderDetails.status.toUpperCase()}
                 </Text>
@@ -341,25 +339,25 @@ export default function LoadActivationScreen({
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Before You Activate</Text>
           <View style={styles.instructionsList}>
-            <View style={styles.instructionItem}>
+            <View style={[styles.instructionItem, styles.instructionMargin]}>
               <MaterialIcons name="check-circle-outline" size={20} color="#2563eb" />
               <Text style={styles.instructionText}>
                 Ensure you are at the loading point
               </Text>
             </View>
-            <View style={styles.instructionItem}>
+            <View style={[styles.instructionItem, styles.instructionMargin]}>
               <MaterialIcons name="check-circle-outline" size={20} color="#2563eb" />
               <Text style={styles.instructionText}>
                 Verify the vehicle is ready for loading
               </Text>
             </View>
-            <View style={styles.instructionItem}>
+            <View style={[styles.instructionItem, styles.instructionMargin]}>
               <MaterialIcons name="check-circle-outline" size={20} color="#2563eb" />
               <Text style={styles.instructionText}>
                 Location services must be enabled
               </Text>
             </View>
-            <View style={styles.instructionItem}>
+            <View style={[styles.instructionItem, styles.instructionMargin]}>
               <MaterialIcons name="check-circle-outline" size={20} color="#2563eb" />
               <Text style={styles.instructionText}>
                 After activation, you can scan QR codes
@@ -404,18 +402,6 @@ export default function LoadActivationScreen({
       </View>
     </ScrollView>
   );
-}
-
-const getStatusStyle = (status: string) => {
-  const styles: any = {
-    pending: { backgroundColor: '#9ca3af' },
-    assigned: { backgroundColor: '#3b82f6' },
-    activated: { backgroundColor: '#10b981' },
-    in_transit: { backgroundColor: '#8b5cf6' },
-    delivered: { backgroundColor: '#059669' },
-    completed: { backgroundColor: '#10b981' },
-  };
-  return styles[status] || { backgroundColor: '#6b7280' };
 };
 
 const styles = StyleSheet.create({
@@ -536,11 +522,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   instructionsList: {
-    gap: 12,
+    marginTop: 12,
   },
   instructionItem: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  instructionMargin: {
+    marginBottom: 12,
   },
   instructionText: {
     marginLeft: 12,
@@ -585,3 +574,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default LoadActivationScreen;
