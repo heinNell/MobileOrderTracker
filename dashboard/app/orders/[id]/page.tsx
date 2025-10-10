@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../../lib/supabase";
 import { useRouter } from "next/navigation";
-import type { Order, TransporterSupplier } from "../../../../shared/types";
+import { useEffect, useState } from "react";
+import type { Order } from "../../../../shared/types";
 import { exportOrderToPDF } from "../../../lib/pdf-export";
+import { supabase } from "../../../lib/supabase";
 import { handleApiError, handleSuccess } from "../../../lib/utils";
 import EnhancedOrderForm from "../../components/EnhancedOrderForm";
 
@@ -255,8 +255,7 @@ export default function OrderDetailPage({
       await exportOrderToPDF(order, {
         includeQR: true,
         includeTransporter: true,
-        companyName: "Mobile Order Tracker",
-        companyAddress: "Professional Logistics Management System",
+        companyName: "Matanuska Load Confirmation",
       });
       handleSuccess("PDF exported successfully!");
     } catch (error: any) {

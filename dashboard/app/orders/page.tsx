@@ -1,26 +1,25 @@
 // Enhanced Order Management with Better Error Handling and Debugging
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
-import type { Order, OrderStatus } from "../../../shared/types";
 import { useRouter } from "next/navigation";
-import { parsePostGISPoint } from "../../../shared/locationUtils";
-import {
-  handleApiError,
-  handleSuccess,
-  validateRequired,
-  validateCoordinates,
-} from "../../lib/utils";
+import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
+import type { Order, OrderStatus } from "../../../shared/types";
+import { exportOrderToPDF } from "../../lib/pdf-export";
+import
+  {
+    downloadQRCode,
+    generateQRCode,
+    testQRCodeFlow,
+  } from "../../lib/qr-service";
+import { supabase } from "../../lib/supabase";
+import
+  {
+    handleApiError,
+    handleSuccess
+  } from "../../lib/utils";
 import EnhancedOrderForm from "../components/EnhancedOrderForm";
 import QRDebugger from "../components/QRDebugger";
-import { exportOrderToPDF } from "../../lib/pdf-export";
-import {
-  generateQRCode,
-  downloadQRCode,
-  testQRCodeFlow,
-} from "../../lib/qr-service";
 
 interface DebugInfo {
   userStatus: string;
@@ -551,8 +550,7 @@ export default function EnhancedOrdersPage() {
       await exportOrderToPDF(order, {
         includeQR: true,
         includeTransporter: true,
-        companyName: "Mobile Order Tracker",
-        companyAddress: "Professional Logistics Management System",
+        companyName: "Matanuska Load Confirmation",
       });
       handleSuccess("PDF exported successfully!");
     } catch (error: any) {
