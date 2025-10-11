@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "expo": "^54.0.13",
+    "expo-dev-client": "~6.0.15",
     "react-dom": "19.1.0",
     "react-native-web": "^0.21.0"
   }

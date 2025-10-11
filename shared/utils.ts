@@ -1,8 +1,8 @@
 // /workspaces/MobileOrderTracker/shared/utils.ts
 // General shared utilities for order handling and formatting
 
-import { Order, TrackingUpdate, Location, OrderStatus } from './types';
 import { parsePostGISPoint } from "./locationUtils";
+import type { Location, Order, OrderStatus, TrackingUpdate } from './types';
 
 
 /**
@@ -29,7 +29,8 @@ export const getOrderLocation = (order: Order): Location | null => {
   }
 
   // Fall back to legacy lat/lng fields
-  if (order.destination_lat !== null && order.destination_lng !== null) {
+  if (order.destination_lat !== null && order.destination_lng !== null && 
+      order.destination_lat !== undefined && order.destination_lng !== undefined) {
     return {
       latitude: order.destination_lat,
       longitude: order.destination_lng,

@@ -1,5 +1,5 @@
 // Utility functions for converting between PostGIS WKT and Location objects
-import { Location } from "./types";
+import type { Location } from "./types";
 
 /**
  * Normalize various WKT inputs by stripping optional SRID prefix.
@@ -50,7 +50,7 @@ export function parsePostGISPoint(wkt: string | Location): Location {
   // PostGIS POINT format: POINT(longitude latitude)
   const match = normalized.match(/POINT\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
 
-  if (!match) {
+  if (!match || !match[1] || !match[2]) {
     throw new Error(`Invalid PostGIS POINT format: ${wkt}`);
   }
 

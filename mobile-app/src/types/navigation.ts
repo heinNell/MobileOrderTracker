@@ -1,5 +1,5 @@
 // src/types/navigation.ts
-import { NavigatorScreenParams } from '@react-navigation/native';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { Order } from '../../../shared/types';
 
 export type RootStackParamList = {
