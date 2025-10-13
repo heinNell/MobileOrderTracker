@@ -94,12 +94,12 @@ class ErrorBoundary extends React.Component {
       return (
         <View style={styles.centered}>
           <Text style={styles.errorText}>Something went wrong</Text>
-          <Pressable
+          <WebCompatibleButton
             style={styles.errorButton}
             onPress={() => this.setState({ hasError: false })}
           >
             <Text style={styles.errorButtonText}>Try Again</Text>
-          </Pressable>
+          </WebCompatibleButton>
         </View>
       );
     }
@@ -391,7 +391,7 @@ function DriverDashboard() {
             </View>
 
             <View style={styles.actionButtons}>
-              <Pressable
+              <WebCompatibleButton
                 style={({ pressed }) => [
                   styles.primaryButton,
                   pressed && styles.buttonPressed
@@ -403,24 +403,24 @@ function DriverDashboard() {
               >
                 <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
                 <Text style={styles.buttonText}>Update Status</Text>
-              </Pressable>
+              </WebCompatibleButton>
 
               {locationTracking ? (
-                <Pressable
+                <WebCompatibleButton
                   style={styles.stopButton}
                   onPress={stopLocationTracking}
                 >
                   <MaterialIcons name="stop" size={20} color="#fff" />
                   <Text style={styles.buttonText}>Stop Tracking</Text>
-                </Pressable>
+                </WebCompatibleButton>
               ) : (
-                <Pressable
+                <WebCompatibleButton
                   style={styles.trackButton}
                   onPress={startLocationTracking}
                 >
                   <MaterialIcons name="my-location" size={20} color="#fff" />
                   <Text style={styles.buttonText}>Start Tracking</Text>
-                </Pressable>
+                </WebCompatibleButton>
               )}
             </View>
           </View>
@@ -453,7 +453,7 @@ function DriverDashboard() {
             </View>
 
             {scannedOrders.slice(0, 5).map((order) => (
-              <Pressable
+              <WebCompatibleButton
                 key={order.id}
                 style={styles.recentOrderItem}
                 onPress={() => router.navigate(`/(tabs)/${order.id}`)}
@@ -476,16 +476,16 @@ function DriverDashboard() {
                     {order.status.replace("_", " ")}
                   </Text>
                 </View>
-              </Pressable>
+              </WebCompatibleButton>
             ))}
 
-            <Pressable
+            <WebCompatibleButton
               style={styles.viewAllButton}
               onPress={() => router.navigate('/(tabs)/orders')}
             >
               <Text style={styles.viewAllText}>View All Orders</Text>
               <MaterialIcons name="arrow-forward" size={16} color="#6366f1" />
-            </Pressable>
+            </WebCompatibleButton>
           </View>
         )}
 
