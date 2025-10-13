@@ -1,101 +1,116 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
-import { supabase } from "../lib/supabase";
-import { Platform } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext({});
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    initializeAuth();
+    // Check active sessions
+    checkUser();
+
+    // Listen for auth changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔐 Auth event:', event);
+        
+        if (session?.user) {
+          setUser(session.user);
+          setIsAuthenticated(true);
+          await AsyncStorage.setItem('supabase.auth.token', JSON.stringify(session));
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+          await AsyncStorage.removeItem('supabase.auth.token');
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
-  const initializeAuth = async () => {
+  async function checkUser() {
     try {
-      // Wait a bit for window to be available on web
-      if (Platform.OS === 'web' && typeof window === 'undefined') {
-        setLoading(false);
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          setUser(session?.user ?? null);
-        }
-      );
-
-      setLoading(false);
-
-      return () => subscription.unsubscribe();
-    } catch (error) {
-      console.error("Auth initialization error:", error);
-      setLoading(false);
-    }
-  };
-
-  const signUp = async (email, password) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+      setLoading(true);
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
       if (error) throw error;
-      return data;
+      
+      if (session?.user) {
+        setUser(session.user);
+        setIsAuthenticated(true);
+        console.log('✅ User authenticated:', session.user.email);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+        console.log('❌ No active session');
+      }
     } catch (error) {
-      console.error("SignUp error:", error);
-      throw error;
+      console.error('❌ Error checking user:', error);
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const login = async (email, password) => {
+  async function signIn(email, password) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error("Login error:", error);
-      throw error;
-    }
-  };
 
-  const logout = async () => {
+      if (error) throw error;
+
+      console.log('✅ Sign in successful:', data.user.email);
+      return { success: true, user: data.user };
+    } catch (error) {
+      console.error('❌ Sign in error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async function signOut() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-    } catch (error) {
-      console.error("Logout error:", error);
-      throw error;
-    }
-  };
 
-  // Always provide the auth functions, even during loading
+      setUser(null);
+      setIsAuthenticated(false);
+      await AsyncStorage.removeItem('supabase.auth.token');
+      
+      console.log('✅ Sign out successful');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Sign out error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   const value = {
     user,
     loading,
-    signUp,
-    login,
-    logout,
+    isAuthenticated,
+    signIn,
+    signOut,
+    checkUser,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

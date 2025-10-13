@@ -1,3 +1,4 @@
+// app/(tabs)/order-details.js
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -218,7 +219,7 @@ export default function OrderDetailsScreen() {
             style={styles.primaryButton}
             onPress={() =>
               router.push({
-                pathname: "/QRScanner",
+                pathname: "/(tabs)/scanner",
                 params: { orderId: order.id, orderNumber: order.order_number },
               })
             }

@@ -1,61 +1,78 @@
-import { Tabs } from "expo-router";
-import { Text } from "react-native";
+// app/(tabs)/_layout.js
+import React from 'react';
+import { Tabs, Redirect } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { ActivityIndicator, View } from 'react-native';
 
 export default function TabLayout() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
-        tabBarStyle: {
-          backgroundColor: "white",
-          borderTopWidth: 1,
-          borderTopColor: "#e2e8f0",
-          paddingTop: 5,
-          paddingBottom: 5,
-          height: 60,
+        tabBarActiveTintColor: '#2563eb',
+        tabBarInactiveTintColor: '#6b7280',
+        headerStyle: {
+          backgroundColor: '#ffffff',
         },
-        tabBarActiveTintColor: "#2563eb",
-        tabBarInactiveTintColor: "#64748b",
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
+        headerTintColor: '#111827',
+        headerTitleStyle: {
+          fontWeight: 'bold',
         },
-        headerTitleAlign: "center",
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="orders"
         options={{
-          title: "Dashboard",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>🏠</Text>
+          title: 'Orders',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="list-alt" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="scanner"
         options={{
-          title: "Scan QR",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>📷</Text>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: "Orders",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>📋</Text>
+          title: 'Scanner',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="qr-code-scanner" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>👤</Text>
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="person" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="order-details"
+        options={{
+          href: null, // Hide from tab bar
+          title: 'Order Details',
+        }}
+      />
+      <Tabs.Screen
+        name="LoadActivationScreen"
+        options={{
+          href: null, // Hide from tab bar
+          title: 'Activate Load',
         }}
       />
     </Tabs>

@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Linking,
-  Platform,
-  ActivityIndicator,
-} from "react-native";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import
+  {
+    ActivityIndicator,
+    Alert,
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from "react-native";
 import { supabase } from "../lib/supabase";
-import { LocationService } from "../services/locationService";
-import { parsePostGISPoint } from "../locationUtils";
+import { parsePostGISPoint } from "../shared/locationUtils";
+import LocationService from "../services/LocationService";
 
 const STATUS_ACTIONS = [
   { status: "in_transit", label: "Start Transit", color: "#8B5CF6" },
@@ -23,6 +24,8 @@ const STATUS_ACTIONS = [
   { status: "unloading", label: "Start Unloading", color: "#F59E0B" },
   { status: "completed", label: "Complete Delivery", color: "#059669" },
 ];
+
+const locationService = new LocationService();
 
 const OrderDetailsScreen = () => {
   const route = useRoute();
@@ -104,7 +107,7 @@ const OrderDetailsScreen = () => {
   useEffect(() => {
     const checkTracking = async () => {
       if (!order?.id) return;
-      const currentTracked = await LocationService.getCurrentOrderId();
+      const currentTracked = await locationService.getCurrentOrderId();
       setIsTracking(currentTracked === order.id);
     };
     checkTracking();
@@ -121,7 +124,7 @@ const OrderDetailsScreen = () => {
   const startTracking = useCallback(async () => {
     if (!order?.id) return;
     try {
-      const ok = await LocationService.startTracking(order.id);
+      const ok = await locationService.startTracking(order.id);
       if (ok) {
         setIsTracking(true);
         Alert.alert("Success", "Location tracking started");
@@ -136,7 +139,7 @@ const OrderDetailsScreen = () => {
 
   const stopTracking = useCallback(async () => {
     try {
-      await LocationService.stopTracking();
+      await locationService.stopTracking();
       setIsTracking(false);
       Alert.alert("Success", "Location tracking stopped");
     } catch (e) {
@@ -194,7 +197,7 @@ const OrderDetailsScreen = () => {
         }
 
         // Current location (optional) - Mobile location fetch
-        const location = await LocationService.getCurrentLocation().catch(
+        const location = await locationService.getCurrentLocation().catch(
           () => null
         );
 

@@ -1,30 +1,37 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  Dimensions,
-} from "react-native";
-// import { CameraView, useCameraPermissions } from "expo-camera";
 import { MaterialIcons } from "@expo/vector-icons";
+import { CameraView, useCameraPermissions } from "expo-camera"; // ✅ Fixed import
+import { useEffect, useState } from "react";
+import
+  {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from "react-native";
 import { supabase } from "../lib/supabase";
 
 const { width } = Dimensions.get("window");
 const SCAN_AREA_SIZE = width * 0.7;
 
 export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissions(); // ✅ Now properly imported
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
 
   useEffect(() => {
+    console.log('📷 Camera permission status:', permission);
     if (!permission) {
+      console.log('📷 Requesting camera permission...');
       requestPermission();
+    } else if (permission.granted) {
+      console.log('✅ Camera permission granted');
+    } else {
+      console.log('❌ Camera permission denied');
     }
   }, [permission]);
 
@@ -160,6 +167,8 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
     );
   }
 
+  console.log('🎥 Rendering CameraView with permission:', permission?.granted);
+  
   return (
     <View style={styles.container}>
       <CameraView
@@ -170,6 +179,8 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
         }}
+        onCameraReady={() => console.log('📷 Camera is ready!')}
+        onMountError={(error) => console.error('❌ Camera mount error:', error)}
       >
         <View style={styles.overlay}>
           {/* Top Section */}
@@ -247,6 +258,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
   );
 }
 
+// ... rest of your styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,

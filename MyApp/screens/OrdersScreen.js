@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
-  RefreshControl,
-  ActivityIndicator 
-} from 'react-native';
+import { useEffect, useState } from 'react';
+import
+  {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+  } from 'react-native';
 import { useAuth } from '../app/context/AuthContext';
 import { supabase } from '../app/lib/supabase';
 

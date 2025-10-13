@@ -1,17 +1,21 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { QRCodeScanner } from "../components/QRCodeScanner";
-import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import ErrorBoundary from "../components/ErrorBoundary";
+import { QRCodeScanner } from "../components/QRCodeScanner";
 
 export default function ScannerScreen() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const [scanning, setScanning] = useState(false);
 
   const handleScanSuccess = (order) => {
     console.log("✅ Scan successful:", order);
     setScanning(false);
-    router.push(`/order-details?orderId=${order.id}`);
+    navigation.navigate("OrdersTab", { 
+      screen: "OrderDetails", 
+      params: { orderId: order.id } 
+    });
   };
 
   const handleScanError = (error) => {
@@ -30,11 +34,16 @@ export default function ScannerScreen() {
   return (
     <View style={styles.container}>
       {scanning ? (
-        <QRCodeScanner
-          onScanSuccess={handleScanSuccess}
-          onScanError={handleScanError}
-          onClose={handleClose}
-        />
+        <ErrorBoundary 
+          fallbackMessage="The camera component encountered an error. Please check camera permissions and try again."
+          onError={handleClose}
+        >
+          <QRCodeScanner
+            onScanSuccess={handleScanSuccess}
+            onScanError={handleScanError}
+            onClose={handleClose}
+          />
+        </ErrorBoundary>
       ) : (
         <View style={styles.centered}>
           <MaterialIcons name="qr-code-scanner" size={80} color="#2563eb" />
@@ -113,10 +122,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     borderRadius: 12,
     marginVertical: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
     elevation: 3,
   },
   buttonText: {

@@ -13,7 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.logistics.ordertracker",
@@ -25,14 +27,20 @@
         "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
         "NSLocationWhenInUseUsageDescription": "This app requires location access to track deliveries",
         "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background",
-        "UIBackgroundModes": ["location", "fetch", "background-processing"],
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "background-processing"
+        ],
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "DeliveryTracking": "Required for live ETA calculations"
         },
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "com.logistics.ordertracker",
-            "CFBundleURLSchemes": ["ordertracker"]
+            "CFBundleURLSchemes": [
+              "ordertracker"
+            ]
           }
         ]
       }
@@ -60,7 +68,10 @@
               "scheme": "ordertracker"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -77,11 +88,13 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "staticRendering": false,
       "build": {
         "babel": {
-          "include": ["@expo/vector-icons"]
+          "include": [
+            "@expo/vector-icons"
+          ]
         }
       }
     },
@@ -91,7 +104,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Mobile Order Tracker to track your delivery location."
         }
-      ]
+      ],
+      "expo-router"
     ],
     "description": "Logistics QR Code Mobile Application for Drivers",
     "updates": {

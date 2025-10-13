@@ -1,23 +1,24 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-} from "react-native";
-import { supabase } from "../lib/supabase";
-import { useAuth } from "../context/AuthContext";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { useEffect, useState } from "react";
+import
+  {
+    Alert,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from "react-native";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
 export default function OrdersScreen() {
   const [orders, setOrders] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const { user, logout } = useAuth();
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const fetchOrders = async () => {
     try {
@@ -55,7 +56,7 @@ export default function OrdersScreen() {
           style: "destructive",
           onPress: async () => {
             await logout();
-            router.replace("/login");
+            // Auth context will handle navigation to login
           },
         },
       ]
@@ -158,10 +159,7 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   orderHeader: {

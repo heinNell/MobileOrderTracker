@@ -1,27 +1,75 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { supabase } from "../lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from '@react-navigation/native';
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { supabase } from "../lib/supabase";
+import LocationService from "../services/LocationService";
+
+const locationService = new LocationService();
 
 export default function OrdersScreen() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [startingPoint, setStartingPoint] = useState(null);
+  const [settingLocation, setSettingLocation] = useState(false);
 
   useEffect(() => {
     loadOrders();
+    loadStartingPoint();
   }, []);
+
+  const loadStartingPoint = async () => {
+    try {
+      const point = await locationService.getStartingPoint();
+      setStartingPoint(point);
+    } catch (error) {
+      console.error('Error loading starting point:', error);
+    }
+  };
+
+  const setCurrentLocationAsStartingPoint = async () => {
+    try {
+      setSettingLocation(true);
+      const location = await locationService.setCurrentLocationAsStartingPoint();
+      setStartingPoint(location);
+      
+      Alert.alert(
+        "Starting Point Set",
+        `Your current location has been set as the starting point for orders.\n\nLat: ${location.latitude.toFixed(6)}\nLng: ${location.longitude.toFixed(6)}`,
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      Alert.alert(
+        "Error",
+        "Failed to set starting point. Please check location permissions and try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setSettingLocation(false);
+    }
+  };
+
+  const clearStartingPoint = async () => {
+    try {
+      await locationService.clearStartingPoint();
+      setStartingPoint(null);
+      Alert.alert("Starting Point Cleared", "The starting point has been removed.", [{ text: "OK" }]);
+    } catch (error) {
+      Alert.alert("Error", "Failed to clear starting point.", [{ text: "OK" }]);
+    }
+  };
 
   const loadOrders = async () => {
     try {
@@ -76,7 +124,7 @@ export default function OrdersScreen() {
   const renderOrderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.orderCard}
-      onPress={() => router.push(`/order-details?orderId=${item.id}`)}
+      onPress={() => navigation.navigate("QRScannerScreen", { orderId: item.id })}
     >
       <View style={styles.orderHeader}>
         <Text style={styles.orderNumber}>#{item.order_number}</Text>
@@ -171,6 +219,68 @@ export default function OrdersScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
+          ListHeaderComponent={() => (
+            <View style={styles.startingPointCard}>
+              <View style={styles.startingPointHeader}>
+                <MaterialIcons name="my-location" size={24} color="#2563eb" />
+                <Text style={styles.startingPointTitle}>Starting Point</Text>
+              </View>
+              
+              {startingPoint ? (
+                <View style={styles.startingPointInfo}>
+                  <Text style={styles.locationText}>
+                    📍 Lat: {startingPoint.latitude.toFixed(6)}, Lng: {startingPoint.longitude.toFixed(6)}
+                  </Text>
+                  <Text style={styles.locationTime}>
+                    Set: {new Date(startingPoint.timestamp).toLocaleString()}
+                  </Text>
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity 
+                      style={styles.updateButton} 
+                      onPress={setCurrentLocationAsStartingPoint}
+                      disabled={settingLocation}
+                    >
+                      {settingLocation ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <MaterialIcons name="refresh" size={18} color="#fff" />
+                          <Text style={styles.buttonText}>Update</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.clearButton} 
+                      onPress={clearStartingPoint}
+                    >
+                      <MaterialIcons name="clear" size={18} color="#fff" />
+                      <Text style={styles.buttonText}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.noLocationInfo}>
+                  <Text style={styles.noLocationText}>
+                    Set your current location as the starting point for order tracking
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.setLocationButton} 
+                    onPress={setCurrentLocationAsStartingPoint}
+                    disabled={settingLocation}
+                  >
+                    {settingLocation ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <MaterialIcons name="add-location" size={20} color="#fff" />
+                        <Text style={styles.buttonText}>Set Current Location</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
         />
       )}
     </View>
@@ -235,10 +345,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
     elevation: 3,
   },
   orderHeader: {
@@ -305,5 +412,92 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     marginTop: 8,
     textAlign: "center",
+  },
+  // Starting Point Styles
+  startingPointCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
+    elevation: 3,
+  },
+  startingPointHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  startingPointTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1f2937",
+    marginLeft: 8,
+  },
+  startingPointInfo: {
+    padding: 12,
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 4,
+  },
+  locationTime: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginBottom: 12,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  updateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    flex: 1,
+    justifyContent: "center",
+  },
+  clearButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    flex: 1,
+    justifyContent: "center",
+  },
+  noLocationInfo: {
+    padding: 16,
+    backgroundColor: "#fef3c7",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  noLocationText: {
+    fontSize: 14,
+    color: "#92400e",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  setLocationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#10b981",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: "center",
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "500",
+    marginLeft: 4,
   },
 });

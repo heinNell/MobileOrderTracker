@@ -1,3 +1,4 @@
+// app/(tabs)/LoadActivationScreen.js
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -187,7 +188,7 @@ export default function LoadActivationScreen() {
             text: "Scan QR Code",
             onPress: () => {
               router.push({
-                pathname: "/QRScanner",
+                pathname: "/(tabs)/scanner",
                 params: { orderId, orderNumber },
               });
             },
