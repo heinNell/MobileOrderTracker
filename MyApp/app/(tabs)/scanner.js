@@ -1,9 +1,10 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { QRCodeScanner } from "../components/QRCodeScanner";
+import TouchableOpacity from "../components/TouchableOpacity";
 
 export default function ScannerScreen() {
   const router = useRouter();

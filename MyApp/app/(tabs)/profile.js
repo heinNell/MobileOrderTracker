@@ -7,9 +7,9 @@ import
     ScrollView,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View,
   } from 'react-native';
+import TouchableOpacity from '../components/TouchableOpacity';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProfileScreen() {

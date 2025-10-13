@@ -10,9 +10,9 @@ import
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
     View,
   } from 'react-native';
+import TouchableOpacity from './components/TouchableOpacity';
 import { useAuth } from './context/AuthContext';
 
 export default function LoginScreen() {
@@ -26,7 +26,7 @@ export default function LoginScreen() {
   // Navigate to Main tabs if already authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
-      router.replace('/(tabs)/orders');
+      router.replace('/(tabs)');
     }
   }, [isAuthenticated, authLoading]);
 

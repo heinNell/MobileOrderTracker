@@ -8,14 +8,20 @@ export default function Index() {
   const { isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
+    console.log('📍 Index.js useEffect triggered', { loading, isAuthenticated });
+    
     if (!loading) {
       if (isAuthenticated) {
+        console.log('✅ User authenticated, redirecting to tabs');
         router.replace('/(tabs)');
       } else {
+        console.log('❌ User not authenticated, redirecting to login');
         router.replace('/login');
       }
     }
   }, [isAuthenticated, loading, router]);
+
+  console.log('📍 Index.js rendering...', { loading, isAuthenticated });
 
   // Always show loading while determining auth state
   return (

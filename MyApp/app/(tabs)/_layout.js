@@ -1,4 +1,3 @@
-// app/(tabs)/_layout.js
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
@@ -72,14 +71,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="order-details"
         options={{
-          href: null, // Hide from tab bar
+          href: null,
           title: 'Order Details',
         }}
       />
       <Tabs.Screen
         name="LoadActivationScreen"
         options={{
-          href: null, // Hide from tab bar
+          href: null,
           title: 'Activate Load',
         }}
       />

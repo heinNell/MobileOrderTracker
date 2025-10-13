@@ -9,10 +9,10 @@ import
     Platform,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View,
   } from "react-native";
 import { supabase } from "../lib/supabase";
+import TouchableOpacity from "./TouchableOpacity";
 
 const { width } = Dimensions.get("window");
 const SCAN_AREA_SIZE = width * 0.7;

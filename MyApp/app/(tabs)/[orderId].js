@@ -15,6 +15,7 @@ import
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
 import { parsePostGISPoint } from "../shared/locationUtils";
+import { useAuth } from "../context/AuthContext";
 
 const STATUS_ACTIONS = [
   { status: "activated", label: "Start Order", color: "#10b981" },
@@ -30,20 +31,19 @@ const locationService = new LocationService();
 
 const OrderDetailsScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const { order: initialOrder, orderId } = params;
-
-  const [order, setOrder] = useState(initialOrder || null);
-  const [loading, setLoading] = useState(!!orderId && !initialOrder);
+  const { orderId } = useLocalSearchParams();
+  const { user } = useAuth();
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
 
-  // Fetch the order if only orderId was provided (e.g., from QR scan or internal navigation)
+  // Fetch the order
   useEffect(() => {
     let isMounted = true;
 
     const fetchOrder = async () => {
-      if (orderId && !order) {
+      if (orderId) {
         try {
           setLoading(true);
           const { data, error } = await supabase
@@ -61,7 +61,7 @@ const OrderDetailsScreen = () => {
             return;
           }
           setOrder(data);
-          
+
           // Auto-start tracking if order is assigned to current user and in trackable status
           if (data && user && data.assigned_driver_id === user.id) {
             const trackableStatuses = ["assigned", "activated", "in_progress", "in_transit", "loading", "loaded"];
@@ -96,9 +96,9 @@ const OrderDetailsScreen = () => {
     return () => {
       isMounted = false;
     };
-  }, [orderId, order, navigation]);
+  }, [orderId, user]);
 
-  // Subscribe to live order updates - Supabase realtime for mobile
+  // Subscribe to live order updates
   useEffect(() => {
     if (!order?.id) return;
     const channel = supabase
@@ -122,7 +122,7 @@ const OrderDetailsScreen = () => {
     };
   }, [order?.id]);
 
-  // Track whether location tracking is enabled for this order - Mobile location service (async)
+  // Track location
   useEffect(() => {
     const checkTracking = async () => {
       if (!order?.id) return;
@@ -196,14 +196,14 @@ const OrderDetailsScreen = () => {
 
   const updateStatus = useCallback(
     async (newStatus, notes) => {
-      if (!order?.id) return;
+      if (!order?.id || !user) return;
       try {
         setStatusUpdating(true);
 
-        // Check auth - Mobile auth check
+        // Check auth
         const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) {
+        const currentUser = auth?.user;
+        if (!currentUser) {
           Alert.alert(
             "Authentication Required",
             "You need to be logged in to update status.",
@@ -215,7 +215,7 @@ const OrderDetailsScreen = () => {
           return;
         }
 
-        // Current location (optional) - Mobile location fetch
+        // Current location
         const location = await locationService.getCurrentLocation().catch(
           () => null
         );
@@ -225,7 +225,7 @@ const OrderDetailsScreen = () => {
           .from("status_updates")
           .insert({
             order_id: order.id,
-            driver_id: user.id,
+            driver_id: currentUser.id,
             status: newStatus,
             location:
               location && location.coords
@@ -256,7 +256,7 @@ const OrderDetailsScreen = () => {
 
         Alert.alert("Success", "Status updated successfully");
 
-        // Auto-start tracking when order begins or is assigned
+        // Auto-start tracking
         const trackableStatuses = ["assigned", "activated", "in_progress", "in_transit"];
         if (trackableStatuses.includes(newStatus) && !isTracking) {
           await startTracking();
@@ -274,7 +274,7 @@ const OrderDetailsScreen = () => {
       isTracking,
       startTracking,
       stopTracking,
-      navigation,
+      user
     ]
   );
 
@@ -296,7 +296,6 @@ const OrderDetailsScreen = () => {
     });
   };
 
-  // Render loading state - Mobile loading UI
   if (loading || !order) {
     return (
       <View style={styles.loadingWrap}>
@@ -626,3 +625,4 @@ const styles = StyleSheet.create({
   quickActionText: { color: "#3B82F6", fontSize: 14, fontWeight: "600" },
 });
 
+export default OrderDetailsScreen;

@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import
@@ -6,17 +7,42 @@ import
     ActivityIndicator,
     Alert,
     FlatList,
+    Platform,
     RefreshControl,
     StyleSheet,
     Text,
-    TouchableOpacity,
-    View,
+    View
   } from "react-native";
+import TouchableOpacity from "../components/TouchableOpacity";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
 
 const locationService = new LocationService();
+
+// Platform-aware storage to handle web compatibility
+const storage = Platform.OS === 'web' 
+  ? {
+      getItem: (key) => {
+        if (typeof window !== 'undefined') {
+          return Promise.resolve(window.localStorage.getItem(key));
+        }
+        return Promise.resolve(null);
+      },
+      setItem: (key, value) => {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, value);
+        }
+        return Promise.resolve();
+      },
+      removeItem: (key) => {
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(key);
+        }
+        return Promise.resolve();
+      },
+    }
+  : AsyncStorage;
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -91,8 +117,7 @@ export default function OrdersScreen() {
           onPress: async () => {
             try {
               // Clear active order when logging out
-              const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-              await AsyncStorage.removeItem('activeOrderId');
+              await storage.removeItem('activeOrderId');
               
               const result = await signOut();
               if (!result.success) {
@@ -140,8 +165,7 @@ export default function OrdersScreen() {
       }
 
       // Check for active order from QR scan (stored in AsyncStorage)
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const activeOrderId = await AsyncStorage.getItem('activeOrderId');
+      const activeOrderId = await storage.getItem('activeOrderId');
 
       if (!activeOrderId) {
         // No active order - show empty state with instruction to scan QR
@@ -160,7 +184,7 @@ export default function OrdersScreen() {
       if (error) {
         if (error.code === 'PGRST116') {
           // No order found - clear invalid active order
-          await AsyncStorage.removeItem('activeOrderId');
+          await storage.removeItem('activeOrderId');
           setOrders([]);
           setError("Active order not found. Please scan QR code again.");
         } else {
@@ -203,7 +227,7 @@ export default function OrdersScreen() {
   const renderOrderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.orderCard}
-      onPress={() => router.push(`/QRScannerScreen?orderId=${item.id}`)}
+      onPress={() => router.push(`/(tabs)/QRScannerScreen?orderId=${item.id}`)}
     >
       <View style={styles.orderHeader}>
         <Text style={styles.orderNumber}>#{item.order_number}</Text>
