@@ -1,11 +1,10 @@
 // Incidents Page - Incident Management Interface
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
-import type { Incident, Order } from "../../../shared/types";
 import { useRouter } from "next/navigation";
-import { parsePostGISPoint } from "../../../shared/locationUtils";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
+import type { Incident } from "../../shared/types";
 
 // Extended type for incidents with joined data from Supabase
 interface IncidentWithRelations extends Incident {
@@ -26,7 +25,7 @@ export default function IncidentsPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [severityFilter, setSeverityFilter] = useState<number | "all">("all");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "resolved">("all");
   const [sortBy, setSortBy] = useState<"created_at" | "severity">("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -157,16 +156,14 @@ export default function IncidentsPage() {
     setFilteredIncidents(result);
   };
 
-  const getIncidentSeverityColor = (severity: number): string => {
-    const colors = [
-      "bg-gray-200",
-      "bg-blue-200",
-      "bg-yellow-200",
-      "bg-orange-200",
-      "bg-red-200",
-      "bg-red-500 text-white",
-    ];
-    return colors[severity - 1] || "bg-gray-200";
+  const getIncidentSeverityColor = (severity: string): string => {
+    const colors: Record<string, string> = {
+      "low": "bg-green-100 text-green-800",
+      "medium": "bg-yellow-100 text-yellow-800", 
+      "high": "bg-orange-100 text-orange-800",
+      "critical": "bg-red-100 text-red-800",
+    };
+    return colors[severity] || "bg-gray-100 text-gray-800";
   };
 
   const getIncidentTypeColor = (type: string): string => {
@@ -291,7 +288,7 @@ export default function IncidentsPage() {
                 id="severity"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                onChange={(e) => setSeverityFilter(e.target.value)}
               >
                 <option value="all">All Severities</option>
                 <option value="1">1 - Low</option>

@@ -1,11 +1,10 @@
 // Dashboard Page - Main Dashboard Interface
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
-import type { Order, OrderStatus } from "../../shared/types";
 import { useRouter } from "next/navigation";
-import { parsePostGISPoint } from "../../shared/locationUtils";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+import type { Order, OrderStatus } from "../shared/types";
 
 export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -83,6 +82,8 @@ export default function DashboardPage() {
     const colors: Record<OrderStatus, string> = {
       pending: "bg-gray-500",
       assigned: "bg-blue-500",
+      activated: "bg-green-500",
+      in_progress: "bg-indigo-500",
       in_transit: "bg-purple-500",
       arrived: "bg-green-500",
       loading: "bg-yellow-500",

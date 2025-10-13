@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase"; // Assuming this is typed or needs import adjustment
-import type { User } from "../../../shared/types"; // Assuming User type is defined here
 import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase"; // Assuming this is typed or needs import adjustment
+import type { User } from "../../shared/types";
 
 // Define a more specific type for user instead of any (based on Supabase session.user)
 interface SessionUser {

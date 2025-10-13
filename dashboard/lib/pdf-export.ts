@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
-import { parsePostGISPoint } from "../../shared/locationUtils";
-import type { Order } from "../../shared/types";
+import { parsePostGISPoint } from "../shared/locationUtils";
+import type { Order } from "../shared/types";
 
 export interface PDFExportOptions {
   includeQR?: boolean;

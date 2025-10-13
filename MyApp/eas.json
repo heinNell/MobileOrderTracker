@@ -14,7 +14,7 @@
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
         "VERSION": "2.0.0",
         "TENANT_ID": "default-tenant",
-        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "DASHBOARD_URL": "https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app/",
         "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
         "IS_PRODUCTION": "false"
       }
@@ -29,7 +29,7 @@
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
         "VERSION": "2.0.0",
         "TENANT_ID": "default-tenant",
-        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "DASHBOARD_URL": "https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app/",
         "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
         "IS_PRODUCTION": "false"
       }
@@ -43,7 +43,7 @@
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
         "VERSION": "2.0.0",
         "TENANT_ID": "default-tenant",
-        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "DASHBOARD_URL": "https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app/,
         "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
         "IS_PRODUCTION": "true"
       }
@@ -57,7 +57,7 @@
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
         "VERSION": "2.0.0",
         "TENANT_ID": "default-tenant",
-        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "DASHBOARD_URL": "https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app/",
         "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
         "IS_PRODUCTION": "true"
       }

@@ -3,10 +3,10 @@
 
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
-import { parsePostGISPoint } from "../../../shared/locationUtils";
-import type { LocationUpdate, Order } from "../../../shared/types";
 import { supabase } from "../../lib/supabase";
-// Import Google Maps components
+import { parsePostGISPoint } from "../../shared/locationUtils";
+import type { LocationUpdate, Order } from "../../shared/types";
+// Import Google Maps components with type overrides
 import
   {
     GoogleMap,
@@ -14,6 +14,12 @@ import
     Marker,
     Polyline
   } from "@react-google-maps/api";
+
+// Type overrides for Google Maps components
+const GoogleMapTyped = GoogleMap as any;
+const LoadScriptTyped = LoadScript as any;
+const MarkerTyped = Marker as any;
+const PolylineTyped = Polyline as any;
 
 export default function TrackingPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -338,15 +344,15 @@ export default function TrackingPage() {
             )}
           </div>
 
-          <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-            <GoogleMap mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={mapZoom} options={mapOptions}>
+          <LoadScriptTyped googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
+            <GoogleMapTyped mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={mapZoom} options={mapOptions}>
               {/* Render routes for all orders or selected order */}
               {(selectedOrder ? [selectedOrder] : orders).map((order) => {
                 const route = getOrderRoute(order.id);
                 if (route.length === 0) return null;
 
                 return (
-                  <Polyline
+                  <PolylineTyped
                     key={`route-${order.id}`}
                     path={route}
                     options={{
@@ -372,7 +378,7 @@ export default function TrackingPage() {
                 };
 
                 return (
-                  <Marker
+                  <MarkerTyped
                     key={location.id}
                     position={position}
                     icon={{
@@ -400,7 +406,7 @@ export default function TrackingPage() {
                 return (
                   <React.Fragment key={order.id}>
                     {/* Loading point */}
-                    <Marker
+                    <MarkerTyped
                       position={loadingPoint}
                       icon={{
                         // Custom SVG path for circle (equivalent to SymbolPath.CIRCLE)
@@ -415,7 +421,7 @@ export default function TrackingPage() {
                     />
 
                     {/* Unloading point */}
-                    <Marker
+                    <MarkerTyped
                       position={unloadingPoint}
                       icon={{
                         // Custom SVG path for circle (equivalent to SymbolPath.CIRCLE)
@@ -431,8 +437,8 @@ export default function TrackingPage() {
                   </React.Fragment>
                 );
               })}
-            </GoogleMap>
-          </LoadScript>
+            </GoogleMapTyped>
+          </LoadScriptTyped>
 
           {/* Map Legend */}
           <div className="mt-4 flex flex-wrap gap-4 text-sm">

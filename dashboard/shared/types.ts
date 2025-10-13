@@ -200,76 +200,123 @@ export interface Incident {
   driver_id: string;
   incident_type: IncidentType;
   title: string;
-  description: string;
-  location: Location;
-  severity: number;
+  description?: string;
+  status: "open" | "investigating" | "resolved";
+  priority: "low" | "medium" | "high" | "critical";
+  severity: "low" | "medium" | "high" | "critical";  // Add severity field
+  location?: Location;
   photo_urls?: string[];
-  video_urls?: string[];
-  is_resolved: boolean;
-  resolved_at?: string;
-  resolved_by?: string;
   resolution_notes?: string;
+  resolved_at?: string;
+  is_resolved?: boolean;  // Add is_resolved field
   created_at: string;
   updated_at: string;
-}
-
-export interface Message {
-  id: string;
-  order_id: string;
-  sender_id: string;
-  sender?: User;
-  recipient_id?: string;
-  recipient?: User;
-  message_text: string;
-  is_template: boolean;
-  is_read: boolean;
-  read_at?: string;
-  metadata?: Record<string, any>;
-  created_at: string;
 }
 
 export interface Notification {
   id: string;
   tenant_id: string;
   user_id: string;
-  order_id?: string;
-  notification_type: NotificationType;
+  type: NotificationType;
   title: string;
   message: string;
-  is_read: boolean;
+  data?: Record<string, any>;
   read_at?: string;
-  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  order_id: string;
+  sender_id: string;
+  sender: {
+    id: string;
+    full_name: string;
+    role: UserRole;
+  };
+  content: string;
+  message_text: string;  // Add message_text field
+  recipient?: {          // Add recipient field
+    id: string;
+    full_name: string;
+    role: UserRole;
+  };
+  attachment_urls?: string[];
+  is_read: boolean;
   created_at: string;
 }
 
 export interface Geofence {
   id: string;
-  tenant_id: string;
   name: string;
-  location: Location;
-  radius_meters: number;
+  type: "loading_point" | "unloading_point" | "waypoint" | "custom";
+  center: Location;
+  radius: number; // in meters
+  radius_meters?: number; // Alternative field name for compatibility
   is_active: boolean;
-  metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+export interface GeofenceEvent {
+  id: string;
+  order_id: string;
+  driver_id: string;
+  event_type: "enter" | "exit";
+  geofence_type: "loading_point" | "unloading_point" | "waypoint";
+  location: Location;
+  created_at: string;
+}
+
+export interface DeliveryProof {
+  id: string;
+  order_id: string;
+  driver_id: string;
+  proof_type: "photo" | "signature" | "note";
+  content: string; // URL for photos, base64 for signatures, text for notes
+  location?: Location;
+  created_at: string;
+}
+
+export interface QRCode {
+  id: string;
+  order_id: string;
+  qr_code_data: string;
+  status: "active" | "used" | "expired";
+  expires_at?: string;
+  scanned_at?: string;
+  scanned_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoadActivation {
+  id: string;
+  order_id: string;
+  driver_id: string;
+  activated_at: string;
+  location?: string; // PostGIS point
+  location_address?: string;
+  device_info?: Record<string, any>;
+  notes?: string;
+  created_at: string;
 }
 
 export interface AuditLog {
   id: string;
   tenant_id: string;
-  user_id?: string;
+  user_id: string;
   order_id?: string;
   action: string;
   resource_type: string;
-  resource_id?: string;
+  resource_id: string;
   old_values?: Record<string, any>;
   new_values?: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
+  metadata?: Record<string, any>;
   created_at: string;
 }
 
-// API Response types
+// API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -277,96 +324,64 @@ export interface ApiResponse<T = any> {
   message?: string;
 }
 
-export interface QRCodeResponse {
-  data: string;
-  image: string;
-  expiresAt: string;
+export interface PaginatedResponse<T = any> {
+  data: T[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
 }
 
-export interface OrderDetailsResponse {
-  order: Order;
-  recentUpdates: StatusUpdate[];
-  incidents: Incident[];
-  locationUpdates: LocationUpdate[];
+// Form and UI Types
+export interface OrderFilters {
+  status?: OrderStatus[];
+  assigned_driver_id?: string;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
 }
 
-// Template messages for quick status updates
-export const STATUS_TEMPLATES = {
-  arrived: "Arrived at location",
-  loading: "Started loading",
-  loaded: "Loading completed",
-  departed: "Departed from location",
-  delayed: "Experiencing delay",
-  on_route: "On route to destination",
-  unloading: "Started unloading",
-  completed: "Delivery completed",
-} as const;
-
-// Status color mapping for UI
-export const STATUS_COLORS: Record<OrderStatus, string> = {
-  pending: "#6B7280",
-  assigned: "#3B82F6",
-  activated: "#10B981",
-  in_progress: "#6366f1",
-  in_transit: "#8B5CF6",
-  arrived: "#10B981",
-  loading: "#F59E0B",
-  loaded: "#10B981",
-  unloading: "#F59E0B",
-  completed: "#059669",
-  cancelled: "#EF4444",
-};
-
-// Incident severity levels
-export const INCIDENT_SEVERITY = {
-  1: "Low",
-  2: "Medium",
-  3: "High",
-  4: "Critical",
-  5: "Emergency",
-} as const;
-
-
-// Valid status transitions
-export const VALID_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['assigned', 'cancelled'],
-  assigned: ['activated', 'cancelled'],
-  activated: ['in_progress', 'cancelled'],
-  in_progress: ['in_transit', 'cancelled'],
-  in_transit: ['arrived', 'cancelled'],
-  arrived: ['loading', 'cancelled'],
-  loading: ['loaded', 'cancelled'],
-  loaded: ['in_transit', 'unloading', 'cancelled'],
-  unloading: ['completed', 'cancelled'],
-  completed: [],
-  cancelled: []
-};
-
-export const canTransitionStatus = (from: OrderStatus, to: OrderStatus): boolean => {
-  return VALID_STATUS_TRANSITIONS[from].includes(to);
-};
-
-
-export interface OrderMetrics {
-  totalDistance: number;
-  totalDuration: number;
-  averageSpeed: number;
-  delayMinutes: number;
-  onTimePercentage: number;
+export interface DashboardStats {
+  total_orders: number;
+  active_orders: number;
+  completed_orders: number;
+  active_drivers: number;
 }
 
-export interface DriverMetrics {
-  totalOrders: number;
-  completedOrders: number;
-  averageRating: number;
-  totalDistanceDriven: number;
-  activeHours: number;
-}
-// Utility type guards
-export const isValidOrderStatus = (status: string): status is OrderStatus => {
-  return ['pending', 'assigned', 'in_transit', 'arrived', 'loading', 'loaded', 'unloading', 'completed', 'cancelled'].includes(status);
-};
+// Export utility type for form validation
+export type RequiredOrderFields = Pick<
+  Order,
+  | "loading_point_name"
+  | "loading_point_address"
+  | "loading_point_location"
+  | "unloading_point_name"
+  | "unloading_point_address"
+  | "unloading_point_location"
+>;
 
-export const isValidUserRole = (role: string): role is UserRole => {
-  return ['admin', 'dispatcher', 'driver'].includes(role);
-};
+// Navigation types
+export interface RouteInfo {
+  origin: Location;
+  destination: Location;
+  waypoints?: Location[];
+  distance?: number;
+  duration?: number;
+  traffic_info?: any;
+}
+
+// Real-time event types
+export interface RealtimeOrderUpdate {
+  order_id: string;
+  status: OrderStatus;
+  location?: Location;
+  timestamp: string;
+}
+
+export interface RealtimeDriverUpdate {
+  driver_id: string;
+  location: Location;
+  order_id?: string;
+  timestamp: string;
+}

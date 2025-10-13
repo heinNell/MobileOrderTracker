@@ -7,7 +7,7 @@ module.exports = {
     {
       source: '/api/locations',
       headers: [
-        { key: 'Access-Control-Allow-Origin', value: 'https://regal-quokka-de7e35.netlify.app' }
+        { key: 'Access-Control-Allow-Origin', value: 'https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app' }
       ]
     }
   ]

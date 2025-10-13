@@ -1,10 +1,10 @@
 // Messages Page - Communication Hub
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../../lib/supabase";
-import type { Message, Order, User } from "../../../shared/types";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "../../lib/supabase";
+import type { Message, Order, User } from "../../shared/types";
 
 export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([]);

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import type { Order, TransporterSupplier, User } from "../../../shared/types";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import type { Order, TransporterSupplier } from "../../shared/types";
 
 // Simplified driver type for form selection
 interface DriverOption {

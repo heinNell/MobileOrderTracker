@@ -1,12 +1,12 @@
 // Geofences Page - Geofence Configuration (hardened & fixed)
 "use client";
 
+import { useRouter } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import type { Geofence } from "../../../shared/types";
-import { useRouter } from "next/navigation";
+import type { Geofence } from "../../shared/types";
 // @ts-ignore
-import { GoogleMap, LoadScript, Marker, Circle } from "@react-google-maps/api";
+import { Circle, GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
 
 type Row = Partial<Geofence> & {
   location?: unknown;

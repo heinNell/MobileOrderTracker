@@ -1,24 +1,25 @@
 // Analytics Page - Reporting and Analytics
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
-import type { Order, OrderStatus } from "../../../shared/types";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
+import type { Order, OrderStatus } from "../../shared/types";
 // @ts-ignore
+import
+  {
+    ArcElement,
+    BarElement,
+    CategoryScale,
+    Chart as ChartJS,
+    Legend,
+    LinearScale,
+    LineElement,
+    PointElement,
+    Title,
+    Tooltip,
+  } from "chart.js";
 import { Bar, Line, Pie } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-} from "chart.js";
 
 ChartJS.register(
   CategoryScale,
@@ -100,6 +101,8 @@ export default function AnalyticsPage() {
     const statusCounts: Record<OrderStatus, number> = {
       pending: 0,
       assigned: 0,
+      activated: 0,
+      in_progress: 0,
       in_transit: 0,
       arrived: 0,
       loading: 0,
@@ -164,6 +167,8 @@ export default function AnalyticsPage() {
     const statusCounts: Record<OrderStatus, number> = {
       pending: 0,
       assigned: 0,
+      activated: 0,
+      in_progress: 0,
       in_transit: 0,
       arrived: 0,
       loading: 0,

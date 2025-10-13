@@ -4,7 +4,6 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-import type { Order, OrderStatus } from "../../../shared/types";
 import { exportOrderToPDF } from "../../lib/pdf-export";
 import
   {
@@ -18,6 +17,7 @@ import
     handleApiError,
     handleSuccess
   } from "../../lib/utils";
+import type { Order, OrderStatus } from "../../shared/types";
 import EnhancedOrderForm from "../components/EnhancedOrderForm";
 import QRDebugger from "../components/QRDebugger";
 
@@ -581,6 +581,8 @@ export default function EnhancedOrdersPage() {
     const colors: Record<OrderStatus, string> = {
       pending: "bg-gray-500",
       assigned: "bg-blue-500",
+      activated: "bg-green-500",
+      in_progress: "bg-indigo-500",
       in_transit: "bg-purple-500",
       arrived: "bg-green-500",
       loading: "bg-yellow-500",

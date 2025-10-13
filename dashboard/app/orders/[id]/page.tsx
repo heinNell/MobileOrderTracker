@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { Order } from "../../../../shared/types";
 import { exportOrderToPDF } from "../../../lib/pdf-export";
 import { supabase } from "../../../lib/supabase";
 import { handleApiError, handleSuccess } from "../../../lib/utils";
+import type { Order } from "../../../shared/types";
 import EnhancedOrderForm from "../../components/EnhancedOrderForm";
 
 // Define local interfaces for type safety
@@ -50,7 +50,7 @@ interface LocationUpdate {
 export default function OrderDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [statusUpdates, setStatusUpdates] = useState<StatusUpdate[]>([]);
@@ -59,11 +59,17 @@ export default function OrderDetailPage({
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [orderId, setOrderId] = useState<string>("");
   const router = useRouter();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    const initializePage = async () => {
+      const resolvedParams = await params;
+      setOrderId(resolvedParams.id);
+      await checkAuth();
+    };
+    initializePage();
+  }, [params]);
 
   const checkAuth = async () => {
     const {
@@ -76,11 +82,19 @@ export default function OrderDetailPage({
     }
 
     setUser(session.user);
-    fetchOrderDetails();
-    subscribeToUpdates();
   };
 
-  const fetchOrderDetails = async () => {
+  // Fetch data when orderId is available
+  useEffect(() => {
+    if (orderId && user) {
+      fetchOrderData();
+      subscribeToUpdates();
+    }
+  }, [orderId, user]);
+
+  const fetchOrderData = async () => {
+    if (!orderId) return;
+    
     try {
       // Fetch order details
       const { data: orderData, error: orderError } = await supabase
@@ -95,7 +109,7 @@ export default function OrderDetailPage({
           )
         `
         )
-        .eq("id", params.id)
+        .eq("id", orderId)
         .single();
 
       if (orderError) throw orderError;
@@ -116,7 +130,7 @@ export default function OrderDetailPage({
           )
         `
         )
-        .eq("order_id", params.id)
+        .eq("order_id", orderId)
         .order("created_at", { ascending: false });
 
       if (statusError) throw statusError;
@@ -133,7 +147,7 @@ export default function OrderDetailPage({
           )
         `
         )
-        .eq("order_id", params.id)
+        .eq("order_id", orderId)
         .order("created_at", { ascending: false });
 
       if (incidentError) throw incidentError;
@@ -143,7 +157,7 @@ export default function OrderDetailPage({
       const { data: locationData, error: locationError } = await supabase
         .from("location_updates")
         .select("*")
-        .eq("order_id", params.id)
+        .eq("order_id", orderId)
         .order("timestamp", { ascending: false })
         .limit(20); // Limit to last 20 updates
 
@@ -159,14 +173,14 @@ export default function OrderDetailPage({
   const subscribeToUpdates = () => {
     // Subscribe to order changes
     const orderChannel = supabase
-      .channel(`order:${params.id}`)
+      .channel(`order:${orderId}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "orders",
-          filter: `id=eq.${params.id}`,
+          filter: `id=eq.${orderId}`,
         },
         (payload) => {
           setOrder(payload.new as Order);
@@ -176,14 +190,14 @@ export default function OrderDetailPage({
 
     // Subscribe to status updates
     const statusChannel = supabase
-      .channel(`status_updates:${params.id}`)
+      .channel(`status_updates:${orderId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "status_updates",
-          filter: `order_id=eq.${params.id}`,
+          filter: `order_id=eq.${orderId}`,
         },
         (payload) => {
           setStatusUpdates((prev) => [payload.new as StatusUpdate, ...prev]);
@@ -193,14 +207,14 @@ export default function OrderDetailPage({
 
     // Subscribe to incidents
     const incidentChannel = supabase
-      .channel(`incidents:${params.id}`)
+      .channel(`incidents:${orderId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "incidents",
-          filter: `order_id=eq.${params.id}`,
+          filter: `order_id=eq.${orderId}`,
         },
         (payload) => {
           setIncidents((prev) => [payload.new as Incident, ...prev]);
