@@ -168,16 +168,23 @@ class LocationService {
         return;
       }
 
-      // Insert location update
+          // Insert location update with enhanced data for dashboard
+      const locationData = {
+        driver_id: user.id,
+        order_id: this.currentOrderId,
+        location: toPostGISPoint(location),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timestamp: location.timestamp,
+        created_at: new Date().toISOString(),
+        accuracy: location.accuracy || null,
+        speed: location.speed || null,
+        heading: location.heading || null,
+      };
+
       const { error } = await supabase
         .from('driver_locations')
-        .insert({
-          driver_id: user.id,
-          order_id: this.currentOrderId,
-          location: toPostGISPoint(location),
-          timestamp: location.timestamp,
-          created_at: new Date().toISOString(),
-        });
+        .insert(locationData);
 
       if (error) {
         console.error('Error saving location:', error);
@@ -268,6 +275,70 @@ class LocationService {
     } catch (error) {
       console.error('Error calculating distance from start:', error);
       return null;
+    }
+  }
+
+  // Send immediate location update to dashboard (for real-time tracking)
+  async sendImmediateLocationUpdate() {
+    try {
+      const location = await this.getCurrentLocation();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Send location even if not actively tracking an order
+      const locationData = {
+        driver_id: user.id,
+        order_id: this.currentOrderId,
+        location: toPostGISPoint(location),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timestamp: location.timestamp,
+        created_at: new Date().toISOString(),
+        accuracy: location.accuracy || null,
+        speed: location.speed || null,
+        heading: location.heading || null,
+        is_manual_update: true, // Flag for dashboard to know this is a manual update
+      };
+
+      const { error } = await supabase
+        .from('driver_locations')
+        .insert(locationData);
+
+      if (error) throw error;
+
+      console.log('📍 Manual location update sent to dashboard');
+      return location;
+    } catch (error) {
+      console.error('Error sending immediate location update:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced cleanup method for logout
+  async cleanup() {
+    try {
+      await this.stopTracking();
+      
+      // Clear all stored data
+      await AsyncStorage.multiRemove([
+        'trackingOrderId',
+        'orderStartingPoint',
+        'lastKnownLocation'
+      ]);
+
+      // Reset all instance variables
+      this.currentOrderId = null;
+      this.isTracking = false;
+      this.trackingInterval = null;
+      this.lastLocation = null;
+      this.startingPoint = null;
+
+      console.log('✅ LocationService cleaned up for logout');
+    } catch (error) {
+      console.error('Error cleaning up LocationService:', error);
     }
   }
 }

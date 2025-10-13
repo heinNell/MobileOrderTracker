@@ -1,17 +1,18 @@
 // app/(tabs)/order-details.js
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-} from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { supabase } from "../lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import
+  {
+    ActivityIndicator,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from "react-native";
+import { supabase } from "../lib/supabase";
 
 export default function OrderDetailsScreen() {
   const { orderId } = useLocalSearchParams();
@@ -214,7 +215,7 @@ export default function OrderDetailsScreen() {
           </TouchableOpacity>
         )}
 
-        {order.load_activated_at && (
+        {order.load_activated_at && ["activated", "in_progress", "in_transit", "arrived", "loading", "loaded", "unloading"].includes(order.status) && (
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() =>
@@ -225,8 +226,19 @@ export default function OrderDetailsScreen() {
             }
           >
             <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
-            <Text style={styles.primaryButtonText}>Scan QR Code</Text>
+            <Text style={styles.primaryButtonText}>
+              {order.status === "activated" ? "Start Order" : "Manage Order"}
+            </Text>
           </TouchableOpacity>
+        )}
+
+        {order.status === "assigned" && order.load_activated_at && (
+          <View style={styles.infoContainer}>
+            <MaterialIcons name="info-outline" size={20} color="#6366f1" />
+            <Text style={styles.infoText}>
+              Load is activated! You can now scan QR codes to start the order.
+            </Text>
+          </View>
         )}
 
         <TouchableOpacity
@@ -245,6 +257,7 @@ const getStatusStyle = (status) => {
     pending: { backgroundColor: "#9ca3af" },
     assigned: { backgroundColor: "#3b82f6" },
     activated: { backgroundColor: "#10b981" },
+    in_progress: { backgroundColor: "#6366f1" },
     in_transit: { backgroundColor: "#8b5cf6" },
     delivered: { backgroundColor: "#059669" },
     completed: { backgroundColor: "#10b981" },

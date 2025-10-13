@@ -13,16 +13,17 @@ import
     View,
   } from "react-native";
 import { supabase } from "../lib/supabase";
-import { parsePostGISPoint } from "../shared/locationUtils";
 import LocationService from "../services/LocationService";
+import { parsePostGISPoint } from "../shared/locationUtils";
 
 const STATUS_ACTIONS = [
-  { status: "in_transit", label: "Start Transit", color: "#8B5CF6" },
-  { status: "arrived", label: "Arrived", color: "#10B981" },
-  { status: "loading", label: "Start Loading", color: "#F59E0B" },
-  { status: "loaded", label: "Loading Complete", color: "#10B981" },
-  { status: "unloading", label: "Start Unloading", color: "#F59E0B" },
-  { status: "completed", label: "Complete Delivery", color: "#059669" },
+  { status: "activated", label: "Start Order", color: "#10b981" },
+  { status: "in_progress", label: "Mark In Transit", color: "#8B5CF6" },
+  { status: "in_transit", label: "Mark Arrived", color: "#10B981" },
+  { status: "arrived", label: "Start Loading", color: "#F59E0B" },
+  { status: "loading", label: "Loading Complete", color: "#10B981" },
+  { status: "loaded", label: "Start Unloading", color: "#F59E0B" },
+  { status: "unloading", label: "Complete Delivery", color: "#059669" },
 ];
 
 const locationService = new LocationService();
@@ -220,7 +221,7 @@ const OrderDetailsScreen = () => {
 
         // Update order record
         const updateData = { status: newStatus };
-        if (newStatus === "in_transit" && !order.actual_start_time) {
+        if ((newStatus === "in_progress" || newStatus === "in_transit") && !order.actual_start_time) {
           updateData.actual_start_time = new Date().toISOString();
         }
         if (newStatus === "completed") {
@@ -237,8 +238,8 @@ const OrderDetailsScreen = () => {
 
         Alert.alert("Success", "Status updated successfully");
 
-        // Ensure tracking when transit starts
-        if (newStatus === "in_transit" && !isTracking) {
+        // Auto-start tracking when order begins
+        if ((newStatus === "in_progress" || newStatus === "in_transit") && !isTracking) {
           await startTracking();
         }
       } catch (e) {
@@ -475,6 +476,8 @@ const getStatusColor = (status) => {
   const colors = {
     pending: "#6B7280",
     assigned: "#3B82F6",
+    activated: "#10b981",
+    in_progress: "#6366f1",
     in_transit: "#8B5CF6",
     arrived: "#10B981",
     loading: "#F59E0B",

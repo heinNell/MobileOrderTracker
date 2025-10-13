@@ -1,7 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from "react";
-import {
+import
+  {
     ActivityIndicator,
     Alert,
     FlatList,
@@ -10,7 +11,7 @@ import {
     Text,
     TouchableOpacity,
     View,
-} from "react-native";
+  } from "react-native";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
 
@@ -71,6 +72,29 @@ export default function OrdersScreen() {
     }
   };
 
+  const [sendingLocation, setSendingLocation] = useState(false);
+
+  const sendLocationToDashboard = async () => {
+    try {
+      setSendingLocation(true);
+      await locationService.sendImmediateLocationUpdate();
+      Alert.alert(
+        "Location Sent", 
+        "Your current location has been sent to the dashboard for tracking.",
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      console.error('Error sending location to dashboard:', error);
+      Alert.alert(
+        "Error", 
+        "Failed to send location to dashboard. Please check your internet connection and try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setSendingLocation(false);
+    }
+  };
+
   const loadOrders = async () => {
     try {
       setLoading(true);
@@ -114,7 +138,12 @@ export default function OrdersScreen() {
       pending: "#9ca3af",
       assigned: "#3b82f6",
       activated: "#10b981",
+      in_progress: "#6366f1",
       in_transit: "#8b5cf6",
+      arrived: "#10b981",
+      loading: "#f59e0b",
+      loaded: "#10b981",
+      unloading: "#f59e0b",
       delivered: "#059669",
       completed: "#10b981",
     };
@@ -255,6 +284,24 @@ export default function OrdersScreen() {
                     >
                       <MaterialIcons name="clear" size={18} color="#fff" />
                       <Text style={styles.buttonText}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {/* Dashboard Location Button */}
+                  <View style={styles.dashboardButtonRow}>
+                    <TouchableOpacity 
+                      style={styles.dashboardButton} 
+                      onPress={sendLocationToDashboard}
+                      disabled={sendingLocation}
+                    >
+                      {sendingLocation ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <MaterialIcons name="dashboard" size={18} color="#fff" />
+                          <Text style={styles.buttonText}>Send to Dashboard</Text>
+                        </>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -472,6 +519,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 6,
     flex: 1,
+    justifyContent: "center",
+  },
+  dashboardButtonRow: {
+    marginTop: 8,
+  },
+  dashboardButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#10b981",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 6,
     justifyContent: "center",
   },
   noLocationInfo: {

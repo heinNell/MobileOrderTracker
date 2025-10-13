@@ -1,13 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
@@ -27,11 +26,21 @@ export default function ProfileScreen({ navigation }) {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            const result = await signOut();
-            if (result.success) {
-              navigation.replace('Login');
-            } else {
-              Alert.alert('Error', 'Failed to sign out');
+            try {
+              // Stop location tracking before signing out
+              const LocationService = require('../services/LocationService').default;
+              const locationService = new LocationService();
+              await locationService.stopTracking();
+              
+              // Sign out from Supabase
+              const result = await signOut();
+              if (!result.success) {
+                Alert.alert('Error', result.error || 'Failed to sign out');
+              }
+              // Note: Navigation will be handled by AuthContext state change
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to sign out properly');
             }
           },
         },

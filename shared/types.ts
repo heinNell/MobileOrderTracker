@@ -154,13 +154,27 @@ export interface LocationUpdate {
   id: string;
   order_id: string;
   driver_id: string;
-  location: Location;
-  accuracy_meters?: number;
-  speed_kmh?: number;
+  location: Location; // PostGIS point for backward compatibility
+  latitude: number;  // Direct coordinate fields for easier access
+  longitude: number;
+  accuracy?: number;
+  speed?: number;
   heading?: number;
   battery_level?: number;
   timestamp: string;
   created_at: string;
+  is_manual_update?: boolean;
+  // Joined data from queries
+  driver?: {
+    id: string;
+    full_name: string;
+    email: string;
+  };
+  order?: {
+    id: string;
+    order_number: string;
+    status: string;
+  };
 }
 
 // Alias for backward compatibility

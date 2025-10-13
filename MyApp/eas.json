@@ -1,25 +1,66 @@
 {
   "cli": {
-    "version": ">= 5.9.1"
+    "version": ">= 5.9.1",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": { "NODE_ENV": "development" }
+      "env": {
+        "NODE_ENV": "development",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+        "VERSION": "2.0.0",
+        "TENANT_ID": "default-tenant",
+        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+        "IS_PRODUCTION": "false"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "NODE_ENV": "staging" }
+      "env": {
+        "NODE_ENV": "staging",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+        "VERSION": "2.0.0",
+        "TENANT_ID": "default-tenant",
+        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+        "IS_PRODUCTION": "false"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "NODE_ENV": "production" }
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+        "VERSION": "2.0.0",
+        "TENANT_ID": "default-tenant",
+        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+        "IS_PRODUCTION": "true"
+      }
     },
     "local": {
       "android": { "buildType": "apk" },
-      "env": { "NODE_ENV": "production" }
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+        "VERSION": "2.0.0",
+        "TENANT_ID": "default-tenant",
+        "DASHBOARD_URL": "https://regal-quokka-de7e35.netlify.app/",
+        "QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
+        "IS_PRODUCTION": "true"
+      }
     }
   },
   "submit": {

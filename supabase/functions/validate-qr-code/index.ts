@@ -2,8 +2,8 @@
 // Validates QR code signatures and returns order details
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -158,27 +158,76 @@ serve(async (req) => {
       new_values: { scanned_at: new Date().toISOString() },
     });
 
-    // If driver scans and order is pending, auto-assign
-    if (userData.role === "driver" && order.status === "pending") {
-      await supabase
-        .from("orders")
-        .update({
-          assigned_driver_id: user.id,
+    // Check if load is activated for drivers
+    if (userData.role === "driver") {
+      // If order is pending, auto-assign
+      if (order.status === "pending") {
+        await supabase
+          .from("orders")
+          .update({
+            assigned_driver_id: user.id,
+            status: "assigned",
+            actual_start_time: new Date().toISOString(),
+          })
+          .eq("id", orderId);
+
+        // Create status update
+        await supabase.from("status_updates").insert({
+          order_id: orderId,
+          driver_id: user.id,
           status: "assigned",
-          actual_start_time: new Date().toISOString(),
-        })
-        .eq("id", orderId);
+          notes: "Order assigned via QR code scan",
+        });
 
-      // Create status update
-      await supabase.from("status_updates").insert({
-        order_id: orderId,
-        driver_id: user.id,
-        status: "assigned",
-        notes: "Order activated via QR code scan",
-      });
+        order.assigned_driver_id = user.id;
+        order.status = "assigned";
+      }
 
-      order.assigned_driver_id = user.id;
-      order.status = "assigned";
+      // Check if driver is assigned to this order
+      if (order.assigned_driver_id !== user.id) {
+        return new Response(
+          JSON.stringify({ error: "You are not assigned to this order" }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // Check if load is activated (required for drivers)
+      if (order.status === "assigned" && !order.load_activated_at) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Load must be activated before scanning",
+            details: "Please activate the load first using the mobile app"
+          }),
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // Auto-progress to in_progress if scanning activated order for first time
+      if (order.status === "activated") {
+        await supabase
+          .from("orders")
+          .update({
+            status: "in_progress",
+            actual_start_time: new Date().toISOString(),
+          })
+          .eq("id", orderId);
+
+        // Create status update
+        await supabase.from("status_updates").insert({
+          order_id: orderId,
+          driver_id: user.id,
+          status: "in_progress",
+          notes: "Order started via QR code scan",
+        });
+
+        order.status = "in_progress";
+      }
     }
 
     // Return order details

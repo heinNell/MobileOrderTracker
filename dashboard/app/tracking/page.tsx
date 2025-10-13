@@ -1,18 +1,19 @@
 // Live Tracking Page - Real-time Vehicle Location Visualization
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
-import type { Order, LocationUpdate } from "../../../shared/types";
 import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
 import { parsePostGISPoint } from "../../../shared/locationUtils";
-// Import types and components
-import {
-  GoogleMap,
-  LoadScript,
-  Marker,
-  Polyline,
-} from "@react-google-maps/api";
+import type { LocationUpdate, Order } from "../../../shared/types";
+import { supabase } from "../../lib/supabase";
+// Import Google Maps components
+import
+  {
+    GoogleMap,
+    LoadScript,
+    Marker,
+    Polyline
+  } from "@react-google-maps/api";
 
 export default function TrackingPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -55,6 +56,7 @@ export default function TrackingPage() {
 
     setUser(session.user);
     fetchOrders();
+    fetchDriverLocations();
     subscribeToLocationUpdates();
   };
 
@@ -114,24 +116,57 @@ export default function TrackingPage() {
     }
   };
 
+  const fetchDriverLocations = async () => {
+    try {
+      // Fetch recent driver locations (last 24 hours)
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from("driver_locations")
+        .select(`
+          *,
+          driver:users!driver_locations_driver_id_fkey(
+            id,
+            full_name,
+            email
+          ),
+          order:orders!driver_locations_order_id_fkey(
+            id,
+            order_number,
+            status
+          )
+        `)
+        .gte("created_at", twentyFourHoursAgo)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setLocationUpdates(data || []);
+      console.log("Fetched driver locations:", data?.length || 0);
+    } catch (error) {
+      console.error("Error fetching driver locations:", error);
+    }
+  };
+
   const subscribeToLocationUpdates = () => {
-    // Subscribe to location updates
+    // Subscribe to driver location updates
     const locationChannel = supabase
-      .channel("location_updates")
+      .channel("driver_location_updates")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "location_updates",
+          table: "driver_locations",
         },
         (payload) => {
+          console.log("New driver location received:", payload.new);
           const newLocation = payload.new as LocationUpdate;
           setLocationUpdates((prev) => {
             // Add new location update to the beginning of the array
             const updated = [newLocation, ...prev];
-            // Keep only the latest 100 updates to prevent memory issues
-            return updated.slice(0, 100);
+            // Keep only the latest 200 updates to prevent memory issues
+            return updated.slice(0, 200);
           });
         }
       )
@@ -151,6 +186,8 @@ export default function TrackingPage() {
     const colors: Record<string, string> = {
       pending: "bg-gray-500",
       assigned: "bg-blue-500",
+      activated: "bg-green-500",
+      in_progress: "bg-indigo-500", 
       in_transit: "bg-purple-500",
       arrived: "bg-green-500",
       loading: "bg-yellow-500",
@@ -168,9 +205,10 @@ export default function TrackingPage() {
 
     // For each location update, keep only the latest one per order
     locationUpdates.forEach((update) => {
+      const existingLocation = orderLocations[update.order_id];
       if (
-        !orderLocations[update.order_id] ||
-        new Date(update.timestamp) > new Date(orderLocations[update.order_id].timestamp)
+        !existingLocation ||
+        new Date(update.timestamp) > new Date(existingLocation.timestamp)
       ) {
         orderLocations[update.order_id] = update;
       }
@@ -185,8 +223,9 @@ export default function TrackingPage() {
       .filter((update) => update.order_id === orderId)
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
       .map((update) => ({
-        lat: update.location.latitude,
-        lng: update.location.longitude,
+        // Handle both old location.latitude format and new direct latitude format
+        lat: update.latitude || update.location?.latitude || 0,
+        lng: update.longitude || update.location?.longitude || 0,
       }));
   };
 
@@ -328,8 +367,8 @@ export default function TrackingPage() {
                 const isHighlighted = selectedOrder?.id === order.id;
 
                 const position: google.maps.LatLngLiteral = {
-                  lat: location.location.latitude,
-                  lng: location.location.longitude,
+                  lat: location.latitude || location.location?.latitude || 0,
+                  lng: location.longitude || location.location?.longitude || 0,
                 };
 
                 return (
@@ -345,7 +384,7 @@ export default function TrackingPage() {
                       strokeColor: "#FFFFFF",
                       strokeWeight: 2,
                     }}
-                    title={`Order: ${order.order_number}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}`}
+                    title={`Order: ${order.order_number || 'N/A'}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}`}
                     onClick={() => setSelectedOrder(order)}
                   />
                 );
@@ -372,7 +411,7 @@ export default function TrackingPage() {
                         strokeColor: "#FFFFFF",
                         strokeWeight: 1,
                       }}
-                      title={`Loading: ${order.loading_point_name}`}
+                      title={`Loading: ${order.loading_point_name || 'Unknown'}`}
                     />
 
                     {/* Unloading point */}
@@ -387,7 +426,7 @@ export default function TrackingPage() {
                         strokeColor: "#FFFFFF",
                         strokeWeight: 1,
                       }}
-                      title={`Unloading: ${order.unloading_point_name}`}
+                      title={`Unloading: ${order.unloading_point_name || 'Unknown'}`}
                     />
                   </React.Fragment>
                 );

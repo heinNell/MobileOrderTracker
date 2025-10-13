@@ -80,14 +80,30 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     try {
+      // Clean up location services before signing out
+      try {
+        const LocationService = require('../services/LocationService').default;
+        const locationService = new LocationService();
+        await locationService.cleanup();
+      } catch (locationError) {
+        console.warn('Location cleanup error:', locationError);
+      }
+
+      // Sign out from Supabase
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
 
+      // Clear local state and storage
       setUser(null);
       setIsAuthenticated(false);
-      await AsyncStorage.removeItem('supabase.auth.token');
+      await AsyncStorage.multiRemove([
+        'supabase.auth.token',
+        'trackingOrderId',
+        'orderStartingPoint',
+        'lastKnownLocation'
+      ]);
       
-      console.log('✅ Sign out successful');
+      console.log('✅ Sign out successful with cleanup');
       return { success: true };
     } catch (error) {
       console.error('❌ Sign out error:', error);

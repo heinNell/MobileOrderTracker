@@ -11,14 +11,16 @@ LogBox.ignoreLogs([
   '[Reanimated] Reduced motion setting is enabled on this device.',
   'shadow* style props are deprecated. Use "boxShadow".',
   'props.pointerEvents is deprecated. Use style.pointerEvents',
+  'Non-serializable values were found in the navigation state',
 ]);
 
 // Import your screens from app directory only
 import LoadActivationScreen from './app/(tabs)/LoadActivationScreen';
+import OrderDetailsScreen from './app/(tabs)/order-details'; // Fixed import path
 import OrdersScreen from './app/(tabs)/orders'; // Driver orders only
 import ProfileScreen from './app/(tabs)/profile'; // Driver profile
-import OrderDetailsScreen from './app/(tabs)/QRScannerScreen'; // This contains order details functionality
 import ScannerScreen from './app/(tabs)/scanner'; // QR Scanner
+import ErrorBoundary from './app/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './app/context/AuthContext';
 import LoginScreen from './app/login';
 
@@ -109,11 +111,13 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <AppNavigator />
-        <StatusBar style="auto" />
-      </NavigationContainer>
-    </AuthProvider>
+    <ErrorBoundary fallbackMessage="The app encountered an unexpected error. Please restart the app.">
+      <AuthProvider>
+        <NavigationContainer>
+          <AppNavigator />
+          <StatusBar style="auto" />
+        </NavigationContainer>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
