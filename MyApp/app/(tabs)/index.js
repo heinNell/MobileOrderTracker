@@ -527,13 +527,16 @@ function DriverDashboard() {
               <Text style={styles.quickActionText}>Profile</Text>
             </WebCompatibleButton>
 
-            <Pressable
+            <WebCompatibleButton
               style={styles.quickActionButton}
-              onPress={loadDriverData}
+              onPress={() => {
+                console.log('🔘 Refresh button clicked');
+                loadDriverData();
+              }}
             >
               <MaterialIcons name="refresh" size={24} color="#f59e0b" />
               <Text style={styles.quickActionText}>Refresh</Text>
-            </Pressable>
+            </WebCompatibleButton>
           </View>
         </View>
       </ScrollView>
