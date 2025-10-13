@@ -28,6 +28,9 @@ class LocationService {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         timestamp: new Date().toISOString(),
+        accuracy: location.coords.accuracy,
+        speed: location.coords.speed,
+        heading: location.coords.heading,
       };
 
       return this.lastLocation;
@@ -152,6 +155,31 @@ class LocationService {
     }
   }
 
+  // ✨ NEW METHOD: Check if tracking is currently active
+  async isTrackingActive() {
+    try {
+      // First check in-memory state
+      if (this.isTracking && this.currentOrderId) {
+        return true;
+      }
+
+      // Then check AsyncStorage for persistence across app restarts
+      const storedOrderId = await AsyncStorage.getItem('trackingOrderId');
+      
+      if (storedOrderId) {
+        // Update in-memory state if found in storage
+        this.currentOrderId = storedOrderId;
+        this.isTracking = true;
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error checking tracking status:', error);
+      return false;
+    }
+  }
+
   // Update current location to database
   async updateLocation() {
     if (!this.isTracking || !this.currentOrderId) {
@@ -168,7 +196,7 @@ class LocationService {
         return;
       }
 
-          // Insert location update with enhanced data for dashboard
+      // Insert location update with enhanced data for dashboard
       const locationData = {
         driver_id: user.id,
         order_id: this.currentOrderId,

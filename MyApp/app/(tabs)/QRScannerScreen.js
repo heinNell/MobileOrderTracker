@@ -1,4 +1,4 @@
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import
   {
@@ -29,9 +29,9 @@ const STATUS_ACTIONS = [
 const locationService = new LocationService();
 
 const OrderDetailsScreen = () => {
-  const route = useRoute();
-  const navigation = useNavigation();
-  const { order: initialOrder, orderId } = route.params;
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const { order: initialOrder, orderId } = params;
 
   const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(!!orderId && !initialOrder);
@@ -56,16 +56,34 @@ const OrderDetailsScreen = () => {
 
           if (error || !data) {
             Alert.alert("Error", "Order not found or access denied", [
-              { text: "OK", onPress: () => navigation.goBack() },
+              { text: "OK", onPress: () => router.back() },
             ]);
             return;
           }
           setOrder(data);
+          
+          // Auto-start tracking if order is assigned to current user and in trackable status
+          if (data && user && data.assigned_driver_id === user.id) {
+            const trackableStatuses = ["assigned", "activated", "in_progress", "in_transit", "loading", "loaded"];
+            if (trackableStatuses.includes(data.status) && !isTracking) {
+              console.log("Auto-starting tracking for assigned order with status:", data.status);
+              try {
+                const ok = await locationService.startTracking(data.id);
+                if (ok) {
+                  setIsTracking(true);
+                  console.log("✅ Auto-started tracking for order:", data.id);
+                }
+              } catch (autoTrackError) {
+                console.warn("Auto-tracking failed:", autoTrackError);
+                // Don't show alert for auto-tracking failure, just log it
+              }
+            }
+          }
         } catch (e) {
           console.error("Fetch order error:", e);
           Alert.alert("Error", "Failed to load order", [
             { text: "Retry", onPress: fetchOrder },
-            { text: "Go Back", onPress: () => navigation.goBack() },
+            { text: "Go Back", onPress: () => router.back() },
           ]);
         } finally {
           setLoading(false);
@@ -191,7 +209,7 @@ const OrderDetailsScreen = () => {
             "You need to be logged in to update status.",
             [
               { text: "Cancel", style: "cancel" },
-              { text: "Login", onPress: () => navigation.navigate("Login") },
+              { text: "Login", onPress: () => router.push("/login") },
             ]
           );
           return;
@@ -238,8 +256,9 @@ const OrderDetailsScreen = () => {
 
         Alert.alert("Success", "Status updated successfully");
 
-        // Auto-start tracking when order begins
-        if ((newStatus === "in_progress" || newStatus === "in_transit") && !isTracking) {
+        // Auto-start tracking when order begins or is assigned
+        const trackableStatuses = ["assigned", "activated", "in_progress", "in_transit"];
+        if (trackableStatuses.includes(newStatus) && !isTracking) {
           await startTracking();
         }
       } catch (e) {
@@ -261,12 +280,12 @@ const OrderDetailsScreen = () => {
 
   const reportIncident = () => {
     if (!order) return;
-    navigation.navigate("ReportIncident", { orderId: order.id });
+    router.push(`/ReportIncident?orderId=${order.id}`);
   };
 
   const sendMessage = () => {
     if (!order) return;
-    navigation.navigate("Messages", { orderId: order.id });
+    router.push(`/Messages?orderId=${order.id}`);
   };
 
   const makePhoneCall = (phoneNumber) => {
@@ -607,4 +626,3 @@ const styles = StyleSheet.create({
   quickActionText: { color: "#3B82F6", fontSize: 14, fontWeight: "600" },
 });
 
-export default OrderDetailsScreen;

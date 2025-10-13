@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import
   {
@@ -12,13 +12,15 @@ import
     TouchableOpacity,
     View,
   } from "react-native";
+import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
 
 const locationService = new LocationService();
 
 export default function OrdersScreen() {
-  const navigation = useNavigation();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,6 +76,38 @@ export default function OrdersScreen() {
 
   const [sendingLocation, setSendingLocation] = useState(false);
 
+  const handleLogout = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out? This will clear your active order.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Clear active order when logging out
+              const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+              await AsyncStorage.removeItem('activeOrderId');
+              
+              const result = await signOut();
+              if (!result.success) {
+                Alert.alert('Error', result.error || 'Failed to sign out');
+              }
+            } catch (error) {
+              console.error('❌ Logout error:', error);
+              Alert.alert('Error', 'Failed to sign out properly');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const sendLocationToDashboard = async () => {
     try {
       setSendingLocation(true);
@@ -100,27 +134,43 @@ export default function OrdersScreen() {
       setLoading(true);
       setError(null);
 
-      // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       if (!user) {
         setError("Please log in to view orders");
         return;
       }
 
-      // Fetch orders assigned to this driver
+      // Check for active order from QR scan (stored in AsyncStorage)
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const activeOrderId = await AsyncStorage.getItem('activeOrderId');
+
+      if (!activeOrderId) {
+        // No active order - show empty state with instruction to scan QR
+        setOrders([]);
+        return;
+      }
+
+      // Fetch ONLY the active scanned order
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .eq("assigned_driver_id", user.id)
-        .order("created_at", { ascending: false });
+        .eq("id", activeOrderId)
+        .eq("assigned_driver_id", user.id) // Security: ensure order is assigned to this driver
+        .single();
 
-      if (error) throw error;
-      setOrders(data || []);
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No order found - clear invalid active order
+          await AsyncStorage.removeItem('activeOrderId');
+          setOrders([]);
+          setError("Active order not found. Please scan QR code again.");
+        } else {
+          throw error;
+        }
+      } else {
+        setOrders([data]);
+      }
     } catch (err) {
-      console.error("Error loading orders:", err);
+      console.error("Error loading active order:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -153,7 +203,7 @@ export default function OrdersScreen() {
   const renderOrderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.orderCard}
-      onPress={() => navigation.navigate("QRScannerScreen", { orderId: item.id })}
+      onPress={() => router.push(`/QRScannerScreen?orderId=${item.id}`)}
     >
       <View style={styles.orderHeader}>
         <Text style={styles.orderNumber}>#{item.order_number}</Text>
@@ -225,19 +275,34 @@ export default function OrdersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>My Orders</Text>
-        <Text style={styles.subtitle}>
-          {orders.length} {orders.length === 1 ? "order" : "orders"}
-        </Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Active Order</Text>
+            <Text style={styles.subtitle}>
+              {orders.length === 1 ? "1 active order" : "Scan QR to start"}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <MaterialIcons name="logout" size={24} color="#ef4444" />
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {orders.length === 0 ? (
         <View style={styles.emptyState}>
-          <MaterialIcons name="inbox" size={64} color="#9ca3af" />
-          <Text style={styles.emptyText}>No orders assigned yet</Text>
+          <MaterialIcons name="qr-code-scanner" size={64} color="#9ca3af" />
+          <Text style={styles.emptyText}>No Active Order</Text>
           <Text style={styles.emptySubtext}>
-            Orders assigned to you will appear here
+            Scan the QR code from the dashboard to activate your assigned order
           </Text>
+          <TouchableOpacity 
+            style={styles.scanQRButton}
+            onPress={() => router.push('/(tabs)/scanner')}
+          >
+            <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
+            <Text style={styles.scanQRText}>Scan QR Code</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -374,6 +439,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
   },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#fef2f2",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  logoutText: {
+    color: "#ef4444",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
   title: {
     fontSize: 28,
     fontWeight: "bold",
@@ -458,7 +544,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#9ca3af",
     marginTop: 8,
+    marginBottom: 20,
     textAlign: "center",
+  },
+  scanQRButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#10b981",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  scanQRText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   // Starting Point Styles
   startingPointCard: {

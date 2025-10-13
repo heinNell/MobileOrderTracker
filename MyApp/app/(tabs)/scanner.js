@@ -1,21 +1,38 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { QRCodeScanner } from "../components/QRCodeScanner";
 
 export default function ScannerScreen() {
-  const navigation = useNavigation();
+  const router = useRouter();
   const [scanning, setScanning] = useState(false);
 
-  const handleScanSuccess = (order) => {
+  const handleScanSuccess = async (order) => {
     console.log("✅ Scan successful:", order);
     setScanning(false);
-    navigation.navigate("OrdersTab", { 
-      screen: "OrderDetails", 
-      params: { orderId: order.id } 
-    });
+    
+    try {
+      // Set this order as the active order
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      await AsyncStorage.setItem('activeOrderId', order.id);
+      
+      console.log("🎯 Active order set:", order.id);
+      
+      // Start location tracking for this order
+      const LocationService = require("../services/LocationService").default;
+      const locationService = new LocationService();
+      await locationService.startTracking(order.id);
+      
+      console.log("📍 Location tracking started for order:", order.id);
+      
+      // Navigate to the QR Scanner Screen with order details
+      router.push(`/(tabs)/QRScannerScreen?orderId=${order.id}`);
+    } catch (error) {
+      console.error("❌ Error setting active order:", error);
+      Alert.alert("Error", "Failed to activate order. Please try again.");
+    }
   };
 
   const handleScanError = (error) => {
@@ -49,7 +66,7 @@ export default function ScannerScreen() {
           <MaterialIcons name="qr-code-scanner" size={80} color="#2563eb" />
           <Text style={styles.title}>QR Scanner</Text>
           <Text style={styles.subtitle}>
-            Scan QR codes to quickly access order details
+            Scan the QR code from the dashboard to authenticate and activate your assigned order
           </Text>
 
           <TouchableOpacity style={styles.scanButton} onPress={startScanning}>

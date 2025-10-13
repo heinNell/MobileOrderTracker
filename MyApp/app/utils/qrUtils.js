@@ -101,3 +101,8 @@ export async function verifyQRData(qrString) {
     return { valid: false, error: error.message };
   }
 }
+
+// Default export for expo-router compatibility (this should not be used as a route)
+export default function NotARoute() {
+  return null; // This prevents the file from being used as a route
+}

@@ -1,9 +1,8 @@
 // app/(tabs)/_layout.js
-import React from 'react';
-import { Tabs, Redirect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext';
+import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
 export default function TabLayout() {
   const { isAuthenticated, loading } = useAuth();
@@ -35,11 +34,20 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Dashboard',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="dashboard" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="orders"
         options={{
-          title: 'Orders',
+          title: 'Active Order',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="list-alt" size={size} color={color} />
+            <MaterialIcons name="assignment" size={size} color={color} />
           ),
         }}
       />

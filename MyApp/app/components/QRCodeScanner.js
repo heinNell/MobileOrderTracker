@@ -410,3 +410,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 });
+
+// Default export for expo-router compatibility (this should not be used as a route)
+export default function NotARoute() {
+  return null; // This prevents the component from being used as a route
+}

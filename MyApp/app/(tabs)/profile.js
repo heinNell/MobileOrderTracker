@@ -1,5 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import {
+import { useRouter } from 'expo-router';
+import
+  {
     ActivityIndicator,
     Alert,
     ScrollView,
@@ -7,10 +9,11 @@ import {
     Text,
     TouchableOpacity,
     View,
-} from 'react-native';
+  } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
-export default function ProfileScreen({ navigation }) {
+export default function ProfileScreen() {
+  const router = useRouter();
   const { user, loading, isAuthenticated, signOut } = useAuth();
 
   const handleSignOut = async () => {
@@ -27,19 +30,20 @@ export default function ProfileScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Stop location tracking before signing out
-              const LocationService = require('../services/LocationService').default;
-              const locationService = new LocationService();
-              await locationService.stopTracking();
+              console.log('🔄 User requested sign out...');
               
-              // Sign out from Supabase
+              // Sign out (this will handle all cleanup including location services)
               const result = await signOut();
+              
               if (!result.success) {
+                console.error('❌ Sign out failed:', result.error);
                 Alert.alert('Error', result.error || 'Failed to sign out');
+              } else {
+                console.log('✅ Sign out completed successfully');
+                // Navigation will be handled automatically by AuthContext state change
               }
-              // Note: Navigation will be handled by AuthContext state change
             } catch (error) {
-              console.error('Logout error:', error);
+              console.error('❌ Logout error:', error);
               Alert.alert('Error', 'Failed to sign out properly');
             }
           },
@@ -64,7 +68,7 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.errorText}>Not logged in</Text>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => navigation.navigate('Login')}
+          onPress={() => router.push('/login')}
         >
           <Text style={styles.buttonText}>Go to Login</Text>
         </TouchableOpacity>

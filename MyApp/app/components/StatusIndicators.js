@@ -1,6 +1,5 @@
 // components/StatusIndicators.js
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 // Color constants for consistency
 const STATUS_COLORS = {
@@ -150,3 +149,8 @@ export const getStatusColor = (status) =>
 
 export const getStatusIcon = (status) =>
   STATUS_ICONS[status] || STATUS_ICONS.default;
+
+// Default export for expo-router compatibility (this should not be used as a route)
+export default function NotARoute() {
+  return null; // This prevents the component from being used as a route
+}

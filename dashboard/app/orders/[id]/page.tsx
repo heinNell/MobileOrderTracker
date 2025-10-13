@@ -153,12 +153,19 @@ export default function OrderDetailPage({
       if (incidentError) throw incidentError;
       setIncidents(incidentData || []);
 
-      // Fetch location updates
+      // Fetch location updates (driver locations)
       const { data: locationData, error: locationError } = await supabase
-        .from("location_updates")
-        .select("*")
+        .from("driver_locations")
+        .select(`
+          *,
+          driver:users!driver_locations_driver_id_fkey(
+            id,
+            full_name,
+            email
+          )
+        `)
         .eq("order_id", orderId)
-        .order("timestamp", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(20); // Limit to last 20 updates
 
       if (locationError) throw locationError;
@@ -222,10 +229,29 @@ export default function OrderDetailPage({
       )
       .subscribe();
 
+    // Subscribe to location updates (driver locations)
+    const locationChannel = supabase
+      .channel(`driver_locations:${orderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "driver_locations",
+          filter: `order_id=eq.${orderId}`,
+        },
+        (payload) => {
+          console.log("New location update received:", payload.new);
+          setLocationUpdates((prev) => [payload.new as LocationUpdate, ...prev.slice(0, 19)]); // Keep last 20
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(orderChannel);
       supabase.removeChannel(statusChannel);
       supabase.removeChannel(incidentChannel);
+      supabase.removeChannel(locationChannel);
     };
   };
 
@@ -233,6 +259,8 @@ export default function OrderDetailPage({
     const colors: Record<string, string> = {
       pending: "bg-gray-500",
       assigned: "bg-blue-500",
+      activated: "bg-green-500",
+      in_progress: "bg-indigo-500",
       in_transit: "bg-purple-500",
       arrived: "bg-green-500",
       loading: "bg-yellow-500",
@@ -257,8 +285,15 @@ export default function OrderDetailPage({
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+    try {
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      handleApiError(error, "Failed to logout");
+      // Force redirect even if signOut fails
+      router.push("/login");
+    }
   };
 
   const handleExportToPDF = async () => {
@@ -284,11 +319,29 @@ export default function OrderDetailPage({
 
     try {
       setLoading(true);
+      
+      // If assigning a driver and status is still pending, automatically update to assigned
+      if (orderData.assigned_driver_id && order.status === 'pending') {
+        orderData.status = 'assigned';
+      }
+      
+      // Update order with the new data
       const { data: updatedOrder, error } = await supabase
         .from("orders")
-        .update(orderData)
+        .update({
+          ...orderData,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", order.id)
-        .select()
+        .select(`
+          *,
+          assigned_driver:users!orders_assigned_driver_id_fkey(
+            id,
+            full_name,
+            email,
+            phone
+          )
+        `)
         .maybeSingle();
 
       if (error) {
@@ -297,6 +350,31 @@ export default function OrderDetailPage({
 
       if (updatedOrder) {
         setOrder(updatedOrder);
+        
+        // If driver was assigned, send notification
+        if (orderData.assigned_driver_id) {
+          try {
+            const { error: notifError } = await supabase
+              .from("notifications")
+              .insert([{
+                title: "Order Assignment",
+                message: `You have been assigned to order ${order.order_number}`,
+                user_id: orderData.assigned_driver_id,
+                type: "order_assignment",
+                created_at: new Date().toISOString(),
+                order_id: order.id
+              }]);
+            
+            if (notifError) {
+              console.warn("Failed to send notification:", notifError);
+            }
+          } catch (notifError) {
+            console.warn("Notification error:", notifError);
+          }
+        }
+        
+        // Refresh order data to get latest status updates
+        await fetchOrderData();
       }
 
       handleSuccess("Order updated successfully!");

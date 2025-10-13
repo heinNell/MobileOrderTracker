@@ -43,3 +43,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+// Default export for expo-router compatibility (this should not be used as a route)
+export default function NotARoute() {
+  return null; // This prevents the file from being used as a route
+}

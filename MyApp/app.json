@@ -13,9 +13,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.logistics.ordertracker",
@@ -24,23 +22,18 @@
         "applinks:magnificent-snickerdoodle-018e86.netlify.app"
       ],
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
         "NSLocationWhenInUseUsageDescription": "This app requires location access to track deliveries",
         "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background",
-        "UIBackgroundModes": [
-          "location",
-          "fetch",
-          "background-processing"
-        ],
+        "UIBackgroundModes": ["location", "fetch", "background-processing"],
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "DeliveryTracking": "Required for live ETA calculations"
         },
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "com.logistics.ordertracker",
-            "CFBundleURLSchemes": [
-              "ordertracker"
-            ]
+            "CFBundleURLSchemes": ["ordertracker"]
           }
         ]
       }
@@ -68,10 +61,7 @@
               "scheme": "ordertracker"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
       "permissions": [
@@ -92,9 +82,7 @@
       "staticRendering": false,
       "build": {
         "babel": {
-          "include": [
-            "@expo/vector-icons"
-          ]
+          "include": ["@expo/vector-icons"]
         }
       }
     },

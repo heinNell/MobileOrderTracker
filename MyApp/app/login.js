@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import
   {
@@ -14,7 +15,8 @@ import
   } from 'react-native';
 import { useAuth } from './context/AuthContext';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen() {
+  const router = useRouter();
   const { signIn, isAuthenticated, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,7 +26,7 @@ export default function LoginScreen({ navigation }) {
   // Navigate to Main tabs if already authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
-      navigation.replace('Main');
+      router.replace('/(tabs)/orders');
     }
   }, [isAuthenticated, authLoading]);
 

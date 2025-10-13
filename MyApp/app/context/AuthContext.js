@@ -80,22 +80,30 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     try {
+      console.log('🔄 Starting sign out process...');
+      
       // Clean up location services before signing out
       try {
         const LocationService = require('../services/LocationService').default;
         const locationService = new LocationService();
         await locationService.cleanup();
+        console.log('✅ Location service cleanup completed');
       } catch (locationError) {
-        console.warn('Location cleanup error:', locationError);
+        console.warn('⚠️ Location cleanup error:', locationError);
       }
 
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
-      // Clear local state and storage
+      // Clear local state first (to immediately update UI)
       setUser(null);
       setIsAuthenticated(false);
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ Supabase signOut error:', error);
+        // Continue with cleanup even if Supabase signOut fails
+      }
+
+      // Clear local storage
       await AsyncStorage.multiRemove([
         'supabase.auth.token',
         'trackingOrderId',
@@ -103,10 +111,13 @@ export function AuthProvider({ children }) {
         'lastKnownLocation'
       ]);
       
-      console.log('✅ Sign out successful with cleanup');
+      console.log('✅ Sign out successful with full cleanup');
       return { success: true };
     } catch (error) {
       console.error('❌ Sign out error:', error);
+      // Ensure state is cleared even on error
+      setUser(null);
+      setIsAuthenticated(false);
       return { success: false, error: error.message };
     }
   }
@@ -129,4 +140,9 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+// Default export for expo-router compatibility (this should not be used as a route)
+export default function NotARoute() {
+  return null; // This prevents the file from being used as a route
 }

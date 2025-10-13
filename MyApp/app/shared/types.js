@@ -282,3 +282,8 @@ export const INCIDENT_SEVERITY = Object.freeze({
   4: "Critical",
   5: "Emergency",
 });
+
+// Default export for expo-router compatibility (this should not be used as a route)
+export default function NotARoute() {
+  return null; // This prevents the file from being used as a route
+}
