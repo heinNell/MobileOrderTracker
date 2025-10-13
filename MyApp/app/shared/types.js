@@ -7,7 +7,7 @@
  */
 
 /**
- * @typedef {"pending" | "assigned" | "in_transit" | "arrived" | "loading" | "loaded" | "unloading" | "completed" | "cancelled"} OrderStatus
+ * @typedef {"pending" | "assigned" | "activated" | "in_progress" | "in_transit" | "arrived" | "loading" | "loaded" | "unloading" | "completed" | "cancelled"} OrderStatus
  */
 
 /**
