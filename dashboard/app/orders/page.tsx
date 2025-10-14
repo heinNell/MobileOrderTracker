@@ -211,6 +211,9 @@ export default function EnhancedOrdersPage() {
         );
       }
 
+      console.log("Orders Page - User tenant_id:", userData.tenant_id);
+      console.log("Orders Page - User role:", userData.role);
+
       // Get total count for pagination
       const { count, error: countError } = await supabase
         .from("orders")
@@ -268,7 +271,7 @@ export default function EnhancedOrdersPage() {
   };
 
   const subscribeToOrders = () => {
-    const channel = supabase
+    const ordersChannel = supabase
       .channel("orders_changes")
       .on(
         "postgres_changes",
@@ -278,6 +281,7 @@ export default function EnhancedOrdersPage() {
           table: "orders",
         },
         () => {
+          console.log("Orders Page - Order change detected, refreshing...");
           fetchOrders(currentPage).catch((error) => {
             handleApiError(error, "Failed to update orders");
           });
@@ -285,8 +289,29 @@ export default function EnhancedOrdersPage() {
       )
       .subscribe();
 
+    // Also subscribe to driver changes to refresh driver data
+    const driversChannel = supabase
+      .channel("orders_drivers_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "users",
+          filter: "role=eq.driver",
+        },
+        () => {
+          console.log("Orders Page - Driver data change detected, refreshing...");
+          fetchOrders(currentPage).catch((error) => {
+            handleApiError(error, "Failed to update orders after driver change");
+          });
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(driversChannel);
     };
   };
 
@@ -524,22 +549,57 @@ export default function EnhancedOrdersPage() {
     if (!editingOrder) return;
 
     try {
+      console.log("Updating order with data:", orderData);
+      console.log("Original order:", editingOrder);
+      
+      // If updating driver assignment, verify the driver exists and has proper tenant_id
+      if (orderData.assigned_driver_id) {
+        const { data: driverData, error: driverError } = await supabase
+          .from("users")
+          .select("id, full_name, tenant_id, role")
+          .eq("id", orderData.assigned_driver_id)
+          .eq("role", "driver")
+          .single();
+
+        if (driverError || !driverData) {
+          throw new Error(`Driver not found or invalid: ${driverError?.message || "Unknown error"}`);
+        }
+
+        console.log("Driver data:", driverData);
+        
+        // Check if driver's tenant_id matches order's tenant_id
+        if (driverData.tenant_id !== editingOrder.tenant_id) {
+          console.warn(`Tenant mismatch - Driver: ${driverData.tenant_id}, Order: ${editingOrder.tenant_id}`);
+        }
+      }
+
       const { data: updatedOrder, error } = await supabase
         .from("orders")
         .update(orderData)
         .eq("id", editingOrder.id)
-        .select()
+        .select(`
+          *,
+          assigned_driver:users!orders_assigned_driver_id_fkey(
+            id,
+            full_name,
+            email
+          )
+        `)
         .maybeSingle();
 
       if (error) {
+        console.error("Update error:", error);
         throw new Error(`Failed to update order: ${error.message}`);
       }
+
+      console.log("Updated order result:", updatedOrder);
 
       handleSuccess("Order updated successfully!");
       setShowEditModal(false);
       setEditingOrder(null);
       await fetchOrders(currentPage);
     } catch (error: any) {
+      console.error("Full update error:", error);
       handleApiError(error, "Failed to update order");
     }
   };

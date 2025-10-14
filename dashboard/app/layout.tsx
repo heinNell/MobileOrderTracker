@@ -1,6 +1,6 @@
-import "./globals.css";
-import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
+import { Toaster } from "react-hot-toast";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Mobile Order Tracker - Dashboard",
@@ -85,6 +85,12 @@ export default function RootLayout({
                     className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
                   >
                     <span className="ml-3">Geofences</span>
+                  </a>
+                  <a
+                    href="/diagnostics"
+                    className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+                  >
+                    <span className="ml-3">🔍 Diagnostics</span>
                   </a>
                 </nav>
               </div>

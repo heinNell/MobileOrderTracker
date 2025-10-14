@@ -41,10 +41,20 @@ interface Incident {
 interface LocationUpdate {
   id: string;
   order_id: string;
-  location: LocationPoint;
+  location?: {
+    lat: number;
+    lng: number;
+  }; // JSONB format
+  latitude?: number; // Separate columns
+  longitude?: number;
   speed_kmh?: number;
   accuracy_meters?: number;
+  speed?: number; // Alternative column names
+  accuracy?: number;
+  heading?: number;
   timestamp: string;
+  created_at: string;
+  is_manual_update?: boolean;
 }
 
 export default function OrderDetailPage({
@@ -802,8 +812,11 @@ export default function OrderDetailPage({
                           {new Date(update.timestamp).toLocaleString()}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
-                          {update.location.latitude.toFixed(6)},{" "}
-                          {update.location.longitude.toFixed(6)}
+                          {update.latitude && update.longitude ? (
+                            `${update.latitude.toFixed(6)}, ${update.longitude.toFixed(6)}`
+                          ) : update.location?.lat && update.location?.lng ? (
+                            `${update.location.lat.toFixed(6)}, ${update.location.lng.toFixed(6)}`
+                          ) : "Location unavailable"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {update.speed_kmh

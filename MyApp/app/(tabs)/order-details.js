@@ -33,6 +33,8 @@ const colors = {
   indigo500: "#6366f1",
   purple500: "#8b5cf6",
   border: "#d1d5db",
+  blue50: "#eff6ff",
+  blue800: "#1e40af",
 };
 
 export default function OrderDetailsScreen() {
@@ -88,7 +90,7 @@ export default function OrderDetailsScreen() {
   if (loading && !order) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading order details...</Text>
       </View>
     );
@@ -97,7 +99,7 @@ export default function OrderDetailsScreen() {
   if (error) {
     return (
       <View style={styles.centered}>
-        <MaterialIcons name="error-outline" size={64} color="#ef4444" />
+        <MaterialIcons name="error-outline" size={64} color={colors.red500} />
         <Text style={styles.errorText}>Error: {error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={loadOrderDetails}>
           <Text style={styles.retryButtonText}>Retry</Text>
@@ -109,7 +111,7 @@ export default function OrderDetailsScreen() {
   if (!order) {
     return (
       <View style={styles.centered}>
-        <MaterialIcons name="inbox" size={64} color="#9ca3af" />
+        <MaterialIcons name="inbox" size={64} color={colors.gray400} />
         <Text style={styles.errorText}>Order not found</Text>
         <TouchableOpacity
           style={styles.retryButton}
@@ -141,20 +143,20 @@ export default function OrderDetailsScreen() {
         <Text style={styles.cardTitle}>Order Information</Text>
 
         <View style={styles.infoRow}>
-          <MaterialIcons name="numbers" size={20} color="#6b7280" />
+          <MaterialIcons name="numbers" size={20} color={colors.gray500} />
           <Text style={styles.label}>Order Number:</Text>
           <Text style={styles.value}>{order.order_number}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <MaterialIcons name="info-outline" size={20} color="#6b7280" />
+          <MaterialIcons name="info-outline" size={20} color={colors.gray500} />
           <Text style={styles.label}>Status:</Text>
           <Text style={styles.value}>{order.status}</Text>
         </View>
 
         {order.assigned_driver && (
           <View style={styles.infoRow}>
-            <MaterialIcons name="person" size={20} color="#6b7280" />
+            <MaterialIcons name="person" size={20} color={colors.gray500} />
             <Text style={styles.label}>Driver:</Text>
             <Text style={styles.value}>{order.assigned_driver.full_name}</Text>
           </View>
@@ -166,20 +168,20 @@ export default function OrderDetailsScreen() {
         <Text style={styles.cardTitle}>Location Details</Text>
 
         <View style={styles.infoRow}>
-          <MaterialIcons name="place" size={20} color="#10b981" />
+          <MaterialIcons name="place" size={20} color={colors.green500} />
           <Text style={styles.label}>Loading Point:</Text>
           <Text style={styles.value}>{order.loading_point_name}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <MaterialIcons name="location-on" size={20} color="#ef4444" />
+          <MaterialIcons name="location-on" size={20} color={colors.red500} />
           <Text style={styles.label}>Delivery Point:</Text>
           <Text style={styles.value}>{order.unloading_point_name}</Text>
         </View>
 
         {order.estimated_distance_km && (
           <View style={styles.infoRow}>
-            <MaterialIcons name="straighten" size={20} color="#6b7280" />
+            <MaterialIcons name="straighten" size={20} color={colors.gray500} />
             <Text style={styles.label}>Distance:</Text>
             <Text style={styles.value}>{order.estimated_distance_km} km</Text>
           </View>
@@ -191,7 +193,7 @@ export default function OrderDetailsScreen() {
         <Text style={styles.cardTitle}>Timeline</Text>
 
         <View style={styles.infoRow}>
-          <MaterialIcons name="event" size={20} color="#6b7280" />
+          <MaterialIcons name="event" size={20} color={colors.gray500} />
           <Text style={styles.label}>Created:</Text>
           <Text style={styles.value}>
             {new Date(order.created_at).toLocaleString()}
@@ -200,7 +202,7 @@ export default function OrderDetailsScreen() {
 
         {order.load_activated_at && (
           <View style={styles.infoRow}>
-            <MaterialIcons name="check-circle" size={20} color="#10b981" />
+            <MaterialIcons name="check-circle" size={20} color={colors.green500} />
             <Text style={styles.label}>Activated:</Text>
             <Text style={styles.value}>
               {new Date(order.load_activated_at).toLocaleString()}
@@ -210,7 +212,7 @@ export default function OrderDetailsScreen() {
 
         {order.delivered_at && (
           <View style={styles.infoRow}>
-            <MaterialIcons name="done-all" size={20} color="#059669" />
+            <MaterialIcons name="done-all" size={20} color={colors.green600} />
             <Text style={styles.label}>Delivered:</Text>
             <Text style={styles.value}>
               {new Date(order.delivered_at).toLocaleString()}
@@ -231,7 +233,7 @@ export default function OrderDetailsScreen() {
               })
             }
           >
-            <MaterialIcons name="play-circle-filled" size={24} color="#fff" />
+            <MaterialIcons name="play-circle-filled" size={24} color={colors.white} />
             <Text style={styles.primaryButtonText}>Activate Load</Text>
           </TouchableOpacity>
         )}
@@ -243,7 +245,7 @@ export default function OrderDetailsScreen() {
 router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_number}`)
             }
           >
-            <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
+            <MaterialIcons name="qr-code-scanner" size={24} color={colors.white} />
             <Text style={styles.primaryButtonText}>
               {order.status === "activated" ? "Start Order" : "Manage Order"}
             </Text>
@@ -252,7 +254,7 @@ router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_numbe
 
         {order.status === "assigned" && order.load_activated_at && (
           <View style={styles.infoContainer}>
-            <MaterialIcons name="info-outline" size={20} color="#6366f1" />
+            <MaterialIcons name="info-outline" size={20} color={colors.indigo500} />
             <Text style={styles.infoText}>
               Load is activated! You can now scan QR codes to start the order.
             </Text>
@@ -271,16 +273,16 @@ router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_numbe
 }
 
 const getStatusStyle = (status) => {
-  const styles = {
-    pending: { backgroundColor: "#9ca3af" },
-    assigned: { backgroundColor: "#3b82f6" },
-    activated: { backgroundColor: "#10b981" },
-    in_progress: { backgroundColor: "#6366f1" },
-    in_transit: { backgroundColor: "#8b5cf6" },
-    delivered: { backgroundColor: "#059669" },
-    completed: { backgroundColor: "#10b981" },
+  const statusStyles = {
+    pending: { backgroundColor: colors.gray400 },
+    assigned: { backgroundColor: colors.blue500 },
+    activated: { backgroundColor: colors.green500 },
+    in_progress: { backgroundColor: colors.indigo500 },
+    in_transit: { backgroundColor: colors.purple500 },
+    delivered: { backgroundColor: colors.green600 },
+    completed: { backgroundColor: colors.green500 },
   };
-  return styles[status] || { backgroundColor: "#6b7280" };
+  return statusStyles[status] || { backgroundColor: colors.gray500 };
 };
 
 const styles = StyleSheet.create({
@@ -409,5 +411,19 @@ const styles = StyleSheet.create({
     color: colors.gray700,
     fontSize: 16,
     fontWeight: "600",
+  },
+  infoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.blue50,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  infoText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: colors.blue800,
   },
 });

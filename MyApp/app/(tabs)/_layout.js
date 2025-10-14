@@ -19,29 +19,29 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="orders"
         options={{
-          title: 'Dashboard',
+          title: 'My Orders',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="dashboard" size={size} color={color} />
+            <MaterialIcons name="assignment" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="scanner"
         options={{
-          title: 'Scanner',
+          title: 'QR Scanner',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="qr-code-scanner" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="orders"
+        name="index"
         options={{
-          title: 'Orders',
+          title: 'Dashboard',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="list-alt" size={size} color={color} />
+            <MaterialIcons name="dashboard" size={size} color={color} />
           ),
         }}
       />

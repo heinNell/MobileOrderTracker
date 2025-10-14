@@ -1,7 +1,7 @@
 // app/index.js
 import { Redirect } from 'expo-router';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from './context/AuthContext';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 
 // Color palette
 const colors = {
@@ -11,11 +11,17 @@ const colors = {
 };
 
 export default function Index() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
-  console.log('🔍 Index.js - Auth state:', { isAuthenticated, loading });
+  console.log('🔍 Index.js - Auth state:', { 
+    isAuthenticated, 
+    loading, 
+    userEmail: user?.email,
+    timestamp: new Date().toISOString()
+  });
 
   if (loading) {
+    console.log('🔍 Index.js - Showing loading screen');
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -25,8 +31,8 @@ export default function Index() {
   }
 
   // Redirect to appropriate screen based on auth state
-  if (isAuthenticated) {
-    console.log('🔍 Redirecting to tabs (authenticated)');
+  if (isAuthenticated && user) {
+    console.log('🔍 Redirecting to tabs (authenticated user):', user.email);
     return <Redirect href="/(tabs)" />;
   } else {
     console.log('🔍 Redirecting to login (not authenticated)');

@@ -84,6 +84,9 @@ export interface User {
   device_token?: string;
   last_location?: Location;
   last_location_update?: string;
+  license_number?: string;
+  license_expiry?: string;
+  temporary_password?: string;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +123,10 @@ export interface Order {
   assigned_driver?: {
     id: string;
     full_name: string;
+    email?: string;
+    last_location?: Location;
+    last_location_update?: string;
+    is_active?: boolean;
   };
   loading_point_name: string;
   loading_point_address: string;

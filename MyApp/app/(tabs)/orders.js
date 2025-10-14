@@ -31,7 +31,10 @@ const colors = {
   gray900: "#1f2937",
   red500: "#ef4444",
   red600: "#dc2626",
+  green50: "#f0fdf4",
+  green100: "#dcfce7",
   green500: "#10b981",
+  green600: "#059669",
   yellow300: "#fef3c7",
   yellow800: "#92400e",
   blue50: "#eff6ff",
@@ -64,9 +67,20 @@ export default function OrdersScreen() {
   const [startingPoint, setStartingPoint] = useState(null);
   const [settingLocation, setSettingLocation] = useState(false);
   const [sendingLocation, setSendingLocation] = useState(false);
+  const [activeOrderId, setActiveOrderId] = useState(null);
 
   useEffect(() => {
     loadStartingPoint();
+    // Load the active order ID from storage
+    const loadActiveOrderId = async () => {
+      try {
+        const activeId = await storage.getItem('activeOrderId');
+        setActiveOrderId(activeId);
+      } catch (error) {
+        console.error('Error loading active order ID:', error);
+      }
+    };
+    loadActiveOrderId();
   }, []);
 
   const loadStartingPoint = async () => {
@@ -149,39 +163,95 @@ export default function OrdersScreen() {
         return;
       }
 
-      const activeOrderId = await storage.getItem('activeOrderId');
+      console.log('🔍 Loading orders for driver ID:', user.id);
+      console.log('🔍 User object:', user);
 
-      if (!activeOrderId) {
-        setOrders([]);
-        return;
+      // First, let's check if there are any orders in the database at all
+      const { data: allOrders, error: allOrdersError } = await supabase
+        .from("orders")
+        .select("id, order_number, assigned_driver_id, status")
+        .limit(10);
+
+      if (allOrdersError) {
+        console.error('Error fetching all orders:', allOrdersError);
+      } else {
+        console.log('📋 Sample orders in database:', allOrders);
       }
 
+      // Fetch all orders assigned to this driver
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .eq("id", activeOrderId)
         .eq("assigned_driver_id", user.id)
-        .single();
+        .order("created_at", { ascending: false });
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          await storage.removeItem('activeOrderId');
-          setOrders([]);
-          setError("Active order not found. Please scan QR code again.");
-        } else {
-          throw error;
-        }
-      } else {
-        setOrders([data]);
+        throw error;
       }
+
+      setOrders(data || []);
+      
+      // Enhanced debugging
+      console.log('📦 Loaded orders for user:', user.id);
+      console.log('📦 Found', data?.length || 0, 'assigned orders');
+      if (data && data.length > 0) {
+        console.log('📦 Orders:', data.map(o => ({ id: o.id, order_number: o.order_number, status: o.status, assigned_driver_id: o.assigned_driver_id })));
+      } else {
+        console.log('❌ No orders found assigned to driver ID:', user.id);
+        
+        // Let's also check for orders that might match the user's email or other identifiers
+        const { data: emailOrders, error: emailError } = await supabase
+          .from("orders")
+          .select("id, order_number, assigned_driver_id, driver_email")
+          .eq("driver_email", user.email)
+          .limit(5);
+          
+        if (!emailError && emailOrders?.length > 0) {
+          console.log('📧 Found orders by email:', emailOrders);
+        }
+      }
+      
     } catch (err) {
-      console.error("Error loading active order:", err);
+      console.error("Error loading assigned orders:", err);
       setError(err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [user]);
+
+  // Smart order activation handler
+  const handleOrderPress = async (order) => {
+    try {
+      console.log('📦 Order pressed:', order.order_number, 'Status:', order.status);
+      
+      // Set this order as the active order in storage
+      await AsyncStorage.setItem('activeOrderId', order.id.toString());
+      
+      // Navigate based on order status
+      switch (order.status) {
+        case 'assigned':
+          // For newly assigned orders, activate them and go to details
+          console.log('📦 Activating assigned order');
+          router.push(`/order-details/${order.id}`);
+          break;
+        case 'activated':
+        case 'in_progress':
+          // For already active/in-progress orders, go directly to details
+          console.log('📦 Opening active/in-progress order details');
+          router.push(`/order-details/${order.id}`);
+          break;
+        default:
+          // For other statuses, might need QR scanning or different flow
+          console.log('📦 Order status requires special handling:', order.status);
+          router.push(`/qr-scanner?orderId=${order.id}`);
+          break;
+      }
+    } catch (error) {
+      console.error('Error handling order press:', error);
+      Alert.alert('Error', 'Failed to open order. Please try again.');
+    }
+  };
 
   // Load orders when component mounts or user changes
   useEffect(() => {
@@ -212,17 +282,31 @@ export default function OrdersScreen() {
     return statusColors[status] || colors.gray500;
   };
 
-  const renderOrderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.orderCard}
-      onPress={() => router.push(`/(tabs)/${item.id}`)}
-    >
-      <View style={styles.orderHeader}>
-        <Text style={styles.orderNumber}>#{item.order_number}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+  const renderOrderItem = ({ item }) => {
+    const isActive = activeOrderId === item.id;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.orderCard,
+          isActive && styles.activeOrderCard
+        ]}
+        onPress={() => handleOrderPress(item)}
+      >
+        <View style={styles.orderHeader}>
+          <View style={styles.orderTitleRow}>
+            <Text style={styles.orderNumber}>#{item.order_number}</Text>
+            {isActive && (
+              <View style={styles.activeIndicator}>
+                <MaterialIcons name="radio-button-checked" size={16} color="#10b981" />
+                <Text style={styles.activeText}>Active</Text>
+              </View>
+            )}
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+            <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+          </View>
         </View>
-      </View>
 
       <View style={styles.orderDetails}>
         <View style={styles.detailRow}>
@@ -253,6 +337,7 @@ export default function OrdersScreen() {
       </View>
     </TouchableOpacity>
   );
+};
 
   if (loading) {
     return (
@@ -280,9 +365,11 @@ export default function OrdersScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.title}>Active Order</Text>
+            <Text style={styles.title}>My Orders</Text>
             <Text style={styles.subtitle}>
-              {orders.length === 1 ? "1 active order" : "Scan QR to start"}
+              {orders.length === 0 
+                ? "No orders assigned" 
+                : `${orders.length} order${orders.length !== 1 ? 's' : ''} assigned`}
             </Text>
           </View>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -294,17 +381,24 @@ export default function OrdersScreen() {
 
       {orders.length === 0 ? (
         <View style={styles.emptyState}>
-          <MaterialIcons name="qr-code-scanner" size={64} color="#9ca3af" />
-          <Text style={styles.emptyText}>No Active Order</Text>
+          <MaterialIcons name="assignment" size={64} color="#9ca3af" />
+          <Text style={styles.emptyText}>No Orders Assigned</Text>
           <Text style={styles.emptySubtext}>
-            Scan the QR code from the dashboard to activate your assigned order
+            You don&apos;t have any orders assigned to you yet.{'\n'}
+            Contact dispatch or check back later for new assignments.
           </Text>
+          {user && (
+            <View style={styles.debugInfo}>
+              <Text style={styles.debugText}>Driver ID: {user.id}</Text>
+              <Text style={styles.debugText}>Email: {user.email}</Text>
+            </View>
+          )}
           <TouchableOpacity 
-            style={styles.scanQRButton}
-            onPress={() => router.push('/(tabs)/scanner')}
+            style={styles.refreshButton}
+            onPress={onRefresh}
           >
-            <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
-            <Text style={styles.scanQRText}>Scan QR Code</Text>
+            <MaterialIcons name="refresh" size={20} color="#fff" />
+            <Text style={styles.scanQRText}>Refresh Orders</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -428,7 +522,9 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   emptyText: { fontSize: 18, fontWeight: "600", color: colors.gray600, marginTop: 16 },
   emptySubtext: { fontSize: 14, color: colors.gray400, marginTop: 8, marginBottom: 20, textAlign: "center" },
-  scanQRButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.green500, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  debugInfo: { marginVertical: 16, padding: 12, backgroundColor: colors.gray50, borderRadius: 8 },
+  debugText: { fontSize: 12, color: colors.gray500, marginBottom: 4 },
+  refreshButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
   scanQRText: { color: colors.white, fontSize: 16, fontWeight: "600", marginLeft: 8 },
   startingPointCard: { backgroundColor: colors.white, borderRadius: 12, padding: 16, marginBottom: 16, elevation: 3, boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" },
   startingPointHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
@@ -445,4 +541,29 @@ const styles = StyleSheet.create({
   noLocationText: { fontSize: 14, color: colors.yellow800, textAlign: "center", marginBottom: 12 },
   setLocationButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.green500, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, justifyContent: "center" },
   buttonText: { color: colors.white, fontWeight: "500", marginLeft: 4 },
+  activeOrderCard: {
+    borderWidth: 2,
+    borderColor: colors.green500,
+    backgroundColor: colors.green50,
+  },
+  orderTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  activeIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 8,
+    backgroundColor: colors.green100,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  activeText: {
+    fontSize: 10,
+    color: colors.green600,
+    fontWeight: "600",
+    marginLeft: 2,
+  },
 });

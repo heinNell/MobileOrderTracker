@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔐 Auth event:', event);
+        console.log('🔐 Auth event:', event, 'Session exists:', !!session);
         
         if (session?.user) {
           setUser(session.user);
@@ -105,6 +105,7 @@ export function AuthProvider({ children }) {
       // Clear local state first (to immediately update UI)
       setUser(null);
       setIsAuthenticated(false);
+      setLoading(false); // Ensure loading is false
       
       // Sign out from Supabase
       const { error } = await supabase.auth.signOut();
@@ -122,12 +123,19 @@ export function AuthProvider({ children }) {
       ]);
       
       console.log('✅ Sign out successful with full cleanup');
+      console.log('🔄 Final auth state after signOut:', { 
+        user: null, 
+        isAuthenticated: false,
+        loading: false 
+      });
+      
       return { success: true };
     } catch (error) {
       console.error('❌ Sign out error:', error);
       // Ensure state is cleared even on error
       setUser(null);
       setIsAuthenticated(false);
+      setLoading(false);
       return { success: false, error: error.message };
     }
   }

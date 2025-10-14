@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
-import { calculateDistance, toPostGISPoint } from '../shared/locationUtils';
+import { calculateDistance } from '../shared/locationUtils';
 
 class LocationService {
   constructor() {
@@ -200,16 +200,22 @@ class LocationService {
       const locationData = {
         driver_id: user.id,
         order_id: this.currentOrderId,
-        location: toPostGISPoint(location),
+        location: {
+          lat: location.latitude,
+          lng: location.longitude
+        }, // JSONB format for your database
         latitude: location.latitude,
         longitude: location.longitude,
-        timestamp: location.timestamp,
+        timestamp: location.timestamp || new Date().toISOString(),
         created_at: new Date().toISOString(),
         accuracy: location.accuracy || null,
         speed: location.speed || null,
         heading: location.heading || null,
+        accuracy_meters: location.accuracy || null,
+        speed_kmh: location.speed ? (location.speed * 3.6) : null, // Convert m/s to km/h
       };
 
+      // Use simple insert - each location update is a new record
       const { error } = await supabase
         .from('driver_locations')
         .insert(locationData);
@@ -272,7 +278,7 @@ class LocationService {
       const { error } = await supabase
         .from('orders')
         .update({
-          loading_point_location: toPostGISPoint(startingPoint),
+          loading_point_location: `SRID=4326;POINT(${startingPoint.longitude} ${startingPoint.latitude})`,
           actual_start_time: new Date().toISOString(),
         })
         .eq('id', orderId);
@@ -320,17 +326,23 @@ class LocationService {
       const locationData = {
         driver_id: user.id,
         order_id: this.currentOrderId,
-        location: toPostGISPoint(location),
+        location: {
+          lat: location.latitude,
+          lng: location.longitude
+        }, // JSONB format for your database
         latitude: location.latitude,
         longitude: location.longitude,
-        timestamp: location.timestamp,
+        timestamp: location.timestamp || new Date().toISOString(),
         created_at: new Date().toISOString(),
         accuracy: location.accuracy || null,
         speed: location.speed || null,
         heading: location.heading || null,
+        accuracy_meters: location.accuracy || null,
+        speed_kmh: location.speed ? (location.speed * 3.6) : null, // Convert m/s to km/h
         is_manual_update: true, // Flag for dashboard to know this is a manual update
       };
 
+      // Use simple insert - each location update is a new record
       const { error } = await supabase
         .from('driver_locations')
         .insert(locationData);

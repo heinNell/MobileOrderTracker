@@ -1,14 +1,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import
+  {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from 'react-native';
 
 // ✅ Import the hook with correct path
 import { useAuth } from "../context/AuthContext";
@@ -45,12 +46,14 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🔄 Profile: Starting sign out...');
               const result = await signOut();
               if (!result.success) {
                 Alert.alert('Error', result.error || 'Failed to sign out');
               } else {
-                // Navigate to login after successful sign out
-                router.replace('/login');
+                console.log('✅ Profile: Sign out successful, auth state should handle redirect');
+                // Don't manually navigate - let the auth state change handle the redirect
+                // The AuthContext will trigger a re-render of index.js which will redirect to login
               }
             } catch (error) {
               console.error('❌ Sign out error in profile:', error);

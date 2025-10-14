@@ -58,6 +58,7 @@
     "eslint-plugin-react-hooks": "^7.0.0",
     "eslint-plugin-react-native": "^5.0.0",
     "eslint-plugin-unused-imports": "^4.2.0",
+    "expo-module-scripts": "^5.0.7",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.4",
     "npm-check-updates": "^19.1.0"
