@@ -1,23 +1,36 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import
-  {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-  } from 'react-native';
-import TouchableOpacity from './components/TouchableOpacity';
-import { useAuth } from './context/AuthContext';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useAuth } from '../context/AuthContext';
+
+// Define colors constant to fix ESLint warnings
+const colors = {
+  primary: '#2563eb',
+  white: '#fff',
+  gray: {
+    100: '#f3f4f6',
+    200: '#e5e7eb',
+    500: '#6b7280',
+  },
+  slate: {
+    900: '#111827',
+  },
+};
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn, isAuthenticated, loading: authLoading } = useAuth();
+  const { signIn, isAuthenticated, loading: authLoading, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,10 +38,23 @@ export default function LoginScreen() {
 
   // Navigate to Main tabs if already authenticated
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
+    console.log('🔐 Auth state:', { isAuthenticated, authLoading, user: !!user });
+    
+    if (isAuthenticated && user && !authLoading) {
+      console.log('✅ User authenticated, redirecting to tabs');
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, user, router]);
+
+  // Show loading only for initial auth check
+  if (authLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Checking authentication...</Text>
+      </View>
+    );
+  }
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -37,25 +63,18 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    console.log('🔄 Attempting login...');
     const result = await signIn(email, password);
     setLoading(false);
 
     if (result.success) {
+      console.log('✅ Login successful, user:', result.user?.email);
       // Navigation will happen automatically via useEffect
-      console.log('✅ Login successful, navigating to Main');
     } else {
+      console.log('❌ Login failed:', result.error);
       Alert.alert('Login Failed', result.error || 'Invalid credentials');
     }
   };
-
-  if (authLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
@@ -64,14 +83,14 @@ export default function LoginScreen() {
     >
       <View style={styles.content}>
         <View style={styles.header}>
-          <MaterialIcons name="local-shipping" size={64} color="#2563eb" />
+          <MaterialIcons name="local-shipping" size={64} color={colors.primary} />
           <Text style={styles.title}>Order Tracker</Text>
           <Text style={styles.subtitle}>Driver Login</Text>
         </View>
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <MaterialIcons name="email" size={20} color="#6b7280" style={styles.inputIcon} />
+            <MaterialIcons name="email" size={20} color={colors.gray[500]} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Email"
@@ -85,7 +104,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <MaterialIcons name="lock" size={20} color="#6b7280" style={styles.inputIcon} />
+            <MaterialIcons name="lock" size={20} color={colors.gray[500]} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -102,7 +121,7 @@ export default function LoginScreen() {
               <MaterialIcons
                 name={showPassword ? 'visibility' : 'visibility-off'}
                 size={20}
-                color="#6b7280"
+                color={colors.gray[500]}
               />
             </TouchableOpacity>
           </View>
@@ -113,10 +132,10 @@ export default function LoginScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <>
-                <MaterialIcons name="login" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <MaterialIcons name="login" size={20} color={colors.white} style={styles.loginIcon} />
                 <Text style={styles.loginButtonText}>Login</Text>
               </>
             )}
@@ -136,18 +155,18 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.gray[500],
   },
   content: {
     flex: 1,
@@ -161,12 +180,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#111827',
+    color: colors.slate[900],
     marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.gray[500],
     marginTop: 8,
   },
   form: {
@@ -175,12 +194,12 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderRadius: 12,
     marginBottom: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.gray[200],
   },
   inputIcon: {
     marginRight: 12,
@@ -189,13 +208,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#111827',
+    color: colors.slate[900],
   },
   eyeIcon: {
     padding: 8,
   },
   loginButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     flexDirection: 'row',
@@ -208,8 +227,11 @@ const styles = StyleSheet.create({
   loginButtonDisabled: {
     opacity: 0.6,
   },
+  loginIcon: {
+    marginRight: 8,
+  },
   loginButtonText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -219,7 +241,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.gray[500],
     textAlign: 'center',
   },
 });

@@ -22,10 +22,12 @@ export function AuthProvider({ children }) {
           setUser(session.user);
           setIsAuthenticated(true);
           await AsyncStorage.setItem('supabase.auth.token', JSON.stringify(session));
+          console.log('✅ User authenticated via listener:', session.user.email);
         } else {
           setUser(null);
           setIsAuthenticated(false);
           await AsyncStorage.removeItem('supabase.auth.token');
+          console.log('❌ User signed out via listener');
         }
         setLoading(false);
       }
@@ -41,16 +43,19 @@ export function AuthProvider({ children }) {
       setLoading(true);
       const { data: { session }, error } = await supabase.auth.getSession();
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error getting session:', error);
+        throw error;
+      }
       
       if (session?.user) {
         setUser(session.user);
         setIsAuthenticated(true);
-        console.log('✅ User authenticated:', session.user.email);
+        console.log('✅ User authenticated on app start:', session.user.email);
       } else {
         setUser(null);
         setIsAuthenticated(false);
-        console.log('❌ No active session');
+        console.log('❌ No active session on app start');
       }
     } catch (error) {
       console.error('❌ Error checking user:', error);
@@ -63,12 +68,16 @@ export function AuthProvider({ children }) {
 
   async function signIn(email, password) {
     try {
+      console.log('🔄 Signing in with email:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password.trim(),
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Sign in error:', error);
+        throw error;
+      }
 
       console.log('✅ Sign in successful:', data.user.email);
       return { success: true, user: data.user };
@@ -84,7 +93,8 @@ export function AuthProvider({ children }) {
       
       // Clean up location services before signing out
       try {
-        const LocationService = require('../services/LocationService').default;
+        const LocationServiceModule = await import('../services/LocationService');
+        const LocationService = LocationServiceModule.default;
         const locationService = new LocationService();
         await locationService.cleanup();
         console.log('✅ Location service cleanup completed');
@@ -100,7 +110,6 @@ export function AuthProvider({ children }) {
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('❌ Supabase signOut error:', error);
-        // Continue with cleanup even if Supabase signOut fails
       }
 
       // Clear local storage
@@ -108,7 +117,8 @@ export function AuthProvider({ children }) {
         'supabase.auth.token',
         'trackingOrderId',
         'orderStartingPoint',
-        'lastKnownLocation'
+        'lastKnownLocation',
+        'activeOrderId'
       ]);
       
       console.log('✅ Sign out successful with full cleanup');
@@ -142,7 +152,6 @@ export function useAuth() {
   return context;
 }
 
-// Default export for expo-router compatibility (this should not be used as a route)
-export default function NotARoute() {
-  return null; // This prevents the file from being used as a route
+export default function AuthContextComponent() {
+  return null;
 }

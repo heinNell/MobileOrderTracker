@@ -12,6 +12,8 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "noImplicitAny": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./app/*"],

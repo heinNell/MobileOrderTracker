@@ -1,7 +1,7 @@
 // app/(tabs)/order-details.js
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import
   {
     ActivityIndicator,
@@ -13,6 +13,27 @@ import
     View,
   } from "react-native";
 import { supabase } from "../lib/supabase";
+
+// Color palette
+const colors = {
+  white: "#fff",
+  black: "#000",
+  primary: "#2563eb",
+  gray100: "#f3f4f6",
+  gray200: "#e5e7eb",
+  gray400: "#9ca3af",
+  gray500: "#6b7280",
+  gray600: "#4b5563",
+  gray700: "#374151",
+  gray800: "#111827",
+  red500: "#ef4444",
+  green500: "#10b981",
+  green600: "#059669",
+  blue500: "#3b82f6",
+  indigo500: "#6366f1",
+  purple500: "#8b5cf6",
+  border: "#d1d5db",
+};
 
 export default function OrderDetailsScreen() {
   const { orderId } = useLocalSearchParams();
@@ -26,9 +47,9 @@ export default function OrderDetailsScreen() {
     if (orderId) {
       loadOrderDetails();
     }
-  }, [orderId]);
+  }, [orderId, loadOrderDetails]);
 
-  const loadOrderDetails = async () => {
+  const loadOrderDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -57,7 +78,7 @@ export default function OrderDetailsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [orderId]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -219,10 +240,7 @@ export default function OrderDetailsScreen() {
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() =>
-              router.push({
-                pathname: "/(tabs)/scanner",
-                params: { orderId: order.id, orderNumber: order.order_number },
-              })
+router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_number}`)
             }
           >
             <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
@@ -268,48 +286,48 @@ const getStatusStyle = (status) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.gray100,
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.gray100,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#6b7280",
+    color: colors.gray500,
   },
   errorText: {
     fontSize: 18,
-    color: "#ef4444",
+    color: colors.red500,
     textAlign: "center",
     marginTop: 16,
   },
   retryButton: {
     marginTop: 20,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 16,
     fontWeight: "600",
   },
   header: {
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: colors.gray200,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#111827",
+    color: colors.gray800,
     marginBottom: 12,
   },
   statusBadge: {
@@ -319,17 +337,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   statusText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 14,
     fontWeight: "600",
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.white,
     margin: 16,
     marginBottom: 0,
     padding: 16,
     borderRadius: 12,
-    shadowColor: "#000",
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -338,7 +356,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#111827",
+    color: colors.gray800,
     marginBottom: 16,
   },
   infoRow: {
@@ -346,18 +364,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: colors.gray100,
   },
   label: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#6b7280",
+    color: colors.gray500,
     marginLeft: 8,
     width: 120,
   },
   value: {
     fontSize: 14,
-    color: "#111827",
+    color: colors.gray800,
     flex: 1,
   },
   actionContainer: {

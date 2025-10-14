@@ -1,32 +1,49 @@
-import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+// app/index.js
+import { Redirect } from 'expo-router';
 import { useAuth } from './context/AuthContext';
+import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+
+// Color palette
+const colors = {
+  primary: '#3b82f6',
+  gray100: '#f3f4f6',
+  gray500: '#6b7280',
+};
 
 export default function Index() {
-  const router = useRouter();
   const { isAuthenticated, loading } = useAuth();
 
-  useEffect(() => {
-    console.log('📍 Index.js useEffect triggered', { loading, isAuthenticated });
-    
-    if (!loading) {
-      if (isAuthenticated) {
-        console.log('✅ User authenticated, redirecting to tabs');
-        router.replace('/(tabs)');
-      } else {
-        console.log('❌ User not authenticated, redirecting to login');
-        router.replace('/login');
-      }
-    }
-  }, [isAuthenticated, loading, router]);
+  console.log('🔍 Index.js - Auth state:', { isAuthenticated, loading });
 
-  console.log('📍 Index.js rendering...', { loading, isAuthenticated });
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.text}>Loading...</Text>
+      </View>
+    );
+  }
 
-  // Always show loading while determining auth state
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator size="large" />
-    </View>
-  );
+  // Redirect to appropriate screen based on auth state
+  if (isAuthenticated) {
+    console.log('🔍 Redirecting to tabs (authenticated)');
+    return <Redirect href="/(tabs)" />;
+  } else {
+    console.log('🔍 Redirecting to login (not authenticated)');
+    return <Redirect href="/(auth)/login" />;
+  }
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.gray100,
+  },
+  text: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.gray500,
+  },
+});

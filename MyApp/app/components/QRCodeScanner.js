@@ -1,21 +1,30 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera"; // ✅ Fixed import
 import { useEffect, useState } from "react";
-import
-  {
+import {
     ActivityIndicator,
     Alert,
     Dimensions,
     Platform,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
-  } from "react-native";
+} from "react-native";
 import { supabase } from "../lib/supabase";
-import TouchableOpacity from "./TouchableOpacity";
 
 const { width } = Dimensions.get("window");
 const SCAN_AREA_SIZE = width * 0.7;
+
+// Color palette
+const colors = {
+  white: "#fff",
+  primary: "#2563eb",
+  gray600: "#6b7280",
+  gray700: "#374151",
+  transparent: "transparent",
+  overlay: "rgba(0,0,0,0.7)",
+};
 
 export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
   const [permission, requestPermission] = useCameraPermissions(); // ✅ Now properly imported
@@ -33,55 +42,51 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
     } else {
       console.log('❌ Camera permission denied');
     }
-  }, [permission]);
+  }, [permission, requestPermission]);
 
   const validateQRCode = async (qrData) => {
+    // Try to parse as JSON first (for complex QR codes)
+    let orderId;
+    let timestamp;
+
     try {
-      // Try to parse as JSON first (for complex QR codes)
-      let orderId;
-      let timestamp;
+      const parsed = JSON.parse(atob(qrData));
+      orderId = parsed.orderId || parsed.order_id || parsed.id;
+      timestamp = parsed.timestamp;
 
-      try {
-        const parsed = JSON.parse(atob(qrData));
-        orderId = parsed.orderId || parsed.order_id || parsed.id;
-        timestamp = parsed.timestamp;
-
-        // Check expiration if timestamp exists
-        if (timestamp) {
-          const expirationTime = timestamp + 24 * 60 * 60 * 1000; // 24 hours
-          if (Date.now() > expirationTime) {
-            throw new Error("QR code has expired");
-          }
+      // Check expiration if timestamp exists
+      if (timestamp) {
+        const expirationTime = timestamp + 24 * 60 * 60 * 1000; // 24 hours
+        if (Date.now() > expirationTime) {
+          throw new Error("QR code has expired");
         }
-      } catch (parseError) {
-        // If JSON parsing fails, assume it's a simple orderId
-        orderId = qrData;
       }
-
-      if (!orderId) {
-        throw new Error("Invalid QR code format");
-      }
-
-      // Fetch order from database
-      const { data: order, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("id", orderId)
-        .single();
-
-      if (error) throw error;
-
-      if (!order) {
-        throw new Error("Order not found");
-      }
-
-      return order;
-    } catch (error) {
-      throw error;
+    } catch (parseError) {
+      // If JSON parsing fails, assume it's a simple orderId
+      orderId = qrData;
     }
+
+    if (!orderId) {
+      throw new Error("Invalid QR code format");
+    }
+
+    // Fetch order from database
+    const { data: order, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .single();
+
+    if (error) throw error;
+
+    if (!order) {
+      throw new Error("Order not found");
+    }
+
+    return order;
   };
 
-  const handleBarCodeScanned = async ({ type, data }) => {
+  const handleBarCodeScanned = async ({ data }) => {
     if (scanned || loading) return;
 
     setScanned(true);
@@ -141,7 +146,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
   if (!permission) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Requesting camera permission...</Text>
       </View>
     );
@@ -191,7 +196,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
                 style={styles.closeIconButton}
                 onPress={onClose}
               >
-                <MaterialIcons name="close" size={32} color="#fff" />
+                <MaterialIcons name="close" size={32} color={colors.white} />
               </TouchableOpacity>
             </View>
           </View>
@@ -208,7 +213,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
               {/* Loading Indicator */}
               {loading && (
                 <View style={styles.loadingOverlay}>
-                  <ActivityIndicator size="large" color="#fff" />
+                  <ActivityIndicator size="large" color={colors.white} />
                   <Text style={styles.loadingText}>Processing...</Text>
                 </View>
               )}
@@ -234,7 +239,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
                 <MaterialIcons
                   name={torchOn ? "flash-on" : "flash-off"}
                   size={28}
-                  color="#fff"
+                  color={colors.white}
                 />
                 <Text style={styles.controlButtonText}>
                   {torchOn ? "Flash On" : "Flash Off"}
@@ -246,7 +251,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
                   style={styles.controlButton}
                   onPress={resetScanner}
                 >
-                  <MaterialIcons name="refresh" size={28} color="#fff" />
+                  <MaterialIcons name="refresh" size={28} color={colors.white} />
                   <Text style={styles.controlButtonText}>Scan Again</Text>
                 </TouchableOpacity>
               )}
@@ -268,30 +273,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: colors.white,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#6b7280",
+    color: colors.gray600,
   },
   permissionText: {
     fontSize: 16,
-    color: "#374151",
+    color: colors.gray700,
     textAlign: "center",
     marginTop: 16,
     marginBottom: 24,
     paddingHorizontal: 20,
   },
   permissionButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginBottom: 12,
   },
   permissionButtonText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -300,7 +305,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   closeButtonText: {
-    color: "#6b7280",
+    color: colors.gray600,
     fontSize: 16,
   },
   camera: {
@@ -308,11 +313,11 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: colors.transparent,
   },
   topOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: colors.overlay,
     paddingTop: Platform.OS === "ios" ? 50 : 20,
     paddingHorizontal: 20,
   },
@@ -322,7 +327,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 24,
     fontWeight: "bold",
   },
@@ -344,7 +349,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 50,
     height: 50,
-    borderColor: "#2563eb",
+    borderColor: colors.primary,
     borderWidth: 4,
   },
   topLeft: {
@@ -375,19 +380,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: "100%",
     height: "100%",
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: colors.overlay,
     justifyContent: "center",
     alignItems: "center",
   },
   bottomOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: colors.overlay,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
   instructionText: {
-    color: "#fff",
+    color: colors.white,
     fontSize: 18,
     textAlign: "center",
     marginBottom: 30,
@@ -404,7 +409,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   controlButtonText: {
-    color: "#fff",
+    color: colors.white,
     marginTop: 8,
     fontSize: 14,
     fontWeight: "500",

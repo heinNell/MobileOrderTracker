@@ -1,34 +1,20 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { Redirect, Tabs } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import { Tabs } from 'expo-router';
 
 export default function TabLayout() {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Redirect href="/login" />;
-  }
-
   return (
     <Tabs
       screenOptions={{
+        headerShown: false,
         tabBarActiveTintColor: '#2563eb',
         tabBarInactiveTintColor: '#6b7280',
-        headerStyle: {
+        tabBarStyle: {
           backgroundColor: '#ffffff',
-        },
-        headerTintColor: '#111827',
-        headerTitleStyle: {
-          fontWeight: 'bold',
+          borderTopWidth: 1,
+          borderTopColor: '#e5e7eb',
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
         },
       }}
     >
@@ -42,20 +28,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="orders"
-        options={{
-          title: 'Active Order',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="assignment" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="scanner"
         options={{
           title: 'Scanner',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="qr-code-scanner" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: 'Orders',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="list-alt" size={size} color={color} />
           ),
         }}
       />
@@ -69,17 +55,27 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="order-details"
+        name="[orderId]"
         options={{
-          href: null,
-          title: 'Order Details',
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="DriverDashboard"
+        options={{
+          href: null, // Hide from tab bar since index.js exports it
         }}
       />
       <Tabs.Screen
         name="LoadActivationScreen"
         options={{
-          href: null,
-          title: 'Activate Load',
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="order-details"
+        options={{
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>

@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import
   {
     ActivityIndicator,
@@ -11,36 +11,46 @@ import
     RefreshControl,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View
   } from "react-native";
-import TouchableOpacity from "../components/TouchableOpacity";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
 
 const locationService = new LocationService();
 
-// Platform-aware storage to handle web compatibility
+// Color palette
+const colors = {
+  white: "#fff",
+  primary: "#2563eb",
+  gray400: "#9ca3af",
+  gray500: "#6b7280",
+  gray600: "#374151",
+  gray700: "#111827",
+  gray900: "#1f2937",
+  red500: "#ef4444",
+  red600: "#dc2626",
+  green500: "#10b981",
+  yellow300: "#fef3c7",
+  yellow800: "#92400e",
+  blue50: "#eff6ff",
+  gray50: "#f8fafc",
+  gray100: "#f3f4f6",
+  red50: "#fef2f2",
+  gray200: "#e5e7eb",
+  blue500: "#3b82f6",
+  purple500: "#8b5cf6",
+  indigo500: "#6366f1",
+  amber500: "#f59e0b",
+  emerald600: "#059669",
+};
+
 const storage = Platform.OS === 'web' 
   ? {
-      getItem: (key) => {
-        if (typeof window !== 'undefined') {
-          return Promise.resolve(window.localStorage.getItem(key));
-        }
-        return Promise.resolve(null);
-      },
-      setItem: (key, value) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, value);
-        }
-        return Promise.resolve();
-      },
-      removeItem: (key) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(key);
-        }
-        return Promise.resolve();
-      },
+      getItem: (key) => Promise.resolve(typeof window !== 'undefined' ? window.localStorage.getItem(key) : null),
+      setItem: (key, value) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, value); return Promise.resolve(); },
+      removeItem: (key) => { if (typeof window !== 'undefined') window.localStorage.removeItem(key); return Promise.resolve(); },
     }
   : AsyncStorage;
 
@@ -53,9 +63,9 @@ export default function OrdersScreen() {
   const [error, setError] = useState(null);
   const [startingPoint, setStartingPoint] = useState(null);
   const [settingLocation, setSettingLocation] = useState(false);
+  const [sendingLocation, setSendingLocation] = useState(false);
 
   useEffect(() => {
-    loadOrders();
     loadStartingPoint();
   }, []);
 
@@ -73,18 +83,9 @@ export default function OrdersScreen() {
       setSettingLocation(true);
       const location = await locationService.setCurrentLocationAsStartingPoint();
       setStartingPoint(location);
-      
-      Alert.alert(
-        "Starting Point Set",
-        `Your current location has been set as the starting point for orders.\n\nLat: ${location.latitude.toFixed(6)}\nLng: ${location.longitude.toFixed(6)}`,
-        [{ text: "OK" }]
-      );
+      Alert.alert("Starting Point Set", `Your current location has been set as the starting point for orders.\n\nLat: ${location.latitude.toFixed(6)}\nLng: ${location.longitude.toFixed(6)}`, [{ text: "OK" }]);
     } catch (error) {
-      Alert.alert(
-        "Error",
-        "Failed to set starting point. Please check location permissions and try again.",
-        [{ text: "OK" }]
-      );
+      Alert.alert("Error", "Failed to set starting point. Please check location permissions and try again.", [{ text: "OK" }]);
     } finally {
       setSettingLocation(false);
     }
@@ -100,31 +101,24 @@ export default function OrdersScreen() {
     }
   };
 
-  const [sendingLocation, setSendingLocation] = useState(false);
-
   const handleLogout = async () => {
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out? This will clear your active order.',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
             try {
-              // Clear active order when logging out
               await storage.removeItem('activeOrderId');
-              
               const result = await signOut();
               if (!result.success) {
                 Alert.alert('Error', result.error || 'Failed to sign out');
               }
             } catch (error) {
-              console.error('❌ Logout error:', error);
+              console.error('Logout error:', error);
               Alert.alert('Error', 'Failed to sign out properly');
             }
           },
@@ -137,53 +131,40 @@ export default function OrdersScreen() {
     try {
       setSendingLocation(true);
       await locationService.sendImmediateLocationUpdate();
-      Alert.alert(
-        "Location Sent", 
-        "Your current location has been sent to the dashboard for tracking.",
-        [{ text: "OK" }]
-      );
+      Alert.alert("Location Sent", "Your current location has been sent to the dashboard for tracking.", [{ text: "OK" }]);
     } catch (error) {
       console.error('Error sending location to dashboard:', error);
-      Alert.alert(
-        "Error", 
-        "Failed to send location to dashboard. Please check your internet connection and try again.",
-        [{ text: "OK" }]
-      );
+      Alert.alert("Error", "Failed to send location to dashboard. Please check your internet connection and try again.", [{ text: "OK" }]);
     } finally {
       setSendingLocation(false);
     }
   };
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-
       if (!user) {
         setError("Please log in to view orders");
         return;
       }
 
-      // Check for active order from QR scan (stored in AsyncStorage)
       const activeOrderId = await storage.getItem('activeOrderId');
 
       if (!activeOrderId) {
-        // No active order - show empty state with instruction to scan QR
         setOrders([]);
         return;
       }
 
-      // Fetch ONLY the active scanned order
       const { data, error } = await supabase
         .from("orders")
         .select("*")
         .eq("id", activeOrderId)
-        .eq("assigned_driver_id", user.id) // Security: ensure order is assigned to this driver
+        .eq("assigned_driver_id", user.id)
         .single();
 
       if (error) {
         if (error.code === 'PGRST116') {
-          // No order found - clear invalid active order
           await storage.removeItem('activeOrderId');
           setOrders([]);
           setError("Active order not found. Please scan QR code again.");
@@ -200,7 +181,14 @@ export default function OrdersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user]);
+
+  // Load orders when component mounts or user changes
+  useEffect(() => {
+    if (user) {
+      loadOrders();
+    }
+  }, [user, loadOrders]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -208,35 +196,30 @@ export default function OrdersScreen() {
   };
 
   const getStatusColor = (status) => {
-    const colors = {
-      pending: "#9ca3af",
-      assigned: "#3b82f6",
-      activated: "#10b981",
-      in_progress: "#6366f1",
-      in_transit: "#8b5cf6",
-      arrived: "#10b981",
-      loading: "#f59e0b",
-      loaded: "#10b981",
-      unloading: "#f59e0b",
-      delivered: "#059669",
-      completed: "#10b981",
+    const statusColors = {
+      pending: colors.gray400,
+      assigned: colors.blue500,
+      activated: colors.green500,
+      in_progress: colors.indigo500,
+      in_transit: colors.purple500,
+      arrived: colors.green500,
+      loading: colors.amber500,
+      loaded: colors.green500,
+      unloading: colors.amber500,
+      delivered: colors.emerald600,
+      completed: colors.green500,
     };
-    return colors[status] || "#6b7280";
+    return statusColors[status] || colors.gray500;
   };
 
   const renderOrderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.orderCard}
-      onPress={() => router.push(`/(tabs)/QRScannerScreen?orderId=${item.id}`)}
+      onPress={() => router.push(`/(tabs)/${item.id}`)}
     >
       <View style={styles.orderHeader}>
         <Text style={styles.orderNumber}>#{item.order_number}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) },
-          ]}
-        >
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
         </View>
       </View>
@@ -259,17 +242,13 @@ export default function OrdersScreen() {
         {item.estimated_distance_km && (
           <View style={styles.detailRow}>
             <MaterialIcons name="straighten" size={18} color="#6b7280" />
-            <Text style={styles.detailText}>
-              {item.estimated_distance_km} km
-            </Text>
+            <Text style={styles.detailText}>{item.estimated_distance_km} km</Text>
           </View>
         )}
       </View>
 
       <View style={styles.orderFooter}>
-        <Text style={styles.dateText}>
-          {new Date(item.created_at).toLocaleDateString()}
-        </Text>
+        <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
         <MaterialIcons name="chevron-right" size={24} color="#9ca3af" />
       </View>
     </TouchableOpacity>
@@ -332,7 +311,7 @@ export default function OrdersScreen() {
         <FlatList
           data={orders}
           renderItem={renderOrderItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -343,7 +322,7 @@ export default function OrdersScreen() {
                 <MaterialIcons name="my-location" size={24} color="#2563eb" />
                 <Text style={styles.startingPointTitle}>Starting Point</Text>
               </View>
-              
+
               {startingPoint ? (
                 <View style={styles.startingPointInfo}>
                   <Text style={styles.locationText}>
@@ -375,8 +354,7 @@ export default function OrdersScreen() {
                       <Text style={styles.buttonText}>Clear</Text>
                     </TouchableOpacity>
                   </View>
-                  
-                  {/* Dashboard Location Button */}
+
                   <View style={styles.dashboardButtonRow}>
                     <TouchableOpacity 
                       style={styles.dashboardButton} 
@@ -424,264 +402,47 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f3f4f6",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#6b7280",
-  },
-  errorText: {
-    fontSize: 18,
-    color: "#ef4444",
-    textAlign: "center",
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  retryButton: {
-    backgroundColor: "#2563eb",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  header: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  headerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  logoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#fef2f2",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-  },
-  logoutText: {
-    color: "#ef4444",
-    fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  listContent: {
-    padding: 16,
-  },
-  orderCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
-    elevation: 3,
-  },
-  orderHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  orderNumber: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  orderDetails: {
-    marginBottom: 12,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    color: "#374151",
-    marginLeft: 8,
-    flex: 1,
-  },
-  orderFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  dateText: {
-    fontSize: 12,
-    color: "#9ca3af",
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#374151",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#9ca3af",
-    marginTop: 8,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  scanQRButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#10b981",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  scanQRText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  // Starting Point Styles
-  startingPointCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
-    elevation: 3,
-  },
-  startingPointHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  startingPointTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginLeft: 8,
-  },
-  startingPointInfo: {
-    padding: 12,
-    backgroundColor: "#f8fafc",
-    borderRadius: 8,
-  },
-  locationText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#374151",
-    marginBottom: 4,
-  },
-  locationTime: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 12,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  updateButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2563eb",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    flex: 1,
-    justifyContent: "center",
-  },
-  clearButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    flex: 1,
-    justifyContent: "center",
-  },
-  dashboardButtonRow: {
-    marginTop: 8,
-  },
-  dashboardButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#10b981",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 6,
-    justifyContent: "center",
-  },
-  noLocationInfo: {
-    padding: 16,
-    backgroundColor: "#fef3c7",
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  noLocationText: {
-    fontSize: 14,
-    color: "#92400e",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  setLocationButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#10b981",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    justifyContent: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "500",
-    marginLeft: 4,
-  },
+  container: { flex: 1, backgroundColor: colors.gray100 },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
+  loadingText: { marginTop: 16, fontSize: 16, color: colors.gray500 },
+  errorText: { fontSize: 18, color: colors.red500, textAlign: "center", marginTop: 16, marginBottom: 20 },
+  retryButton: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  retryButtonText: { color: colors.white, fontSize: 16, fontWeight: "600" },
+  header: { backgroundColor: colors.white, padding: 20, borderBottomWidth: 1, borderBottomColor: colors.gray200 },
+  headerContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  logoutButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.red50, borderRadius: 8, borderWidth: 1, borderColor: colors.red200 },
+  logoutText: { color: colors.red500, fontSize: 14, fontWeight: "600", marginLeft: 6 },
+  title: { fontSize: 28, fontWeight: "bold", color: colors.gray700, marginBottom: 4 },
+  subtitle: { fontSize: 14, color: colors.gray500 },
+  listContent: { padding: 16 },
+  orderCard: { backgroundColor: colors.white, borderRadius: 12, padding: 16, marginBottom: 12, elevation: 3, boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" },
+  orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  orderNumber: { fontSize: 18, fontWeight: "bold", color: colors.gray700 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  statusText: { color: colors.white, fontSize: 12, fontWeight: "600" },
+  orderDetails: { marginBottom: 12 },
+  detailRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  detailText: { fontSize: 14, color: colors.gray600, marginLeft: 8, flex: 1 },
+  orderFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.gray100 },
+  dateText: { fontSize: 12, color: colors.gray400 },
+  emptyState: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
+  emptyText: { fontSize: 18, fontWeight: "600", color: colors.gray600, marginTop: 16 },
+  emptySubtext: { fontSize: 14, color: colors.gray400, marginTop: 8, marginBottom: 20, textAlign: "center" },
+  scanQRButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.green500, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  scanQRText: { color: colors.white, fontSize: 16, fontWeight: "600", marginLeft: 8 },
+  startingPointCard: { backgroundColor: colors.white, borderRadius: 12, padding: 16, marginBottom: 16, elevation: 3, boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" },
+  startingPointHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  startingPointTitle: { fontSize: 18, fontWeight: "600", color: colors.gray900, marginLeft: 8 },
+  startingPointInfo: { padding: 12, backgroundColor: colors.gray50, borderRadius: 8 },
+  locationText: { fontSize: 14, fontWeight: "500", color: colors.gray600, marginBottom: 4 },
+  locationTime: { fontSize: 12, color: colors.gray500, marginBottom: 12 },
+  buttonRow: { flexDirection: "row", gap: 8 },
+  updateButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, flex: 1, justifyContent: "center" },
+  clearButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.red600, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, flex: 1, justifyContent: "center" },
+  dashboardButtonRow: { marginTop: 8 },
+  dashboardButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.green500, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, justifyContent: "center" },
+  noLocationInfo: { padding: 16, backgroundColor: colors.yellow300, borderRadius: 8, alignItems: "center" },
+  noLocationText: { fontSize: 14, color: colors.yellow800, textAlign: "center", marginBottom: 12 },
+  setLocationButton: { flexDirection: "row", alignItems: "center", backgroundColor: colors.green500, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, justifyContent: "center" },
+  buttonText: { color: colors.white, fontWeight: "500", marginLeft: 4 },
 });

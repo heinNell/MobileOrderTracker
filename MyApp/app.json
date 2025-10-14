@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": "mobile-order-tracker",
-    "slug": "mobile-order-tracker",
+    "name": "MyApp",
+    "slug": "MyApp",
     "owner": "heina1",
     "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "ordertracker",
+    "main": "expo-router/entry",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -93,7 +94,8 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Mobile Order Tracker to track your delivery location."
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-secure-store"
     ],
     "description": "Logistics QR Code Mobile Application for Drivers",
     "updates": {

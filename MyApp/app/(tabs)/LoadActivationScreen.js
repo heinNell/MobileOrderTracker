@@ -1,19 +1,65 @@
 // app/(tabs)/LoadActivationScreen.js
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  Platform,
-} from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { supabase } from "../lib/supabase";
-import * as Location from "expo-location";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Location from "expo-location";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { supabase } from "../lib/supabase";
+
+// Define colors constant to fix ESLint warnings
+const colors = {
+  primary: '#2563eb',
+  white: '#ffffff',
+  gray: {
+    100: '#f3f4f6',
+    200: '#e5e7eb',
+    300: '#d1d5db',
+    400: '#9ca3af',
+    500: '#6b7280',
+    700: '#374151',
+  },
+  slate: {
+    900: '#111827',
+  },
+  green: {
+    600: '#059669',
+    700: '#065f46',
+  },
+  emerald: {
+    100: '#d1fae5',
+    500: '#10b981',
+  },
+  purple: {
+    500: '#8b5cf6',
+  },
+  blue: {
+    500: '#3b82f6',
+  },
+  red: {
+    500: '#ef4444',
+  },
+};
+
+const getStatusStyle = (status) => {
+  const statusStyles = {
+    pending: { backgroundColor: colors.gray[400] },
+    assigned: { backgroundColor: colors.blue[500] },
+    activated: { backgroundColor: colors.emerald[500] },
+    in_transit: { backgroundColor: colors.purple[500] },
+    delivered: { backgroundColor: colors.green[600] },
+    completed: { backgroundColor: colors.emerald[500] },
+  };
+  return statusStyles[status] || { backgroundColor: colors.gray[500] };
+};
 
 export default function LoadActivationScreen() {
   const { orderId, orderNumber } = useLocalSearchParams();
@@ -23,28 +69,7 @@ export default function LoadActivationScreen() {
   const [location, setLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(false);
 
-  useEffect(() => {
-    loadOrderDetails();
-    requestLocationPermission();
-  }, []);
-
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status === "granted");
-
-      if (status === "granted") {
-        const currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        setLocation(currentLocation);
-      }
-    } catch (error) {
-      console.error("Error requesting location permission:", error);
-    }
-  };
-
-  const loadOrderDetails = async () => {
+  const loadOrderDetails = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -71,7 +96,28 @@ export default function LoadActivationScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderId]);
+
+  const requestLocationPermission = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === "granted");
+
+      if (status === "granted") {
+        const currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        setLocation(currentLocation);
+      }
+    } catch (error) {
+      console.error("Error requesting location permission:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOrderDetails();
+    requestLocationPermission();
+  }, [loadOrderDetails, requestLocationPermission]);
 
   const handleActivateLoad = async () => {
     try {
@@ -218,7 +264,7 @@ export default function LoadActivationScreen() {
   if (loading && !orderDetails) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading order details...</Text>
       </View>
     );
@@ -228,7 +274,7 @@ export default function LoadActivationScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <MaterialIcons name="local-shipping" size={64} color="#2563eb" />
+          <MaterialIcons name="local-shipping" size={64} color={colors.primary} />
           <Text style={styles.title}>Activate Load</Text>
           <Text style={styles.subtitle}>Order {orderNumber}</Text>
         </View>
@@ -276,7 +322,7 @@ export default function LoadActivationScreen() {
 
             {orderDetails.load_activated_at && (
               <View style={styles.alertBox}>
-                <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                <MaterialIcons name="check-circle" size={20} color={colors.emerald[500]} />
                 <Text style={styles.alertText}>
                   This load was already activated on{" "}
                   {new Date(orderDetails.load_activated_at).toLocaleString()}
@@ -291,7 +337,7 @@ export default function LoadActivationScreen() {
 
           {locationPermission ? (
             <View style={styles.locationStatus}>
-              <MaterialIcons name="location-on" size={24} color="#10b981" />
+              <MaterialIcons name="location-on" size={24} color={colors.emerald[500]} />
               <Text style={styles.locationText}>
                 Location services enabled
                 {location && (
@@ -305,7 +351,7 @@ export default function LoadActivationScreen() {
             </View>
           ) : (
             <View style={styles.locationStatus}>
-              <MaterialIcons name="location-off" size={24} color="#ef4444" />
+              <MaterialIcons name="location-off" size={24} color={colors.red[500]} />
               <Text style={styles.locationText}>
                 Location permission required
               </Text>
@@ -326,7 +372,7 @@ export default function LoadActivationScreen() {
               <MaterialIcons
                 name="check-circle-outline"
                 size={20}
-                color="#2563eb"
+                color={colors.primary}
               />
               <Text style={styles.instructionText}>
                 Ensure you are at the loading point
@@ -336,7 +382,7 @@ export default function LoadActivationScreen() {
               <MaterialIcons
                 name="check-circle-outline"
                 size={20}
-                color="#2563eb"
+                color={colors.primary}
               />
               <Text style={styles.instructionText}>
                 Verify the vehicle is ready for loading
@@ -346,7 +392,7 @@ export default function LoadActivationScreen() {
               <MaterialIcons
                 name="check-circle-outline"
                 size={20}
-                color="#2563eb"
+                color={colors.primary}
               />
               <Text style={styles.instructionText}>
                 Location services must be enabled
@@ -356,7 +402,7 @@ export default function LoadActivationScreen() {
               <MaterialIcons
                 name="check-circle-outline"
                 size={20}
-                color="#2563eb"
+                color={colors.primary}
               />
               <Text style={styles.instructionText}>
                 After activation, you can scan QR codes
@@ -380,13 +426,13 @@ export default function LoadActivationScreen() {
             }
           >
             {loading ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <>
                 <MaterialIcons
                   name="play-circle-filled"
                   size={24}
-                  color="#ffffff"
+                  color={colors.white}
                 />
                 <Text style={styles.activateButtonText}>
                   {orderDetails?.load_activated_at
@@ -410,28 +456,16 @@ export default function LoadActivationScreen() {
   );
 }
 
-const getStatusStyle = (status) => {
-  const styles = {
-    pending: { backgroundColor: "#9ca3af" },
-    assigned: { backgroundColor: "#3b82f6" },
-    activated: { backgroundColor: "#10b981" },
-    in_transit: { backgroundColor: "#8b5cf6" },
-    delivered: { backgroundColor: "#059669" },
-    completed: { backgroundColor: "#10b981" },
-  };
-  return styles[status] || { backgroundColor: "#6b7280" };
-};
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.gray[100],
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.gray[100],
   },
   content: {
     padding: 16,
@@ -444,34 +478,31 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#111827",
+    color: colors.slate[900],
     marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: "#6b7280",
+    color: colors.gray[500],
     marginTop: 4,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#6b7280",
+    color: colors.gray[500],
   },
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
     elevation: 3,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#111827",
+    color: colors.slate[900],
     marginBottom: 16,
   },
   infoRow: {
@@ -480,16 +511,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: colors.gray[200],
   },
   infoLabel: {
     fontSize: 14,
-    color: "#6b7280",
+    color: colors.gray[500],
     fontWeight: "500",
   },
   infoValue: {
     fontSize: 14,
-    color: "#111827",
+    color: colors.slate[900],
     flex: 1,
     textAlign: "right",
   },
@@ -499,14 +530,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 12,
     fontWeight: "600",
   },
   alertBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#d1fae5",
+    backgroundColor: colors.emerald[100],
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
@@ -515,7 +546,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
     fontSize: 14,
-    color: "#065f46",
+    color: colors.green[700],
   },
   locationStatus: {
     flexDirection: "row",
@@ -525,17 +556,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
     fontSize: 14,
-    color: "#374151",
+    color: colors.gray[700],
   },
   permissionButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,
     marginLeft: 12,
   },
   permissionButtonText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -549,7 +580,7 @@ const styles = StyleSheet.create({
   instructionText: {
     marginLeft: 12,
     fontSize: 14,
-    color: "#374151",
+    color: colors.gray[700],
     flex: 1,
   },
   actionContainer: {
@@ -557,7 +588,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   activateButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -566,25 +597,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   disabledButton: {
-    backgroundColor: "#9ca3af",
+    backgroundColor: colors.gray[400],
     opacity: 0.6,
   },
   activateButtonText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 18,
     fontWeight: "bold",
     marginLeft: 8,
   },
   cancelButton: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.gray[300],
     alignItems: "center",
   },
   cancelButtonText: {
-    color: "#374151",
+    color: colors.gray[700],
     fontSize: 16,
     fontWeight: "600",
   },
