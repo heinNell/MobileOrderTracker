@@ -2,17 +2,18 @@ import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View
-} from "react-native";
+import
+  {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View
+  } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
@@ -85,21 +86,59 @@ const storage = Platform.OS === 'web'
 function DriverDashboard() {
   const [activeOrder, setActiveOrder] = useState(null);
   const [scannedOrders, setScannedOrders] = useState([]);
+  const [assignedOrders, setAssignedOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [locationTracking, setLocationTracking] = useState(false);
   const { user, signOut, isAuthenticated } = useAuth();
   const router = useRouter();
 
+  // Define activateOrderWithTracking before loadDriverData to avoid initialization issues
+  const activateOrderWithTracking = useCallback(async (order) => {
+    try {
+      // Set as active order (same as QR scan)
+      await storage.setItem("activeOrderId", order.id);
+      
+      // Initialize and start location tracking
+      await locationService.initialize();
+      await locationService.setCurrentOrder(order.id);
+      await locationService.startTracking();
+      
+      // Update UI state
+      setActiveOrder(order);
+      setLocationTracking(true);
+      
+      console.log("Order activated with tracking:", order.order_number);
+      
+      // Show success message
+      Alert.alert(
+        "Order Activated",
+        `Order #${order.order_number} is now active and location tracking has started.`,
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      console.error("Error activating order with tracking:", error);
+      Alert.alert(
+        "Activation Error",
+        "Failed to activate order. Please try again.",
+        [{ text: "OK" }]
+      );
+    }
+  }, []);
+
   const loadDriverData = useCallback(async () => {
     try {
       setLoading(true);
       if (!user || !isAuthenticated) return;
 
+      // Initialize LocationService to ensure it knows about current order
+      await locationService.initialize();
+
+      let activeOrderData = null;
       const activeOrderId = await storage.getItem("activeOrderId");
 
       if (activeOrderId) {
-        const { data: activeOrderData, error: activeError } = await supabase
+        const { data, error: activeError } = await supabase
           .from("orders")
           .select("*")
           .eq("id", activeOrderId)
@@ -109,22 +148,55 @@ function DriverDashboard() {
         if (activeError) {
           if (activeError.code === "PGRST116") {
             await storage.removeItem("activeOrderId");
-            setActiveOrder(null);
+            console.log("Removed invalid active order ID");
           } else {
             console.error("Error fetching active order:", activeError);
           }
         } else {
-          setActiveOrder(activeOrderData);
+          activeOrderData = data;
         }
-      } else {
-        setActiveOrder(null);
       }
 
+      // If no active order, look for newly assigned orders
+      if (!activeOrderData) {
+        const { data: assignedOrders, error: assignedError } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("assigned_driver_id", user.id)
+          .eq("status", "assigned")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!assignedError && assignedOrders && assignedOrders.length > 0) {
+          // Auto-activate the most recent assigned order with full tracking setup
+          activeOrderData = assignedOrders[0];
+          console.log("Auto-activating newly assigned order:", activeOrderData.order_number);
+          
+          // Use the full activation function to set up tracking
+          await activateOrderWithTracking(activeOrderData);
+        }
+      }
+
+      // Load all assigned orders for display
+      const { data: allAssignedOrders, error: allAssignedError } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("assigned_driver_id", user.id)
+        .eq("status", "assigned")
+        .order("created_at", { ascending: false });
+
+      if (!allAssignedError) {
+        setAssignedOrders(allAssignedOrders || []);
+      }
+
+      setActiveOrder(activeOrderData);
+
+      // Fetch scanned/in-progress orders (EXCLUDING completed and cancelled)
       const { data: scannedData, error: scannedError } = await supabase
         .from("orders")
         .select("*")
         .eq("assigned_driver_id", user.id)
-        .not("status", "eq", "pending")
+        .not("status", "in", '("pending","completed","cancelled")') // Exclude pending, completed, and cancelled
         .order("updated_at", { ascending: false })
         .limit(5);
 
@@ -148,7 +220,7 @@ function DriverDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated, activateOrderWithTracking]);
 
   useEffect(() => {
     if (user && isAuthenticated) {
@@ -158,28 +230,22 @@ function DriverDashboard() {
     }
   }, [user, isAuthenticated, loadDriverData]);
 
+  // Auto-refresh to catch completed orders being removed
+  useEffect(() => {
+    if (!user || !isAuthenticated) return;
+    
+    // Refresh every 5 seconds to update orders list
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing dashboard data');
+      loadDriverData();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [user, isAuthenticated, loadDriverData]);
+
   const onRefresh = () => {
     setRefreshing(true);
     loadDriverData();
-  };
-
-  const startLocationTracking = async () => {
-    try {
-      if (!activeOrder?.id) return;
-      await locationService.startTracking(activeOrder.id);
-      setLocationTracking(true);
-      if (Platform.OS === 'web') {
-        alert("Started tracking your location for this order.");
-      } else {
-        Alert.alert("Location Tracking", "Started tracking your location for this order.");
-      }
-    } catch (error) {
-      if (Platform.OS === 'web') {
-        alert("Failed to start location tracking.");
-      } else {
-        Alert.alert("Error", "Failed to start location tracking.");
-      }
-    }
   };
 
   const stopLocationTracking = async () => {
@@ -366,7 +432,7 @@ function DriverDashboard() {
                   <Text style={styles.buttonText}>Stop Tracking</Text>
                 </Pressable>
               ) : (
-                <Pressable style={styles.trackButton} onPress={startLocationTracking}>
+                <Pressable style={styles.trackButton} onPress={() => activateOrderWithTracking(activeOrder)}>
                   <MaterialIcons name="my-location" size={20} color={colors.white} />
                   <Text style={styles.buttonText}>Start Tracking</Text>
                 </Pressable>
@@ -378,12 +444,50 @@ function DriverDashboard() {
             <MaterialIcons name="inbox" size={48} color={colors.gray400} />
             <Text style={styles.noActiveText}>No Active Order</Text>
             <Text style={styles.noActiveSubtext}>
-              Scan a QR code to start tracking an order
+              No assigned orders available. Check back later or scan a QR code to start tracking an order.
             </Text>
             <Pressable style={styles.scanButton} onPress={() => router.push('scanner')}>
               <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
               <Text style={styles.buttonText}>Scan QR Code</Text>
             </Pressable>
+          </View>
+        )}
+
+        {assignedOrders.length > 0 && !activeOrder && (
+          <View style={styles.assignedOrdersCard}>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="assignment" size={24} color={colors.primary} />
+              <Text style={styles.cardTitle}>Available Orders</Text>
+            </View>
+            <Text style={styles.cardSubtitle}>
+              Tap any order to activate and start tracking
+            </Text>
+
+            {assignedOrders.map((order) => (
+              <Pressable
+                key={order.id}
+                style={styles.assignedOrderItem}
+                onPress={() => activateOrderWithTracking(order)}
+              >
+                <View style={styles.orderInfo}>
+                  <Text style={styles.assignedOrderNumber}>
+                    #{order.order_number}
+                  </Text>
+                  <Text style={styles.assignedOrderDetails}>
+                    {order.customer_name} • {order.delivery_address}
+                  </Text>
+                  <Text style={styles.assignedOrderDate}>
+                    Assigned: {new Date(order.created_at).toLocaleString()}
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.activateButton}
+                  onPress={() => activateOrderWithTracking(order)}
+                >
+                  <MaterialIcons name="play-circle-filled" size={24} color={colors.white} />
+                </Pressable>
+              </Pressable>
+            ))}
           </View>
         )}
 
@@ -450,6 +554,24 @@ function DriverDashboard() {
             <Pressable style={styles.quickActionButton} onPress={loadDriverData}>
               <MaterialIcons name="refresh" size={24} color={colors.warning} />
               <Text style={styles.quickActionText}>Refresh</Text>
+            </Pressable>
+
+            <Pressable 
+              style={[styles.quickActionButton, { backgroundColor: colors.info }]} 
+              onPress={() => {
+                // For now, we'll use an alert with diagnostic info
+                const LocationDiagnostics = require('../services/LocationDiagnostics').LocationDiagnostics;
+                LocationDiagnostics.checkStoredData().then(data => {
+                  Alert.alert(
+                    'Location Diagnostics',
+                    `Active Order: ${data.activeOrderId || 'NULL'}\nTracking Order: ${data.trackingOrderId || 'NULL'}\n\nTip: Scan a QR code to set an active order.`,
+                    [{ text: 'OK' }]
+                  );
+                });
+              }}
+            >
+              <MaterialIcons name="bug-report" size={24} color={colors.white} />
+              <Text style={[styles.quickActionText, { color: colors.white }]}>Debug</Text>
             </Pressable>
           </View>
         </View>
@@ -616,6 +738,56 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   quickActionText: { fontSize: 14, fontWeight: "600", color: colors.gray700, marginTop: 8 },
+  
+  // Assigned Orders styles
+  assignedOrdersCard: {
+    backgroundColor: colors.white,
+    padding: 20,
+    marginTop: 12,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    elevation: 3,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: colors.gray600,
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  assignedOrderItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: colors.gray50,
+  },
+  assignedOrderNumber: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  assignedOrderDetails: {
+    fontSize: 14,
+    color: colors.gray700,
+    marginTop: 4,
+  },
+  assignedOrderDate: {
+    fontSize: 12,
+    color: colors.gray500,
+    marginTop: 4,
+  },
+  activateButton: {
+    backgroundColor: colors.success,
+    borderRadius: 20,
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
 
 export default DriverDashboard;

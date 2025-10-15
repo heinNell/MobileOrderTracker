@@ -144,8 +144,18 @@ export default function OrdersScreen() {
   const sendLocationToDashboard = async () => {
     try {
       setSendingLocation(true);
+      
+      // Initialize LocationService to get current order info
+      await locationService.initialize();
+      const currentOrderId = await locationService.getCurrentOrderId();
+      
       await locationService.sendImmediateLocationUpdate();
-      Alert.alert("Location Sent", "Your current location has been sent to the dashboard for tracking.", [{ text: "OK" }]);
+      
+      Alert.alert(
+        "Location Sent", 
+        `Your current location has been sent to the dashboard.\n\nOrder ID: ${currentOrderId || 'NULL'}\n\nIf Order ID shows NULL, scan a QR code first to activate an order.`, 
+        [{ text: "OK" }]
+      );
     } catch (error) {
       console.error('Error sending location to dashboard:', error);
       Alert.alert("Error", "Failed to send location to dashboard. Please check your internet connection and try again.", [{ text: "OK" }]);
@@ -178,11 +188,12 @@ export default function OrdersScreen() {
         console.log('📋 Sample orders in database:', allOrders);
       }
 
-      // Fetch all orders assigned to this driver
+      // Fetch all orders assigned to this driver (EXCLUDING completed/cancelled)
       const { data, error } = await supabase
         .from("orders")
         .select("*")
         .eq("assigned_driver_id", user.id)
+        .not("status", "in", '("completed","cancelled")') // Exclude completed and cancelled orders
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -225,26 +236,49 @@ export default function OrdersScreen() {
     try {
       console.log('📦 Order pressed:', order.order_number, 'Status:', order.status);
       
-      // Set this order as the active order in storage
+      // Set this order as the active order in storage (same as QR scan)
       await AsyncStorage.setItem('activeOrderId', order.id.toString());
+      
+      // Initialize LocationService and start tracking (same as QR scan)
+      const LocationService = require("../services/LocationService").default;
+      const locationService = new LocationService();
+      
+      // Initialize the service to detect current order
+      await locationService.initialize();
+      
+      // Start tracking for this order (same as QR scan)
+      await locationService.startTracking(order.id);
+      
+      console.log("📍 Location tracking started for order:", order.order_number);
       
       // Navigate based on order status
       switch (order.status) {
         case 'assigned':
           // For newly assigned orders, activate them and go to details
           console.log('📦 Activating assigned order');
-          router.push(`/order-details/${order.id}`);
+          router.push(`/(tabs)/${order.id}`);
           break;
         case 'activated':
         case 'in_progress':
-          // For already active/in-progress orders, go directly to details
-          console.log('📦 Opening active/in-progress order details');
-          router.push(`/order-details/${order.id}`);
+        case 'in_transit':
+        case 'arrived':
+        case 'loading':
+        case 'loaded':
+        case 'unloading':
+          // For active orders, go directly to order management
+          console.log('📦 Opening active order management');
+          router.push(`/(tabs)/${order.id}`);
+          break;
+        case 'completed':
+        case 'delivered':
+          // For completed orders, go to details view
+          console.log('📦 Opening completed order details');
+          router.push(`/(tabs)/${order.id}`);
           break;
         default:
           // For other statuses, might need QR scanning or different flow
           console.log('📦 Order status requires special handling:', order.status);
-          router.push(`/qr-scanner?orderId=${order.id}`);
+          router.push(`/scanner?orderId=${order.id}`);
           break;
       }
     } catch (error) {
@@ -258,6 +292,19 @@ export default function OrdersScreen() {
     if (user) {
       loadOrders();
     }
+  }, [user, loadOrders]);
+
+  // Refresh orders periodically to catch completed orders
+  useEffect(() => {
+    if (!user) return;
+    
+    // Refresh every 5 seconds when screen is active
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing orders list');
+      loadOrders();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [user, loadOrders]);
 
   const onRefresh = () => {

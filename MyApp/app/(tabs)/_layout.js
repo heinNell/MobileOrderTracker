@@ -57,7 +57,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="[orderId]"
         options={{
-          href: null, // Hide from tab bar
+          href: null, // Hide from tab bar - this is a dynamic route
+          title: 'Order Details',
         }}
       />
       <Tabs.Screen

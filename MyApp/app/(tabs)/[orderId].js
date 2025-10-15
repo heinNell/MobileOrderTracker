@@ -20,17 +20,20 @@ import LocationService from "../services/LocationService";
 import { parsePostGISPoint } from "../shared/locationUtils";
 
 const STATUS_FLOW = {
-  assigned: ["activated"],
+  pending: ["assigned", "activated"],
+  assigned: ["activated", "in_progress"], // Allow direct transition to in_progress
   activated: ["in_progress"],
-  in_progress: ["in_transit"],
-  in_transit: ["arrived"],
-  arrived: ["loading"],
-  loading: ["loaded"],
-  loaded: ["unloading"],
+  in_progress: ["in_transit", "arrived", "loading", "loaded", "unloading"], // Allow skipping to any loading/delivery stage
+  in_transit: ["arrived", "loading", "loaded", "unloading"], // Allow skipping ahead
+  arrived: ["loading", "loaded", "unloading"], // Allow skipping loading step
+  loading: ["loaded", "unloading"], // Allow skipping directly to unloading
+  loaded: ["in_transit", "unloading"], // Allow going back to transit if needed
   unloading: ["completed"]
 };
 
 const STATUS_ACTIONS = [
+  { status: "pending", label: "Assign Driver", color: "#6b7280" },
+  { status: "assigned", label: "Activate Order", color: "#2563eb" },
   { status: "activated", label: "Start Order", color: "#10b981" },
   { status: "in_progress", label: "Mark In Transit", color: "#8B5CF6" },
   { status: "in_transit", label: "Mark Arrived", color: "#10B981" },
@@ -39,6 +42,22 @@ const STATUS_ACTIONS = [
   { status: "loaded", label: "Start Unloading", color: "#F59E0B" },
   { status: "unloading", label: "Complete Delivery", color: "#059669" },
 ];
+
+// Helper function to validate status transitions
+// eslint-disable-next-line no-unused-vars
+const isValidStatusTransition = (currentStatus, newStatus) => {
+  if (!currentStatus || !newStatus) return false;
+  const allowedTransitions = STATUS_FLOW[currentStatus] || [];
+  return allowedTransitions.includes(newStatus);
+};
+
+// Helper function to get next available actions for current status
+// eslint-disable-next-line no-unused-vars
+const getNextActions = (currentStatus) => {
+  if (!currentStatus) return [];
+  const nextStatuses = STATUS_FLOW[currentStatus] || [];
+  return STATUS_ACTIONS.filter(action => nextStatuses.includes(action.status));
+};
 
 const locationService = new LocationService();
 
@@ -89,6 +108,27 @@ export default function OrderDetailsScreen() {
   const loadOrderDetails = useCallback(async () => {
     if (!orderId) return;
     
+    console.log('🔍 Loading order details for orderId:', orderId);
+    
+    // Validate orderId format to prevent UUID errors
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (!uuidRegex.test(orderId)) {
+      console.error('❌ Invalid order ID format:', orderId);
+      console.error('❌ This might be a navigation error. Expected UUID, got:', typeof orderId, orderId);
+      
+      // Check if this is a navigation to scanner
+      if (orderId === 'scanner' || orderId === 'qr-scanner') {
+        console.log('🔄 Detected scanner route, redirecting...');
+        router.replace('/(tabs)/scanner');
+        return;
+      }
+      
+      setError(`Invalid order ID format: ${orderId}`);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -131,7 +171,7 @@ export default function OrderDetailsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orderId, user, isTracking]);
+  }, [orderId, user, isTracking, router]);
 
   useEffect(() => {
     loadOrderDetails();
@@ -182,81 +222,187 @@ export default function OrderDetailsScreen() {
   };
 
   const getNextActions = useCallback(() => {
-    if (!order) return [];
+    if (!order) {
+      console.log('🔍 getNextActions: No order available');
+      return [];
+    }
+    
+    console.log('🔍 getNextActions:', {
+      currentStatus: order.status,
+      orderId: order.id
+    });
+    
     const currentIndex = STATUS_ACTIONS.findIndex(
       (a) => a.status === order.status
     );
-    return STATUS_ACTIONS.slice(currentIndex + 1);
+    
+    console.log('🔍 Current status index:', currentIndex);
+    
+    const nextActions = STATUS_ACTIONS.slice(currentIndex + 1);
+    console.log('🔍 Next actions available:', nextActions.map(a => ({ status: a.status, label: a.label })));
+    
+    return nextActions;
   }, [order]);
 
   const updateStatus = useCallback(
     async (newStatus) => {
-      if (!order?.id || !user) return;
+      console.log('🔄 Status update requested:', {
+        currentStatus: order?.status,
+        newStatus,
+        orderId: order?.id,
+        userId: user?.id,
+        assignedDriverId: order?.assigned_driver_id
+      });
 
-      // Validate transition
-      if (!isValidStatusTransition(order.status, newStatus)) {
-        Alert.alert('Invalid Status', 'This status transition is not allowed');
+      if (!order?.id || !user) {
+        console.error('❌ Missing order or user:', { orderId: order?.id, userId: user?.id });
+        Alert.alert('Error', 'Order or user information is missing');
         return;
       }
 
-      Alert.prompt(
+      // Check if order is assigned to current driver
+      if (!order.assigned_driver_id || order.assigned_driver_id !== user.id) {
+        console.warn('⚠️ Order not assigned to current driver, attempting to assign...');
+        
+        // Try to assign the driver to this order first
+        try {
+          const { error: assignError } = await supabase
+            .from("orders")
+            .update({
+              assigned_driver_id: user.id,
+              driver_id: user.id,
+              status: order.status === 'pending' ? 'assigned' : order.status,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", order.id);
+
+          if (assignError) {
+            console.error('❌ Failed to assign driver:', assignError);
+            Alert.alert(
+              'Assignment Required',
+              'This order needs to be assigned to you by a dispatcher before you can update it.',
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+
+          console.log('✅ Driver assigned successfully, reloading order...');
+          // Reload the order to get updated data
+          await loadOrderDetails();
+          
+          Alert.alert(
+            'Order Assigned',
+            'This order has been assigned to you. Please try the status update again.',
+            [{ text: 'OK' }]
+          );
+          return;
+        } catch (assignmentError) {
+          console.error('❌ Assignment error:', assignmentError);
+          Alert.alert(
+            'Error',
+            'Failed to assign order. Please contact dispatch.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
+      // Validate transition
+      if (!isValidStatusTransition(order.status, newStatus)) {
+        console.error('❌ Invalid status transition:', { from: order.status, to: newStatus });
+        Alert.alert('Invalid Status', `Cannot change status from ${order.status} to ${newStatus}`);
+        return;
+      }
+
+      console.log('✅ Status transition is valid, showing confirmation');
+
+      // Note: Alert.prompt is iOS-only, using Alert.alert for cross-platform compatibility
+      Alert.alert(
         'Status Update',
-        'Add any notes for this status change (optional)',
+        `Change status from "${order.status}" to "${newStatus}"?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Update',
-            onPress: async (notes) => {
+            onPress: async () => {
               try {
+                console.log('📝 Starting status update process...');
                 setStatusUpdating(true);
 
-                // Get current location
-                const location = await locationService.getCurrentLocation().catch(() => null);
-
-                // Insert status update
+                console.log('💾 Inserting status update record...');
+                // Insert status update (notes removed for cross-platform compatibility)
                 const { error: statusError } = await supabase
                   .from("status_updates")
                   .insert({
                     order_id: order.id,
-                    driver_id: user.id,
+                    driver_id: user.id, // Fixed: Use driver_id to match database schema
                     status: newStatus,
-                    location: location && location.coords
-                      ? `SRID=4326;POINT(${location.coords.longitude} ${location.coords.latitude})`
-                      : null,
-                    notes: notes || null,
+                    notes: null, // Notes functionality removed for cross-platform compatibility
                     created_at: new Date().toISOString(),
                   });
 
-                if (statusError) throw statusError;
+                if (statusError) {
+                  console.error('❌ Status update insert error:', statusError);
+                  throw statusError;
+                }
+                console.log('✅ Status update record created');
 
+                console.log('🔄 Updating order status...');
                 // Update order
                 const updateData = { status: newStatus };
                 if ((newStatus === "in_progress" || newStatus === "in_transit") && !order.actual_start_time) {
                   updateData.actual_start_time = new Date().toISOString();
                 }
                 if (newStatus === "completed") {
+                  console.log('🏁 Completing order - setting end times and stopping tracking...');
                   updateData.actual_end_time = new Date().toISOString();
                   updateData.delivered_at = new Date().toISOString();
+                  console.log('🛑 Calling locationService.stopTracking()...');
                   await locationService.stopTracking();
+                  console.log('✅ locationService.stopTracking() completed');
                   setIsTracking(false);
+                  console.log('✅ setIsTracking(false) called');
                 }
 
+                console.log('📊 Update data:', updateData);
                 const { error: orderError } = await supabase
                   .from("orders")
                   .update(updateData)
                   .eq("id", order.id);
 
-                if (orderError) throw orderError;
+                if (orderError) {
+                  console.error('❌ Order update error:', orderError);
+                  throw orderError;
+                }
+                console.log('✅ Order status updated successfully in database to:', newStatus);
 
-                Alert.alert("Success", "Status updated successfully");
-
-                // Refresh order data
-                loadOrderDetails();
+                // If completing the order, show success and navigate away
+                if (newStatus === "completed") {
+                  Alert.alert(
+                    "✅ Delivery Complete!", 
+                    `Order ${order.order_number} has been completed successfully.`,
+                    [
+                      {
+                        text: "OK",
+                        onPress: () => {
+                          console.log('🏠 Navigating back to dashboard after completion');
+                          router.replace('/(tabs)/orders'); // Navigate back to orders list
+                        }
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert("Success", `Status updated to "${newStatus}" successfully`);
+                  console.log('🔄 Refreshing order data...');
+                  // Refresh order data
+                  loadOrderDetails();
+                }
               } catch (e) {
-                console.error("Update status error:", e);
-                Alert.alert("Error", e?.message || "Failed to update status");
+                console.error("❌ Update status error:", e);
+                Alert.alert("Error", `Failed to update status: ${e?.message || 'Unknown error'}`);
               } finally {
                 setStatusUpdating(false);
+                console.log('🏁 Status update process completed');
               }
             },
           },
@@ -264,7 +410,7 @@ export default function OrderDetailsScreen() {
         'plain-text'
       );
     },
-    [order, user, loadOrderDetails]
+    [order, user, loadOrderDetails, router]
   );
 
   const startTracking = useCallback(async () => {
@@ -583,10 +729,10 @@ export default function OrderDetailsScreen() {
         )}
 
         {/* Status Updates */}
-        {order.status !== "completed" && order.status !== "cancelled" && getNextActions().length > 0 && (
+        {order.status !== "completed" && order.status !== "cancelled" && getNextActions(order.status).length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Update Status</Text>
-            {getNextActions().map((action) => (
+            {getNextActions(order.status).map((action) => (
               <TouchableOpacity
                 key={action.status}
                 style={[

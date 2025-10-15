@@ -34,10 +34,21 @@ export default function ScannerScreen() {
     console.log("✅ Scan successful:", order);
     setScanning(false);
     try {
+      // Store as active order
       await storage.setItem('activeOrderId', order.id);
+      
+      // Initialize LocationService and start tracking
       const LocationService = require("../services/LocationService").default;
       const locationService = new LocationService();
+      
+      // Initialize the service to detect current order
+      await locationService.initialize();
+      
+      // Start tracking for this order
       await locationService.startTracking(order.id);
+      
+      console.log("📍 Location tracking started for order:", order.order_number);
+      
       router.push(`/(tabs)/${order.id}`);
     } catch (error) {
       console.error("❌ Error setting active order:", error);

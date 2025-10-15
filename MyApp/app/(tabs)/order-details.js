@@ -56,6 +56,13 @@ export default function OrderDetailsScreen() {
       setLoading(true);
       setError(null);
 
+      // Validate orderId format to prevent UUID errors
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(orderId)) {
+        throw new Error(`Invalid order ID format: ${orderId}`);
+      }
+
       const { data, error } = await supabase
         .from("orders")
         .select(

@@ -363,10 +363,10 @@ export default function GeofencesPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {coords
-                            ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(
-                                6
-                              )}`
+                          {coords && 
+                           coords.lat !== undefined && 
+                           coords.lng !== undefined
+                            ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`
                             : "—"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

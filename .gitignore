@@ -282,3 +282,6 @@ export_env.ps1
 
 # Local Netlify folder
 .netlify
+*.apk
+*.apk
+MyApp/*.apk

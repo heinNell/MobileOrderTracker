@@ -39,6 +39,8 @@ export default function EnhancedOrdersPage() {
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [showQRDebugger, setShowQRDebugger] = useState(false);
   const [debugOrderId, setDebugOrderId] = useState<string>("");
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [trackingLink, setTrackingLink] = useState<string>("");
   const [user, setUser] = useState<any>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     userStatus: "Unknown",
@@ -625,6 +627,31 @@ export default function EnhancedOrdersPage() {
     setShowEditModal(true);
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm("Are you sure you want to delete this order? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      handleSuccess("Order deleted successfully!");
+      await fetchOrders(currentPage);
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      handleApiError(error, "Failed to delete order");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const runQuickDiagnostic = async () => {
     try {
       setLoading(true);
@@ -1023,6 +1050,35 @@ export default function EnhancedOrdersPage() {
                           >
                             Edit
                           </button>
+                          {(order.status === 'assigned' || order.status === 'activated' || order.status === 'in_progress' || order.status === 'in_transit' || order.status === 'loaded' || order.status === 'unloading' || order.status === 'completed') && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  const link = `${window.location.origin}/tracking/${order.id}/public`;
+                                  setTrackingLink(link);
+                                  setShowTrackingModal(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-900 font-semibold"
+                                title="Get Tracking Link"
+                              >
+                                🔗 Track
+                              </button>
+                              <button
+                                onClick={() => window.open(`/tracking/${order.id}/public`, '_blank')}
+                                className="text-indigo-600 hover:text-indigo-900"
+                                title="Open Tracking Page"
+                              >
+                                � View
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => handleDeleteOrder(order.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Order"
+                          >
+                            Delete
+                          </button>
                           <button
                             onClick={() => handleExportToPDF(order)}
                             className="text-purple-600 hover:text-purple-900"
@@ -1197,6 +1253,83 @@ export default function EnhancedOrdersPage() {
             setDebugOrderId("");
           }}
         />
+      )}
+
+      {/* Tracking Link Modal */}
+      {showTrackingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">📍 Customer Tracking Link</h2>
+              <button
+                onClick={() => setShowTrackingModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Share this link with your customer to let them track the delivery in real-time:
+                </p>
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+                  <code className="text-sm text-blue-600 break-all">{trackingLink}</code>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(trackingLink);
+                    handleSuccess("Tracking link copied to clipboard!");
+                  }}
+                  className="flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy Link
+                </button>
+
+                <button
+                  onClick={() => window.open(trackingLink, '_blank')}
+                  className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Open Link
+                </button>
+
+                <button
+                  onClick={() => {
+                    const subject = encodeURIComponent("Track Your Delivery");
+                    const body = encodeURIComponent(`You can track your delivery in real-time here:\n\n${trackingLink}\n\nThank you!`);
+                    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+                  }}
+                  className="flex items-center justify-center px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Email
+                </button>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>ℹ️ Features:</strong> The tracking page shows live driver location, 
+                  route history, trip distance, duration, and automatically refreshes every 10 minutes.
+                  No login required!
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

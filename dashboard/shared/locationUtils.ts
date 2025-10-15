@@ -119,6 +119,14 @@ export function calculateDistance(
  * Format coordinates for display
  */
 export function formatCoordinates(location: Location): string {
+  // Check if coordinates exist and are valid numbers
+  if (!location || 
+      typeof location.latitude !== 'number' || 
+      typeof location.longitude !== 'number' ||
+      isNaN(location.latitude) || 
+      isNaN(location.longitude)) {
+    return 'N/A';
+  }
   return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
 }
 

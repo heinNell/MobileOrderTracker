@@ -457,7 +457,9 @@ export default function DriversPage() {
                                 driver.last_location_update
                               ).toLocaleString()}
                             </div>
-                            {driver.last_location && (
+                            {driver.last_location && 
+                             driver.last_location.latitude !== undefined && 
+                             driver.last_location.longitude !== undefined && (
                               <div className="text-xs">
                                 {driver.last_location.latitude.toFixed(6)},{" "}
                                 {driver.last_location.longitude.toFixed(6)}

@@ -1,0 +1,12 @@
+-- Check the main function
+SELECT pg_get_functiondef('public.sync_driver_location_and_broadcast'::regproc);
+
+-- Check trigger functions
+SELECT pg_get_functiondef('public.fill_driver_location_from_latlng'::regproc);
+SELECT pg_get_functiondef('public.fill_driver_location_and_propagate'::regproc);
+
+[
+  {
+    "pg_get_functiondef": "CREATE OR REPLACE FUNCTION public.fill_driver_location_and_propagate()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_lat numeric := NEW.latitude;\n  v_lng numeric := NEW.longitude;\n  v_loc_json jsonb;\n  v_geom geometry;\nBEGIN\n  -- Populate JSON location if missing or empty and lat/lng available\n  IF (NEW.location IS NULL OR NEW.location = '{}'::jsonb) AND v_lat IS NOT NULL AND v_lng IS NOT NULL THEN\n    NEW.location := jsonb_build_object('lat', v_lat, 'lng', v_lng);\n  END IF;\n\n  -- Normalize timestamps\n  IF NEW.created_at IS NULL THEN\n    NEW.created_at := now();\n  END IF;\n  IF NEW.\"timestamp\" IS NULL THEN\n    NEW.\"timestamp\" := now();\n  END IF;\n\n  -- Insert into location_updates if lat/lng present\n  IF v_lat IS NOT NULL AND v_lng IS NOT NULL THEN\n    BEGIN\n      v_geom := ST_SetSRID(ST_MakePoint(v_lng::double precision, v_lat::double precision), 4326);\n      INSERT INTO public.location_updates(\n        id, order_id, driver_id, location, accuracy_meters, speed_kmh, heading, battery_level, \"timestamp\", created_at\n      ) VALUES (\n        gen_random_uuid(), NEW.order_id, NEW.driver_id, v_geom, NEW.accuracy_meters, NEW.speed_kmh, NEW.heading, NULL, NEW.\"timestamp\", now()\n      );\n    EXCEPTION WHEN OTHERS THEN\n      -- Log at debug level but don't fail the main insert/update\n      RAISE DEBUG 'Could not insert into location_updates: %', SQLERRM;\n    END;\n  END IF;\n\n  -- Upsert into map_locations to keep latest driver location\n  IF v_lat IS NOT NULL AND v_lng IS NOT NULL THEN\n    INSERT INTO public.map_locations(\n      id, user_id, latitude, longitude, address, place_name, place_id, location_type, notes, created_at, updated_at\n    ) VALUES (\n      gen_random_uuid(), NEW.driver_id, v_lat, v_lng, NULL, NULL, NULL, 'driver_latest', NULL, now(), now()\n    )\n    ON CONFLICT (user_id) DO UPDATE\n    SET latitude = EXCLUDED.latitude,\n        longitude = EXCLUDED.longitude,\n        updated_at = now(),\n        location_type = 'driver_latest';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  }
+]

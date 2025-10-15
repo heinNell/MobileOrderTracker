@@ -1,7 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera"; // ✅ Fixed import
 import { useEffect, useState } from "react";
-import {
+import
+  {
     ActivityIndicator,
     Alert,
     Dimensions,
@@ -10,7 +11,7 @@ import {
     Text,
     TouchableOpacity,
     View,
-} from "react-native";
+  } from "react-native";
 import { supabase } from "../lib/supabase";
 
 const { width } = Dimensions.get("window");
@@ -68,6 +69,13 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
 
     if (!orderId) {
       throw new Error("Invalid QR code format");
+    }
+
+    // Validate UUID format to prevent database errors
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (!uuidRegex.test(orderId)) {
+      throw new Error(`Invalid order ID format: ${orderId}. Expected UUID format.`);
     }
 
     // Fetch order from database

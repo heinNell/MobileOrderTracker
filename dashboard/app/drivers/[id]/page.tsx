@@ -436,7 +436,9 @@ export default function DriverDetailPage({ params }: DriverDetailProps) {
                         {formatDate(driver.last_location_update)}
                       </p>
                     </div>
-                    {driver.last_location && (
+                    {driver.last_location && 
+                     driver.last_location.latitude !== undefined && 
+                     driver.last_location.longitude !== undefined && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Coordinates</label>
                         <p className="mt-1 text-sm text-gray-900 font-mono">

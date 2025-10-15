@@ -47,6 +47,17 @@ export default function TrackingPage() {
 
   useEffect(() => {
     checkAuth();
+    
+    // Auto-refresh every 10 minutes
+    const refreshInterval = setInterval(() => {
+      console.log("Auto-refreshing tracking data...");
+      fetchOrders();
+      fetchDriverLocations();
+    }, 10 * 60 * 1000); // 10 minutes
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -88,7 +99,7 @@ export default function TrackingPage() {
 
   const fetchOrders = async () => {
     try {
-      // Fetch active orders (in_transit or loaded status)
+      // Fetch active orders (all trackable statuses)
       const { data, error } = await supabase
         .from("orders")
         .select(
@@ -100,7 +111,7 @@ export default function TrackingPage() {
           )
         `
         )
-        .in("status", ["in_transit", "loaded", "unloading"])
+        .in("status", ["assigned", "activated", "in_progress", "in_transit", "loaded", "unloading", "loading", "arrived"])
         .order("created_at", { ascending: false });
 
       if (error) throw error;
