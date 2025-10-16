@@ -1,15 +1,14 @@
 {
   "version": 2,
-  "name": "mobile-order-tracker",
   "cleanUrls": true,
   "trailingSlash": false,
   "public": true,
   "buildCommand": "npm run web:build",
   "outputDirectory": "dist",
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
