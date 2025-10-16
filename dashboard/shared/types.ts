@@ -115,6 +115,8 @@ export interface Order {
   tenant_id: string;
   order_number: string;
   sku?: string;
+  customer_name?: string;
+  total_amount?: string | number;
   qr_code_data: string;
   qr_code_signature: string;
   qr_code_expires_at?: string;

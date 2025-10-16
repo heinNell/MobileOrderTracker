@@ -234,20 +234,94 @@ export default function EnhancedOrdersPage() {
       const from = (page - 1) * ordersPerPage;
       const to = from + ordersPerPage - 1;
 
-      const { data, error } = await supabase
-        .from("orders")
-        .select(
-          `
-          *,
-          assigned_driver:users!orders_assigned_driver_id_fkey(
+      // FIXED: Use a more reliable query method instead of foreign key naming
+      // First try the view approach, fallback to manual join
+      let data, error;
+      
+      try {
+        // Try using the orders_with_drivers view first
+        const viewResult = await supabase
+          .from("orders_with_drivers")
+          .select(`
             id,
-            full_name
-          )
-        `
-        )
-        .eq("tenant_id", userData.tenant_id)
-        .order(sortBy, { ascending: sortOrder === "asc" })
-        .range(from, to);
+            order_number,
+            status,
+            assigned_driver_id,
+            assigned_driver_name,
+            assigned_driver_email,
+            tenant_id,
+            loading_point_name,
+            loading_point_address,
+            unloading_point_name,
+            unloading_point_address,
+            delivery_instructions,
+            contact_name,
+            contact_phone,
+            created_at,
+            updated_at,
+            qr_code_data
+          `)
+          .eq("tenant_id", userData.tenant_id)
+          .order(sortBy, { ascending: sortOrder === "asc" })
+          .range(from, to);
+
+        if (viewResult.error && (viewResult.error.code === "42P01" || viewResult.error.message.includes("does not exist"))) {
+          // View doesn't exist or has column issues, use manual join
+          console.log("orders_with_drivers view issue detected, using manual join:", viewResult.error.message);
+          
+          const manualResult = await supabase
+            .from("orders")
+            .select(`
+              *,
+              assigned_driver:users(id, full_name, email)
+            `)
+            .eq("tenant_id", userData.tenant_id)
+            .order(sortBy, { ascending: sortOrder === "asc" })
+            .range(from, to);
+            
+          data = manualResult.data;
+          error = manualResult.error;
+        } else if (viewResult.error) {
+          // Other view error, fall back to manual join
+          console.log("View error, falling back to manual join:", viewResult.error.message);
+          const manualResult = await supabase
+            .from("orders")
+            .select(`
+              *,
+              assigned_driver:users(id, full_name, email)
+            `)
+            .eq("tenant_id", userData.tenant_id)
+            .order(sortBy, { ascending: sortOrder === "asc" })
+            .range(from, to);
+            
+          data = manualResult.data;
+          error = manualResult.error;
+        } else {
+          // Transform view data to match expected format
+          data = (viewResult.data || []).map(order => ({
+            ...order,
+            assigned_driver: order.assigned_driver_name ? {
+              id: order.assigned_driver_id,
+              full_name: order.assigned_driver_name,
+              email: order.assigned_driver_email
+            } : null
+          }));
+          error = viewResult.error;
+        }
+      } catch (queryError: any) {
+        console.error("Query error, falling back to basic query:", queryError);
+        
+        // Ultimate fallback: basic query without driver info
+        const basicResult = await supabase
+          .from("orders")
+          .select("*")
+          .eq("tenant_id", userData.tenant_id)
+          .order(sortBy, { ascending: sortOrder === "asc" })
+          .range(from, to);
+          
+        data = basicResult.data;
+        error = basicResult.error;
+      }
 
       if (error) {
         throw new Error(`Failed to fetch orders: ${error.message}`);

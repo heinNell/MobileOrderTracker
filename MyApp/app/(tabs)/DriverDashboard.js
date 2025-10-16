@@ -6,6 +6,7 @@ import
   {
     ActivityIndicator,
     Alert,
+    Linking,
     Platform,
     Pressable,
     RefreshControl,
@@ -20,26 +21,60 @@ import LocationService from "../services/LocationService";
 
 const locationService = new LocationService();
 
-// Color constants
+// Modern Mobile-First Color System
 const colors = {
-  primary: '#2563eb',
-  success: '#10b981',
-  danger: '#ef4444',
-  warning: '#f59e0b',
-  info: '#6366f1',
-  purple: '#8b5cf6',
+  // Primary brand colors
+  primary: '#3B82F6',
+  primaryLight: '#60A5FA',
+  primaryDark: '#1D4ED8',
   
-  white: '#fff',
-  gray50: '#F9FAFB',
-  gray100: '#F3F4F6',
-  gray200: '#E5E7EB',
-  gray400: '#9ca3af',
-  gray500: '#6B7280',
-  gray700: '#374151',
-  gray900: '#111827',
+  // Semantic colors
+  success: '#059669',
+  successLight: '#10B981',
+  successBackground: '#ECFDF5',
   
-  greenLight: '#D1FAE5',
-  redLight: '#FEE2E2',
+  danger: '#DC2626',
+  dangerLight: '#EF4444',
+  dangerBackground: '#FEF2F2',
+  
+  warning: '#D97706',
+  warningLight: '#F59E0B',
+  warningBackground: '#FFFBEB',
+  
+  info: '#2563EB',
+  infoLight: '#3B82F6',
+  infoBackground: '#EFF6FF',
+  
+  purple: '#7C3AED',
+  purpleLight: '#8B5CF6',
+  purpleBackground: '#F3E8FF',
+  
+  // Neutral grays (improved contrast)
+  white: '#FFFFFF',
+  gray50: '#F8FAFC',
+  gray100: '#F1F5F9',
+  gray200: '#E2E8F0',
+  gray300: '#CBD5E1',
+  gray400: '#94A3B8',
+  gray500: '#64748B',
+  gray600: '#475569',
+  gray700: '#334155',
+  gray800: '#1E293B',
+  gray900: '#0F172A',
+  
+  // Background colors
+  background: '#F8FAFC',
+  surface: '#FFFFFF',
+  surfaceSecondary: '#F1F5F9',
+  
+  // Border colors
+  border: '#E2E8F0',
+  borderLight: '#F1F5F9',
+  borderDark: '#CBD5E1',
+  
+  // Shadow colors
+  shadow: 'rgba(15, 23, 42, 0.08)',
+  shadowDark: 'rgba(15, 23, 42, 0.16)',
 };
 
 const getStatusColor = (status) => {
@@ -49,11 +84,11 @@ const getStatusColor = (status) => {
     activated: colors.success,
     in_progress: colors.info,
     in_transit: colors.purple,
-    arrived: colors.success,
+    arrived: colors.successLight,
     loading: colors.warning,
     loaded: colors.success,
-    unloading: colors.warning,
-    delivered: '#059669',
+    unloading: colors.warningLight,
+    delivered: colors.success,
     completed: colors.success,
     cancelled: colors.danger,
   };
@@ -90,6 +125,7 @@ function DriverDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [locationTracking, setLocationTracking] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true); // Add auto-refresh toggle
   const { user, signOut, isAuthenticated } = useAuth();
   const router = useRouter();
 
@@ -168,12 +204,20 @@ function DriverDashboard() {
           .limit(1);
 
         if (!assignedError && assignedOrders && assignedOrders.length > 0) {
-          // Auto-activate the most recent assigned order with full tracking setup
+          // Auto-activate the most recent assigned order (WITHOUT automatic location tracking)
           activeOrderData = assignedOrders[0];
           console.log("Auto-activating newly assigned order:", activeOrderData.order_number);
           
-          // Use the full activation function to set up tracking
-          await activateOrderWithTracking(activeOrderData);
+          // Set the active order, but tracking requires user gesture
+          try {
+            await storage.setItem("activeOrderId", activeOrderData.id);
+            await locationService.initialize();
+            await locationService.setCurrentOrder(activeOrderData.id);
+            // Note: Location tracking will be prompted in UI - user must start manually
+            console.log("Order activated. Location tracking available for user to start.");
+          } catch (activationError) {
+            console.error("Error in auto-activation:", activationError);
+          }
         }
       }
 
@@ -208,8 +252,13 @@ function DriverDashboard() {
       }
 
       try {
-        const trackingStatus = await locationService.isCurrentlyTracking();
-        setLocationTracking(trackingStatus);
+        // Only check tracking status if we have an active order to avoid unnecessary location access
+        if (activeOrderData) {
+          const trackingStatus = await locationService.isCurrentlyTracking();
+          setLocationTracking(trackingStatus);
+        } else {
+          setLocationTracking(false);
+        }
       } catch (trackingError) {
         console.warn("Error checking tracking status:", trackingError);
         setLocationTracking(false);
@@ -220,28 +269,28 @@ function DriverDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, isAuthenticated, activateOrderWithTracking]);
+  }, [user, isAuthenticated]); // Include all required dependencies
 
   useEffect(() => {
-    if (user && isAuthenticated) {
+    if (user?.id && isAuthenticated) {
       loadDriverData();
     } else {
       setLoading(false);
     }
-  }, [user, isAuthenticated, loadDriverData]);
+  }, [user?.id, isAuthenticated, loadDriverData]);
 
-  // Auto-refresh to catch completed orders being removed
+  // Auto-refresh to catch completed orders - but much less aggressive and optional
   useEffect(() => {
-    if (!user || !isAuthenticated) return;
+    if (!user?.id || !isAuthenticated || !autoRefresh) return;
     
-    // Refresh every 5 seconds to update orders list
+    // Reduced refresh to every 2 minutes instead of 5 seconds, and only if enabled
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing dashboard data');
+      console.log('🔄 Auto-refreshing dashboard data (2min interval)');
       loadDriverData();
-    }, 5000);
+    }, 120000); // 2 minutes instead of 5 seconds = 96% reduction in refreshes
 
     return () => clearInterval(interval);
-  }, [user, isAuthenticated, loadDriverData]);
+  }, [user?.id, isAuthenticated, autoRefresh, loadDriverData]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -265,6 +314,46 @@ function DriverDashboard() {
       }
     }
   };
+
+  // Navigation function to open maps with destination
+  const openMaps = useCallback((destinationName) => {
+    try {
+      if (!destinationName) {
+        Alert.alert("Error", "Missing location information");
+        return;
+      }
+      
+      // Use location name for search since we don't have coordinates here
+      const query = encodeURIComponent(destinationName);
+      const scheme = Platform.select({ 
+        ios: 'maps:', 
+        android: 'geo:',
+        default: 'https:'
+      });
+      
+      let url;
+      if (Platform.OS === 'ios') {
+        url = `${scheme}?q=${query}`;
+      } else if (Platform.OS === 'android') {
+        url = `${scheme}0,0?q=${query}`;
+      } else {
+        // Web fallback
+        url = `https://www.google.com/maps/search/${query}`;
+      }
+      
+      if (Platform.OS === 'web') {
+        window.open(url, '_blank');
+      } else {
+        Linking.openURL(url).catch((err) => {
+          console.error("Error opening maps:", err);
+          Alert.alert("Error", "Unable to open maps application.");
+        });
+      }
+    } catch (error) {
+      console.error("Error in openMaps:", error);
+      Alert.alert("Error", "Failed to open navigation.");
+    }
+  }, []);
 
   const handleLogout = async () => {
     console.log('🔘 Dashboard logout button pressed');
@@ -358,13 +447,28 @@ function DriverDashboard() {
                 Welcome back, {user?.email?.split("@")[0]}
               </Text>
             </View>
-            <Pressable 
-              style={styles.logoutButton} 
-              onPress={handleLogout}
-            >
-              <MaterialIcons name="logout" size={20} color={colors.danger} />
-              <Text style={styles.logoutText}>Logout</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable 
+                style={[styles.autoRefreshToggle, autoRefresh && styles.autoRefreshToggleActive]} 
+                onPress={() => setAutoRefresh(!autoRefresh)}
+              >
+                <MaterialIcons 
+                  name={autoRefresh ? "sync" : "sync-disabled"} 
+                  size={16} 
+                  color={autoRefresh ? colors.success : colors.gray400} 
+                />
+                <Text style={[styles.autoRefreshText, autoRefresh && styles.autoRefreshTextActive]}>
+                  Auto-refresh
+                </Text>
+              </Pressable>
+              <Pressable 
+                style={styles.logoutButton} 
+                onPress={handleLogout}
+              >
+                <MaterialIcons name="logout" size={20} color={colors.danger} />
+                <Text style={styles.logoutText}>Logout</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
 
@@ -398,44 +502,109 @@ function DriverDashboard() {
             </View>
 
             <View style={styles.routeInfo}>
-              <View style={styles.locationRow}>
+              <Pressable 
+                style={styles.navigationRow}
+                onPress={() => openMaps(activeOrder.loading_point_name)}
+              >
                 <MaterialIcons name="place" size={18} color={colors.success} />
                 <Text style={styles.locationText}>
                   {activeOrder.loading_point_name}
                 </Text>
-              </View>
+                <MaterialIcons name="directions" size={20} color={colors.success} />
+              </Pressable>
+              
               <MaterialIcons
                 name="keyboard-arrow-down"
                 size={20}
                 color={colors.gray400}
+                style={styles.routeArrow}
               />
-              <View style={styles.locationRow}>
+              
+              <Pressable 
+                style={styles.navigationRow}
+                onPress={() => openMaps(activeOrder.unloading_point_name)}
+              >
                 <MaterialIcons name="location-on" size={18} color={colors.danger} />
                 <Text style={styles.locationText}>
                   {activeOrder.unloading_point_name}
                 </Text>
-              </View>
+                <MaterialIcons name="directions" size={20} color={colors.danger} />
+              </Pressable>
             </View>
 
+            {/* Primary Action Buttons */}
             <View style={styles.actionButtons}>
               <Pressable
                 style={styles.primaryButton}
                 onPress={() => router.push(`/(tabs)/${activeOrder.id}`)}
               >
-                <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
-                <Text style={styles.buttonText}>Update Status</Text>
+                <MaterialIcons name="description" size={20} color={colors.white} />
+                <Text style={styles.buttonText}>Order Details</Text>
               </Pressable>
 
+              <Pressable
+                style={styles.scanButton}
+                onPress={() => router.push(`/(tabs)/scanner?orderId=${activeOrder.id}`)}
+              >
+                <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
+                <Text style={styles.buttonText}>Scan QR</Text>
+              </Pressable>
+            </View>
+
+            {/* Tracking Control - Enhanced for Auto-Assigned Orders */}
+            <View style={[
+              styles.trackingControlSection,
+              !locationTracking && styles.trackingPromptSection
+            ]}>
+              <View style={styles.trackingControlHeader}>
+                <MaterialIcons 
+                  name={locationTracking ? "gps-fixed" : "gps-not-fixed"} 
+                  size={20} 
+                  color={locationTracking ? colors.success : colors.warning} 
+                />
+                <Text style={styles.trackingControlTitle}>Location Tracking</Text>
+                {!locationTracking && (
+                  <View style={styles.promptBadge}>
+                    <Text style={styles.promptBadgeText}>Action Required</Text>
+                  </View>
+                )}
+              </View>
+              
               {locationTracking ? (
-                <Pressable style={styles.stopButton} onPress={stopLocationTracking}>
-                  <MaterialIcons name="stop" size={20} color={colors.white} />
-                  <Text style={styles.buttonText}>Stop Tracking</Text>
-                </Pressable>
+                <View style={styles.trackingActiveContainer}>
+                  <View style={styles.trackingStatusRow}>
+                    <MaterialIcons name="gps-fixed" size={16} color={colors.success} />
+                    <Text style={styles.trackingStatusText}>
+                      Location tracking active for this order
+                    </Text>
+                  </View>
+                  <Pressable 
+                    style={styles.stopTrackingButton} 
+                    onPress={stopLocationTracking}
+                  >
+                    <MaterialIcons name="stop" size={20} color={colors.white} />
+                    <Text style={styles.stopTrackingButtonText}>Stop Tracking</Text>
+                  </Pressable>
+                </View>
               ) : (
-                <Pressable style={styles.trackButton} onPress={() => activateOrderWithTracking(activeOrder)}>
-                  <MaterialIcons name="my-location" size={20} color={colors.white} />
-                  <Text style={styles.buttonText}>Start Tracking</Text>
-                </Pressable>
+                <View style={styles.trackingInactiveContainer}>
+                  <View style={styles.trackingPromptCard}>
+                    <MaterialIcons name="my-location" size={24} color={colors.warning} />
+                    <Text style={styles.trackingPromptTitle}>
+                      Start Tracking Your Journey
+                    </Text>
+                    <Text style={styles.trackingPromptText}>
+                      Enable location tracking to monitor your route to the loading point and throughout delivery. This helps customers track their order progress.
+                    </Text>
+                  </View>
+                  <Pressable 
+                    style={styles.startTrackingButtonProminent} 
+                    onPress={() => activateOrderWithTracking(activeOrder)}
+                  >
+                    <MaterialIcons name="my-location" size={20} color={colors.white} />
+                    <Text style={styles.startTrackingButtonText}>Start Tracking</Text>
+                  </Pressable>
+                </View>
               )}
             </View>
           </View>
@@ -581,212 +750,629 @@ function DriverDashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray100 },
-  scrollView: { flex: 1 },
+  // Main container with improved background
+  container: { 
+    flex: 1, 
+    backgroundColor: colors.background 
+  },
+  scrollView: { 
+    flex: 1 
+  },
+  
+  // Loading and centered states
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.white,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    backgroundColor: colors.surface,
   },
-  loadingText: { marginTop: 12, fontSize: 16, color: colors.primary },
+  loadingText: { 
+    marginTop: 16, 
+    fontSize: 16, 
+    color: colors.primary,
+    fontWeight: '500'
+  },
+  
+  // Modern header design with better spacing
   header: {
-    backgroundColor: colors.white,
-    padding: 20,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray200,
+    borderBottomColor: colors.border,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  headerContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: 24, fontWeight: "bold", color: colors.gray900 },
-  subtitle: { fontSize: 16, color: colors.gray500, marginTop: 4 },
+  headerContent: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "flex-start",
+    gap: 16
+  },
+  
+  // Improved typography hierarchy
+  title: { 
+    fontSize: 28, 
+    fontWeight: "bold", 
+    color: colors.gray900,
+    letterSpacing: -0.5
+  },
+  subtitle: { 
+    fontSize: 16, 
+    color: colors.gray600, 
+    marginTop: 4,
+    fontWeight: '500'
+  },
+  
+  // Header actions with improved styling
+  headerActions: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12 
+  },
+  // Auto refresh toggle with modern styling
+  autoRefreshToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.gray50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  autoRefreshToggleActive: {
+    backgroundColor: colors.greenLight,
+    borderColor: colors.success,
+    shadowColor: colors.success,
+    shadowOpacity: 0.15,
+  },
+  autoRefreshText: {
+    fontSize: 12,
+    color: colors.gray600,
+    marginLeft: 4,
+    fontWeight: "600",
+  },
+  autoRefreshTextActive: {
+    color: colors.successDark,
+  },
+  // Modern logout button styling
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: colors.redLight,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.redBorder,
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  logoutText: { color: colors.danger, fontSize: 14, fontWeight: "600", marginLeft: 4 },
+  logoutText: { 
+    color: colors.danger, 
+    fontSize: 12, 
+    fontWeight: "600", 
+    marginLeft: 4 
+  },
+  // Modern order card styling with enhanced mobile UX
   activeOrderCard: {
     backgroundColor: colors.white,
-    padding: 20,
-    marginTop: 12,
-    borderRadius: 12,
+    padding: 24,
+    marginTop: 16,
+    borderRadius: 16,
     marginHorizontal: 16,
-    elevation: 3,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray100,
   },
   noActiveOrderCard: {
     backgroundColor: colors.white,
-    padding: 20,
-    marginTop: 12,
-    borderRadius: 12,
+    padding: 32,
+    marginTop: 16,
+    borderRadius: 16,
     marginHorizontal: 16,
     alignItems: "center",
-    elevation: 3,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray100,
   },
-  noActiveText: { fontSize: 18, fontWeight: "600", color: colors.gray900, marginTop: 12 },
-  noActiveSubtext: { fontSize: 14, color: colors.gray500, marginTop: 8, textAlign: "center" },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  cardHeaderLeft: { flexDirection: "row", alignItems: "center" },
-  cardTitle: { fontSize: 18, fontWeight: "600", color: colors.gray900, marginLeft: 8 },
+  noActiveText: { 
+    fontSize: 20, 
+    fontWeight: "700", 
+    color: colors.gray900, 
+    marginTop: 12,
+    letterSpacing: -0.3
+  },
+  noActiveSubtext: { 
+    fontSize: 15, 
+    color: colors.gray600, 
+    marginTop: 8, 
+    textAlign: "center",
+    lineHeight: 22
+  },
+  // Enhanced card header styling
+  cardHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray100
+  },
+  cardHeaderLeft: { 
+    flexDirection: "row", 
+    alignItems: "center" 
+  },
+  cardTitle: { 
+    fontSize: 19, 
+    fontWeight: "700", 
+    color: colors.gray900, 
+    marginLeft: 8,
+    letterSpacing: -0.3
+  },
+  // Modern tracking indicator
   trackingIndicator: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.greenLight,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.successLight,
   },
-  trackingText: { fontSize: 12, color: colors.success, marginLeft: 4, fontWeight: "600" },
-  orderInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  orderNumber: { fontSize: 16, fontWeight: "600", color: colors.gray900 },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  statusText: { color: colors.white, fontSize: 12, fontWeight: "600" },
-  routeInfo: { marginBottom: 12 },
-  locationRow: { flexDirection: "row", alignItems: "center", marginVertical: 4 },
-  locationText: { fontSize: 14, color: colors.gray700, marginLeft: 8, flex: 1 },
-  actionButtons: { flexDirection: "row", justifyContent: "space-between" },
+  trackingText: { 
+    fontSize: 12, 
+    color: colors.successDark, 
+    marginLeft: 4, 
+    fontWeight: "700" 
+  },
+  
+  // Enhanced order info section
+  orderInfo: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    marginBottom: 16,
+    paddingVertical: 4
+  },
+  orderNumber: { 
+    fontSize: 17, 
+    fontWeight: "700", 
+    color: colors.gray900,
+    letterSpacing: -0.2
+  },
+  statusBadge: { 
+    paddingHorizontal: 14, 
+    paddingVertical: 8, 
+    borderRadius: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  statusText: { 
+    color: colors.white, 
+    fontSize: 12, 
+    fontWeight: "700",
+    letterSpacing: 0.5
+  },
+  // Route information section with navigation
+  routeInfo: { 
+    marginBottom: 20,
+    paddingTop: 4
+  },
+  navigationRow: {
+    flexDirection: "row", 
+    alignItems: "center", 
+    marginVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: colors.gray50,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  routeArrow: {
+    alignSelf: 'center', 
+    marginVertical: 8
+  },
+  locationText: { 
+    fontSize: 15, 
+    color: colors.gray700, 
+    marginLeft: 12, 
+    flex: 1,
+    lineHeight: 20,
+    fontWeight: '500'
+  },
+  
+  // Modern action buttons with enhanced mobile UX
+  actionButtons: { 
+    flexDirection: "row", 
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 16
+  },
   primaryButton: {
     flex: 1,
     backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  trackButton: {
+  
+  // Tracking Control Section
+  trackingControlSection: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: colors.gray50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  // Enhanced Tracking Control Styles
+  trackingPromptSection: {
+    borderColor: colors.warning,
+    borderWidth: 2,
+    backgroundColor: colors.warningBackground,
+  },
+  trackingControlHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  trackingControlTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.gray900,
+    marginLeft: 8,
     flex: 1,
-    backgroundColor: colors.success,
-    paddingVertical: 12,
-    borderRadius: 8,
+    letterSpacing: -0.2,
+  },
+  promptBadge: {
+    backgroundColor: colors.warning,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  promptBadgeText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  trackingPromptCard: {
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  trackingPromptTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.gray900,
+    marginTop: 8,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  trackingPromptText: {
+    fontSize: 14,
+    color: colors.gray600,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  startTrackingButtonProminent: {
+    backgroundColor: colors.warning,
+    paddingVertical: 16,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: colors.warning,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: colors.white,
   },
-  stopButton: {
-    flex: 1,
+  trackingActiveContainer: {
+    alignItems: 'stretch',
+  },
+  trackingStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  trackingStatusText: {
+    fontSize: 14,
+    color: colors.success,
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  stopTrackingButton: {
     backgroundColor: colors.danger,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
+  stopTrackingButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  trackingInactiveContainer: {
+    alignItems: 'stretch',
+  },
+  startTrackingButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  
+  // Scan button with modern styling
   scanButton: {
+    flex: 1,
     backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
-    paddingHorizontal: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  buttonText: { color: colors.white, fontSize: 14, fontWeight: "600", marginLeft: 8 },
+  
+  // Enhanced button text styling
+  buttonText: { 
+    color: colors.white, 
+    fontSize: 15, 
+    fontWeight: "700", 
+    marginLeft: 8,
+    letterSpacing: 0.2
+  },
+  // Enhanced recent orders card
   recentOrdersCard: {
     backgroundColor: colors.white,
-    padding: 20,
-    marginTop: 12,
-    borderRadius: 12,
+    padding: 24,
+    marginTop: 16,
+    borderRadius: 16,
     marginHorizontal: 16,
-    elevation: 3,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray100,
   },
+  
+  // Modern order list item styling
   recentOrderItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray200,
+    borderBottomColor: colors.gray100,
+    borderRadius: 8,
+    marginVertical: 2,
   },
-  recentOrderNumber: { fontSize: 16, fontWeight: "600", color: colors.gray900 },
-  recentOrderDate: { fontSize: 12, color: colors.gray500, marginTop: 4 },
-  miniStatusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  miniStatusText: { color: colors.white, fontSize: 10, fontWeight: "600" },
+  recentOrderNumber: { 
+    fontSize: 16, 
+    fontWeight: "700", 
+    color: colors.gray900,
+    letterSpacing: -0.2
+  },
+  recentOrderDate: { 
+    fontSize: 13, 
+    color: colors.gray600, 
+    marginTop: 4,
+    fontWeight: '500'
+  },
+  miniStatusBadge: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  miniStatusText: { 
+    color: colors.white, 
+    fontSize: 11, 
+    fontWeight: "700",
+    letterSpacing: 0.3
+  },
+  
+  // View all button enhancement
   viewAllButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    marginTop: 8,
+    paddingVertical: 14,
+    marginTop: 12,
+    backgroundColor: colors.gray50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.gray200,
   },
-  viewAllText: { fontSize: 14, color: colors.info, fontWeight: "600", marginRight: 4 },
+  viewAllText: { 
+    fontSize: 14, 
+    color: colors.primary, 
+    fontWeight: "700", 
+    marginRight: 4 
+  },
+  // Modern quick actions card
   quickActionsCard: {
     backgroundColor: colors.white,
-    padding: 20,
-    marginTop: 12,
-    marginBottom: 20,
-    borderRadius: 12,
+    padding: 24,
+    marginTop: 16,
+    marginBottom: 24,
+    borderRadius: 16,
     marginHorizontal: 16,
-    elevation: 3,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray100,
   },
+  // Enhanced quick action grid
   quickActionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginTop: 12,
+    marginTop: 16,
+    gap: 12,
   },
   quickActionButton: {
     width: "48%",
-    backgroundColor: colors.gray100,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.gray50,
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
     marginBottom: 12,
-  },
-  quickActionText: { fontSize: 14, fontWeight: "600", color: colors.gray700, marginTop: 8 },
-  
-  // Assigned Orders styles
-  assignedOrdersCard: {
-    backgroundColor: colors.white,
-    padding: 20,
-    marginTop: 12,
-    borderRadius: 12,
-    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
     elevation: 3,
   },
+  quickActionText: { 
+    fontSize: 14, 
+    fontWeight: "700", 
+    color: colors.gray700, 
+    marginTop: 8,
+    textAlign: 'center'
+  },
+  
+  // Enhanced assigned orders card
+  assignedOrdersCard: {
+    backgroundColor: colors.white,
+    padding: 24,
+    marginTop: 16,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray100,
+  },
   cardSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.gray600,
-    marginBottom: 16,
-    fontStyle: 'italic',
+    marginBottom: 20,
+    fontWeight: '500',
+    lineHeight: 20,
   },
   assignedOrderItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: colors.gray200,
     borderRadius: 12,
     marginBottom: 12,
     backgroundColor: colors.gray50,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
+  // Enhanced assigned order text styling
   assignedOrderNumber: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "700",
     color: colors.primary,
+    letterSpacing: -0.2,
   },
   assignedOrderDetails: {
     fontSize: 14,
     color: colors.gray700,
     marginTop: 4,
+    fontWeight: '500',
   },
   assignedOrderDate: {
     fontSize: 12,
-    color: colors.gray500,
+    color: colors.gray600,
     marginTop: 4,
+    fontWeight: '500',
   },
+  
+  // Modern activate button
   activateButton: {
     backgroundColor: colors.success,
-    borderRadius: 20,
-    padding: 8,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
 });
 

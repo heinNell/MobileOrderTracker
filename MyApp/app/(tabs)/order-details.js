@@ -14,27 +14,59 @@ import
   } from "react-native";
 import { supabase } from "../lib/supabase";
 
-// Color palette
+// Modern mobile-first color palette
 const colors = {
-  white: "#fff",
-  black: "#000",
+  // Base colors
+  white: "#ffffff",
+  black: "#000000",
+  
+  // Primary colors
   primary: "#2563eb",
-  gray100: "#f3f4f6",
-  gray200: "#e5e7eb",
-  gray400: "#9ca3af",
-  gray500: "#6b7280",
-  gray600: "#4b5563",
-  gray700: "#374151",
-  gray800: "#111827",
-  red500: "#ef4444",
-  green500: "#10b981",
-  green600: "#059669",
-  blue500: "#3b82f6",
-  indigo500: "#6366f1",
-  purple500: "#8b5cf6",
-  border: "#d1d5db",
+  primaryLight: "#3b82f6",
+  primaryDark: "#1d4ed8",
+  
+  // Gray scale with improved contrast
+  gray50: "#f8fafc",
+  gray100: "#f1f5f9",
+  gray200: "#e2e8f0",
+  gray300: "#cbd5e1",
+  gray400: "#94a3b8",
+  gray500: "#64748b",
+  gray600: "#475569",
+  gray700: "#334155",
+  gray800: "#1e293b",
+  gray900: "#0f172a",
+  
+  // Status colors with better contrast
+  success: "#10b981",
+  successLight: "#34d399",
+  successDark: "#059669",
+  danger: "#ef4444",
+  dangerLight: "#f87171",
+  dangerDark: "#dc2626",
+  warning: "#f59e0b",
+  warningLight: "#fbbf24",
+  warningDark: "#d97706",
+  info: "#3b82f6",
+  infoLight: "#60a5fa",
+  infoDark: "#2563eb",
+  
+  // Background colors
+  background: "#f8fafc",
+  surface: "#ffffff",
+  
+  // Semantic background colors
   blue50: "#eff6ff",
   blue800: "#1e40af",
+  green500: "#10b981",
+  green600: "#059669",
+  red500: "#ef4444",
+  indigo500: "#6366f1",
+  purple500: "#8b5cf6",
+  
+  // Border and shadow
+  border: "#e2e8f0",
+  shadow: "#0f172a",
 };
 
 export default function OrderDetailsScreen() {
@@ -281,124 +313,169 @@ router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_numbe
 
 const getStatusStyle = (status) => {
   const statusStyles = {
-    pending: { backgroundColor: colors.gray400 },
-    assigned: { backgroundColor: colors.blue500 },
-    activated: { backgroundColor: colors.green500 },
-    in_progress: { backgroundColor: colors.indigo500 },
-    in_transit: { backgroundColor: colors.purple500 },
-    delivered: { backgroundColor: colors.green600 },
-    completed: { backgroundColor: colors.green500 },
+    pending: { backgroundColor: colors.gray500 },
+    assigned: { backgroundColor: colors.info },
+    activated: { backgroundColor: colors.success },
+    in_progress: { backgroundColor: colors.info },
+    in_transit: { backgroundColor: colors.primary },
+    delivered: { backgroundColor: colors.successDark },
+    completed: { backgroundColor: colors.success },
   };
   return statusStyles[status] || { backgroundColor: colors.gray500 };
 };
 
 const styles = StyleSheet.create({
+  // Container and layout styles
   container: {
     flex: 1,
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.gray100,
+    padding: 24,
+    backgroundColor: colors.background,
   },
+  
+  // Enhanced text and loading styles
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: colors.gray500,
+    color: colors.gray600,
+    fontWeight: '500',
   },
   errorText: {
     fontSize: 18,
-    color: colors.red500,
+    color: colors.danger,
     textAlign: "center",
     marginTop: 16,
+    fontWeight: '600',
   },
+  
+  // Modern button styling
   retryButton: {
-    marginTop: 20,
+    marginTop: 24,
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   retryButtonText: {
     color: colors.white,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
+  
+  // Enhanced header design
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray200,
+    borderBottomColor: colors.border,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
   },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "bold",
-    color: colors.gray800,
-    marginBottom: 12,
+    color: colors.gray900,
+    marginBottom: 16,
+    letterSpacing: -0.5,
   },
   statusBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     borderRadius: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   statusText: {
     color: colors.white,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
+  
+  // Modern card design
   card: {
     backgroundColor: colors.white,
-    margin: 16,
-    marginBottom: 0,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    padding: 20,
+    borderRadius: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray100,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.gray800,
-    marginBottom: 16,
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.gray900,
+    marginBottom: 20,
+    letterSpacing: -0.3,
   },
+  
+  // Enhanced info row styling
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray100,
   },
   label: {
     fontSize: 14,
-    fontWeight: "500",
-    color: colors.gray500,
-    marginLeft: 8,
+    fontWeight: "600",
+    color: colors.gray600,
+    marginLeft: 12,
     width: 120,
   },
   value: {
-    fontSize: 14,
-    color: colors.gray800,
+    fontSize: 15,
+    color: colors.gray900,
     flex: 1,
+    fontWeight: '500',
+    lineHeight: 20,
   },
+  
+  // Modern action container and buttons
   actionContainer: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: 20,
+    paddingBottom: 36,
   },
   primaryButton: {
     backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   primaryButtonText: {
     color: colors.white,
@@ -406,31 +483,45 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: 8,
   },
+  
+  // Enhanced secondary button
   secondaryButton: {
     backgroundColor: colors.white,
-    padding: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
     alignItems: "center",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   secondaryButtonText: {
     color: colors.gray700,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
+  
+  // Info container styling
   infoContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.blue50,
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
   },
   infoText: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
+    marginLeft: 12,
+    fontSize: 15,
     color: colors.blue800,
+    fontWeight: '600',
+    lineHeight: 20,
   },
 });

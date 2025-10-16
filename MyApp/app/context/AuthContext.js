@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext({});
@@ -8,15 +8,29 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const authListenerRef = useRef(null);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
+    // Prevent double initialization
+    if (isInitializedRef.current) {
+      return;
+    }
+    isInitializedRef.current = true;
+
     // Check active sessions
     checkUser();
 
-    // Listen for auth changes
+    // Listen for auth changes with debouncing
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔐 Auth event:', event, 'Session exists:', !!session);
+        
+        // Prevent unnecessary updates during initialization
+        if (event === 'INITIAL_SESSION') {
+          console.log('🔍 Initial session detected, handled by checkUser()');
+          return;
+        }
         
         if (session?.user) {
           setUser(session.user);
@@ -33,8 +47,12 @@ export function AuthProvider({ children }) {
       }
     );
 
+    authListenerRef.current = authListener;
+
     return () => {
-      authListener?.subscription?.unsubscribe();
+      if (authListenerRef.current?.subscription) {
+        authListenerRef.current.subscription.unsubscribe();
+      }
     };
   }, []);
 
@@ -89,7 +107,15 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     try {
-      console.log('🔄 Starting sign out process...');
+      console.log('🔄 Starting centralized sign out process...');
+      
+      // Prevent multiple simultaneous sign-outs
+      if (loading) {
+        console.log('⚠️ Sign out already in progress, skipping...');
+        return { success: true };
+      }
+
+      setLoading(true);
       
       // Clean up location services before signing out
       try {
@@ -102,15 +128,11 @@ export function AuthProvider({ children }) {
         console.warn('⚠️ Location cleanup error:', locationError);
       }
 
-      // Clear local state first (to immediately update UI)
-      setUser(null);
-      setIsAuthenticated(false);
-      setLoading(false); // Ensure loading is false
-      
-      // Sign out from Supabase
+      // Sign out from Supabase first
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('❌ Supabase signOut error:', error);
+        throw error;
       }
 
       // Clear local storage
@@ -121,13 +143,12 @@ export function AuthProvider({ children }) {
         'lastKnownLocation',
         'activeOrderId'
       ]);
+
+      // Clear local state (auth listener will handle the rest)
+      setUser(null);
+      setIsAuthenticated(false);
       
       console.log('✅ Sign out successful with full cleanup');
-      console.log('🔄 Final auth state after signOut:', { 
-        user: null, 
-        isAuthenticated: false,
-        loading: false 
-      });
       
       return { success: true };
     } catch (error) {
@@ -135,8 +156,9 @@ export function AuthProvider({ children }) {
       // Ensure state is cleared even on error
       setUser(null);
       setIsAuthenticated(false);
-      setLoading(false);
       return { success: false, error: error.message };
+    } finally {
+      setLoading(false);
     }
   }
 

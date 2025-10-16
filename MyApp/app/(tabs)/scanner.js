@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import ErrorBoundary from "../components/ErrorBoundary";
+import LogoutButton from "../components/LogoutButton";
 import { QRCodeScanner } from "../components/QRCodeScanner";
 
 // Define colors constant to fix ESLint warnings
@@ -104,6 +105,14 @@ export default function ScannerScreen() {
               <Text style={styles.infoText}>Supports both simple and secure QR codes</Text>
             </View>
           </View>
+
+          <View style={styles.logoutContainer}>
+            <LogoutButton 
+              variant="minimal"
+              size="small"
+              showText={true}
+            />
+          </View>
         </View>
       )}
     </View>
@@ -169,5 +178,10 @@ const styles = StyleSheet.create({
     color: colors.slate[400], 
     marginLeft: 12, 
     flex: 1 
+  },
+  logoutContainer: {
+    marginTop: 40,
+    alignSelf: 'stretch',
+    alignItems: 'center',
   },
 });

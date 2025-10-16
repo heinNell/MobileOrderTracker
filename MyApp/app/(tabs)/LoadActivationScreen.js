@@ -3,7 +3,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import {
+import
+  {
     ActivityIndicator,
     Alert,
     Platform,
@@ -12,27 +13,53 @@ import {
     Text,
     TouchableOpacity,
     View,
-} from "react-native";
+  } from "react-native";
 import { supabase } from "../lib/supabase";
 
-// Define colors constant to fix ESLint warnings
+// Modern mobile-first color palette
 const colors = {
-  primary: '#2563eb',
+  // Base colors
   white: '#ffffff',
+  black: '#000000',
+  
+  // Primary colors
+  primary: '#2563eb',
+  primaryLight: '#3b82f6',
+  primaryDark: '#1d4ed8',
+  
+  // Gray scale with improved contrast
   gray: {
-    100: '#f3f4f6',
-    200: '#e5e7eb',
-    300: '#d1d5db',
-    400: '#9ca3af',
-    500: '#6b7280',
-    700: '#374151',
+    50: '#f8fafc',
+    100: '#f1f5f9',
+    200: '#e2e8f0',
+    300: '#cbd5e1',
+    400: '#94a3b8',
+    500: '#64748b',
+    600: '#475569',
+    700: '#334155',
+    800: '#1e293b',
+    900: '#0f172a',
   },
+  
+  // Semantic colors
   slate: {
-    900: '#111827',
+    900: '#0f172a',
   },
+  
+  // Status colors
+  success: '#10b981',
+  successLight: '#34d399',
+  successDark: '#059669',
+  danger: '#ef4444',
+  dangerLight: '#f87171',
+  warning: '#f59e0b',
+  warningLight: '#fbbf24',
+  warningDark: '#d97706',
+  
+  // Background colors
   green: {
     600: '#059669',
-    700: '#065f46',
+    700: '#047857',
   },
   emerald: {
     100: '#d1fae5',
@@ -47,6 +74,10 @@ const colors = {
   red: {
     500: '#ef4444',
   },
+  
+  // Border and shadow
+  border: '#e2e8f0',
+  shadow: '#0f172a',
 };
 
 const getStatusStyle = (status) => {
@@ -457,148 +488,205 @@ export default function LoadActivationScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Container styles with modern background
   container: {
     flex: 1,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray[50],
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray[50],
+    padding: 24,
   },
   content: {
-    padding: 16,
+    padding: 20,
   },
+  
+  // Enhanced header design
   header: {
     alignItems: "center",
-    marginBottom: 24,
-    paddingTop: 16,
+    marginBottom: 32,
+    paddingTop: 24,
   },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "bold",
     color: colors.slate[900],
-    marginTop: 16,
+    marginTop: 20,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: colors.gray[500],
-    marginTop: 4,
+    fontSize: 17,
+    color: colors.gray[600],
+    marginTop: 6,
+    fontWeight: '500',
   },
+  // Enhanced text styles
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: colors.gray[500],
+    color: colors.gray[600],
+    fontWeight: '500',
   },
+  
+  // Modern card design
   card: {
     backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
-    elevation: 3,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray[100],
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: colors.slate[900],
-    marginBottom: 16,
+    marginBottom: 20,
+    letterSpacing: -0.3,
   },
+  
+  // Enhanced info row styling
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[200],
   },
   infoLabel: {
-    fontSize: 14,
-    color: colors.gray[500],
-    fontWeight: "500",
+    fontSize: 15,
+    color: colors.gray[600],
+    fontWeight: "600",
   },
   infoValue: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.slate[900],
     flex: 1,
     textAlign: "right",
+    fontWeight: '500',
   },
+  
+  // Enhanced status badge
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   statusText: {
     color: colors.white,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
+  
+  // Modern alert box
   alertBox: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.emerald[100],
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: colors.successLight,
   },
   alertText: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
+    marginLeft: 12,
+    fontSize: 15,
     color: colors.green[700],
+    fontWeight: '600',
+    lineHeight: 20,
   },
+  // Enhanced location and permission styles
   locationStatus: {
     flexDirection: "row",
     alignItems: "center",
   },
   locationText: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 14,
+    marginLeft: 16,
+    fontSize: 15,
     color: colors.gray[700],
+    fontWeight: '500',
+    lineHeight: 20,
   },
   permissionButton: {
     backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginLeft: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginLeft: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   permissionButtonText: {
     color: colors.white,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
   },
+  
+  // Instructions styling
   instructionsList: {
-    gap: 12,
+    gap: 16,
   },
   instructionItem: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 4,
   },
   instructionText: {
-    marginLeft: 12,
-    fontSize: 14,
+    marginLeft: 16,
+    fontSize: 15,
     color: colors.gray[700],
     flex: 1,
+    fontWeight: '500',
+    lineHeight: 22,
   },
+  
+  // Modern action container and buttons
   actionContainer: {
-    marginTop: 8,
-    marginBottom: 32,
+    marginTop: 16,
+    marginBottom: 40,
   },
   activateButton: {
     backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   disabledButton: {
     backgroundColor: colors.gray[400],
     opacity: 0.6,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   activateButtonText: {
     color: colors.white,
@@ -606,17 +694,25 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: 8,
   },
+  
+  // Enhanced cancel button
   cancelButton: {
     backgroundColor: colors.white,
-    padding: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.gray[300],
     alignItems: "center",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cancelButtonText: {
     color: colors.gray[700],
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

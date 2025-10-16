@@ -78,12 +78,39 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
-      "output": "single",
-      "staticRendering": false,
+      "output": "static",
       "build": {
         "babel": {
           "include": ["@expo/vector-icons"]
         }
+      },
+      "lang": "en",
+      "name": "Mobile Order Tracker",
+      "shortName": "OrderTracker",
+      "description": "Track your delivery orders on mobile",
+      "themeColor": "#3B82F6",
+      "backgroundColor": "#F8FAFC",
+      "display": "standalone",
+      "orientation": "portrait",
+      "scope": "/",
+      "startUrl": "/",
+      "crossorigin": "use-credentials",
+      "relatedApplications": [],
+      "preferRelatedApplications": false,
+      "config": {
+        "firebase": {
+          "measurementId": "G-XXXXXXXXXX"
+        }
+      },
+      "meta": {
+        "apple-mobile-web-app-capable": "yes",
+        "apple-mobile-web-app-status-bar-style": "default",
+        "apple-mobile-web-app-title": "OrderTracker",
+        "application-name": "OrderTracker",
+        "mobile-web-app-capable": "yes",
+        "msapplication-TileColor": "#3B82F6",
+        "msapplication-tap-highlight": "no",
+        "theme-color": "#3B82F6"
       }
     },
     "plugins": [

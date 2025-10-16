@@ -573,6 +573,19 @@ class LocationService {
       console.error('Error cleaning up LocationService:', error);
     }
   }
+
+  // Set current order without starting tracking (for auto-activation)
+  async setCurrentOrder(orderId) {
+    try {
+      await this.ensureInitialized();
+      this.currentOrderId = orderId;
+      await storage.setItem('activeOrderId', orderId);
+      console.log('📍 Set current order:', orderId);
+    } catch (error) {
+      console.error('Error setting current order:', error);
+      throw error;
+    }
+  }
 }
 
 // Export the class so it can be instantiated

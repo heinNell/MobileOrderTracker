@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -45,15 +46,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Auto-refresh every 30 seconds to ensure data stays current
+    // Auto-refresh only if enabled by user - every 5 minutes instead of 30 seconds
+    if (!autoRefresh) return;
+    
     const interval = setInterval(() => {
-      console.log("Dashboard - Auto-refresh triggered");
+      console.log("Dashboard - Auto-refresh triggered (5min interval)");
       fetchOrders();
       setLastRefresh(new Date());
-    }, 30000);
+    }, 300000); // 5 minutes
 
     return () => clearInterval(interval);
-  }, []);
+  }, [autoRefresh]);
 
   const handleManualRefresh = () => {
     console.log("Dashboard - Manual refresh triggered");
@@ -61,10 +64,6 @@ export default function DashboardPage() {
     fetchOrders();
     setLastRefresh(new Date());
   };
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
 
   const checkAuth = async () => {
     const {
@@ -145,7 +144,9 @@ export default function DashboardPage() {
 
       // Calculate total revenue
       const totalRevenue = allOrders?.reduce((sum, order) => {
-        const amount = parseFloat(order.total_amount || '0');
+        const amount = typeof order.total_amount === 'number' 
+          ? order.total_amount 
+          : parseFloat(String(order.total_amount || '0'));
         return sum + (isNaN(amount) ? 0 : amount);
       }, 0) || 0;
 
@@ -187,14 +188,17 @@ export default function DashboardPage() {
           acc[name] = { customer_name: name, order_count: 0, total_amount: 0 };
         }
         acc[name].order_count++;
-        const amount = parseFloat(order.total_amount || '0');
+        const amount = typeof order.total_amount === 'number' 
+          ? order.total_amount 
+          : parseFloat(String(order.total_amount || '0'));
         acc[name].total_amount += isNaN(amount) ? 0 : amount;
         return acc;
       }, {} as Record<string, { customer_name: string; order_count: number; total_amount: number }>) || {};
 
-      const topCustomers = Object.values(customerStats)
-        .sort((a, b) => b.total_amount - a.total_amount)
-        .slice(0, 5);
+      const topCustomers: Array<{ customer_name: string; order_count: number; total_amount: number }> = 
+        (Object.values(customerStats) as Array<{ customer_name: string; order_count: number; total_amount: number }>)
+          .sort((a, b) => b.total_amount - a.total_amount)
+          .slice(0, 5);
 
       // Recent orders
       const recentOrders = allOrders?.slice(0, 10) || [];
@@ -220,7 +224,17 @@ export default function DashboardPage() {
   };
 
   const subscribeToOrders = () => {
-    // Subscribe to orders changes
+    // Subscribe to orders changes - but with debouncing to prevent excessive refreshes
+    let refreshTimeout: NodeJS.Timeout;
+    
+    const debouncedRefresh = () => {
+      clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(() => {
+        console.log("Dashboard - Debounced refresh from subscription");
+        fetchOrders();
+      }, 2000); // Wait 2 seconds before refreshing to batch updates
+    };
+
     const ordersChannel = supabase
       .channel("orders_changes")
       .on(
@@ -231,51 +245,35 @@ export default function DashboardPage() {
           table: "orders",
         },
         () => {
-          console.log("Dashboard - Order change detected, refreshing...");
-          fetchOrders();
+          console.log("Dashboard - Order change detected");
+          debouncedRefresh();
         }
       )
       .subscribe();
 
-    // Also subscribe to driver location updates to refresh driver data
+    // Reduced subscriptions - only essential ones to minimize disruption
+    // Removed driver locations subscription as it's too frequent for dashboard needs
     const driversChannel = supabase
       .channel("drivers_changes")
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
           schema: "public",
           table: "users",
           filter: "role=eq.driver",
         },
         () => {
-          console.log("Dashboard - Driver data change detected, refreshing...");
-          fetchOrders();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to driver location updates
-    const locationsChannel = supabase
-      .channel("driver_locations_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "driver_locations",
-        },
-        () => {
-          console.log("Dashboard - Driver location change detected, refreshing...");
-          fetchOrders();
+          console.log("Dashboard - Driver data change detected");
+          debouncedRefresh();
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(refreshTimeout);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(driversChannel);
-      supabase.removeChannel(locationsChannel);
     };
   };
 
@@ -339,6 +337,17 @@ export default function DashboardPage() {
             </div>
             
             <div className="flex items-center space-x-3 mt-4 md:mt-0">
+              <div className="flex items-center space-x-2">
+                <label className="flex items-center space-x-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={autoRefresh}
+                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-gray-600">Auto-refresh</span>
+                </label>
+              </div>
               <div className="text-xs text-gray-500">
                 Last updated: {lastRefresh.toLocaleTimeString()}
               </div>
@@ -598,7 +607,9 @@ export default function DashboardPage() {
                         {order.assigned_driver?.full_name || "Unassigned"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        ${parseFloat(order.total_amount || '0').toFixed(2)}
+                        ${typeof order.total_amount === 'number' 
+                          ? order.total_amount.toFixed(2) 
+                          : parseFloat(String(order.total_amount || '0')).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(order.created_at).toLocaleDateString()}

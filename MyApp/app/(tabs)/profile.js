@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import
   {
     ActivityIndicator,
-    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -12,58 +11,53 @@ import
   } from 'react-native';
 
 // ✅ Import the hook with correct path
+import LogoutButton from "../components/LogoutButton";
 import { useAuth } from "../context/AuthContext";
 
-// Define colors constant to fix ESLint warnings
+// Modern mobile-first color palette
 const colors = {
+  // Base colors
+  white: '#ffffff',
+  black: '#000000',
+  
+  // Primary colors
   primary: '#2563eb',
+  primaryLight: '#3b82f6',
+  primaryDark: '#1d4ed8',
+  
+  // Status colors
   error: '#ef4444',
-  white: '#fff',
+  success: '#10b981',
+  warning: '#f59e0b',
+  
+  // Gray scale with improved contrast
   gray: {
-    50: '#f3f4f6',
-    100: '#e5e7eb',
-    300: '#9ca3af',
-    400: '#6b7280',
-    900: '#111827',
+    50: '#f8fafc',
+    100: '#f1f5f9',
+    200: '#e2e8f0',
+    300: '#cbd5e1',
+    400: '#94a3b8',
+    500: '#64748b',
+    600: '#475569',
+    700: '#334155',
+    800: '#1e293b',
+    900: '#0f172a',
   },
+  
+  // Background colors
   blue: {
     50: '#eff6ff',
+    100: '#dbeafe',
   },
+  
+  // Shadow and border
+  shadow: '#0f172a',
+  border: '#e2e8f0',
 };
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, loading, isAuthenticated, signOut } = useAuth();
-
-  const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out? This will stop all location tracking.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🔄 Profile: Starting sign out...');
-              const result = await signOut();
-              if (!result.success) {
-                Alert.alert('Error', result.error || 'Failed to sign out');
-              } else {
-                console.log('✅ Profile: Sign out successful, auth state should handle redirect');
-                // Don't manually navigate - let the auth state change handle the redirect
-                // The AuthContext will trigger a re-render of index.js which will redirect to login
-              }
-            } catch (error) {
-              console.error('❌ Sign out error in profile:', error);
-              Alert.alert('Error', 'Failed to sign out properly');
-            }
-          },
-        },
-      ]
-    );
-  };
+  const { user, loading, isAuthenticated } = useAuth();
 
   if (loading) {
     return (
@@ -126,10 +120,12 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <MaterialIcons name="logout" size={20} color={colors.error} />
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
+        <LogoutButton 
+          variant="primary"
+          size="large"
+          style={styles.signOutButton}
+          textStyle={styles.signOutButtonText}
+        />
       </View>
 
       <View style={styles.footer}>
@@ -140,6 +136,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Container styles with modern background
   container: { 
     flex: 1, 
     backgroundColor: colors.gray[50] 
@@ -148,113 +145,166 @@ const styles = StyleSheet.create({
     flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center', 
-    padding: 20, 
+    padding: 24, 
     backgroundColor: colors.gray[50] 
   },
+  
+  // Enhanced text styles
   loadingText: { 
     marginTop: 16, 
     fontSize: 16, 
-    color: colors.gray[400] 
+    color: colors.gray[600],
+    fontWeight: '500'
   },
   errorText: { 
     fontSize: 18, 
     color: colors.error, 
     marginTop: 16, 
-    marginBottom: 20 
+    marginBottom: 20,
+    fontWeight: '600',
+    textAlign: 'center'
   },
+  
+  // Modern button styling
   button: { 
     backgroundColor: colors.primary, 
     paddingHorizontal: 24, 
-    paddingVertical: 12, 
-    borderRadius: 8 
+    paddingVertical: 16, 
+    borderRadius: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   buttonText: { 
     color: colors.white, 
     fontSize: 16, 
-    fontWeight: '600' 
+    fontWeight: '700' 
   },
+  
+  // Enhanced header design
   header: { 
     backgroundColor: colors.white, 
     alignItems: 'center', 
-    padding: 32, 
+    paddingHorizontal: 24,
+    paddingVertical: 40, 
     borderBottomWidth: 1, 
-    borderBottomColor: colors.gray[100] 
+    borderBottomColor: colors.border,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
   },
   avatarContainer: { 
-    width: 96, 
-    height: 96, 
-    borderRadius: 48, 
-    backgroundColor: colors.blue[50], 
+    width: 104, 
+    height: 104, 
+    borderRadius: 52, 
+    backgroundColor: colors.blue[100], 
     justifyContent: 'center', 
     alignItems: 'center', 
-    marginBottom: 16 
+    marginBottom: 20,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 3,
+    borderColor: colors.white,
   },
   name: { 
-    fontSize: 24, 
+    fontSize: 26, 
     fontWeight: 'bold', 
     color: colors.gray[900], 
-    marginBottom: 4 
+    marginBottom: 6,
+    letterSpacing: -0.5
   },
   role: { 
     fontSize: 16, 
-    color: colors.gray[400] 
+    color: colors.gray[500],
+    fontWeight: '600'
   },
+  // Section and card styling
   section: { 
-    padding: 16 
+    padding: 20 
   },
   sectionTitle: { 
-    fontSize: 18, 
-    fontWeight: '600', 
+    fontSize: 20, 
+    fontWeight: '700', 
     color: colors.gray[900], 
-    marginBottom: 12 
+    marginBottom: 16,
+    letterSpacing: -0.3
   },
   infoCard: { 
     backgroundColor: colors.white, 
-    borderRadius: 12, 
-    padding: 16 
+    borderRadius: 16, 
+    padding: 20,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.gray[100],
   },
   infoRow: { 
     flexDirection: 'row', 
     alignItems: 'flex-start', 
-    paddingVertical: 12, 
+    paddingVertical: 16, 
     borderBottomWidth: 1, 
-    borderBottomColor: colors.gray[50] 
+    borderBottomColor: colors.gray[100]
   },
   infoContent: { 
     flex: 1, 
-    marginLeft: 12 
+    marginLeft: 16 
   },
   infoLabel: { 
-    fontSize: 12, 
-    color: colors.gray[400], 
-    marginBottom: 4 
+    fontSize: 13, 
+    color: colors.gray[500], 
+    marginBottom: 6,
+    fontWeight: '600',
+    letterSpacing: 0.5
   },
   infoValue: { 
-    fontSize: 14, 
-    color: colors.gray[900] 
+    fontSize: 15, 
+    color: colors.gray[900],
+    fontWeight: '500',
+    lineHeight: 20
   },
+  
+  // Enhanced logout button
   signOutButton: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'center', 
     backgroundColor: colors.white, 
-    padding: 16, 
-    borderRadius: 12, 
-    borderWidth: 1, 
-    borderColor: colors.error 
+    paddingVertical: 18, 
+    paddingHorizontal: 24,
+    borderRadius: 16, 
+    borderWidth: 2, 
+    borderColor: colors.error,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   signOutButtonText: { 
     color: colors.error, 
     fontSize: 16, 
-    fontWeight: '600', 
+    fontWeight: '700', 
     marginLeft: 8 
   },
+  
+  // Footer styling
   footer: { 
-    padding: 20, 
+    padding: 24, 
     alignItems: 'center' 
   },
   footerText: { 
-    fontSize: 12, 
-    color: colors.gray[300] 
+    fontSize: 13, 
+    color: colors.gray[400],
+    fontWeight: '500'
   },
 });

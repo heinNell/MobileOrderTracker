@@ -29,6 +29,9 @@ export default function TrackingPage() {
   const [user, setUser] = useState<any>(null);
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
   const [mapZoom, setMapZoom] = useState(2);
+  const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
+  const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService | null>(null);
+  const [plannedRoutes, setPlannedRoutes] = useState<Record<string, google.maps.LatLngLiteral[]>>({});
   const router = useRouter();
 
   // Map container style
@@ -48,18 +51,104 @@ export default function TrackingPage() {
   useEffect(() => {
     checkAuth();
     
-    // Auto-refresh every 10 minutes
+    // Reduced auto-refresh interval - only refresh every 15 minutes to minimize disruption
+    // This can be made optional in the future if needed
     const refreshInterval = setInterval(() => {
-      console.log("Auto-refreshing tracking data...");
+      console.log("Auto-refreshing tracking data (15min interval)...");
       fetchOrders();
       fetchDriverLocations();
-    }, 10 * 60 * 1000); // 10 minutes
+    }, 15 * 60 * 1000); // 15 minutes instead of 10
 
     return () => {
       clearInterval(refreshInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Initialize Google Maps services when map loads
+  useEffect(() => {
+    if (mapRef && !directionsService) {
+      setDirectionsService(new google.maps.DirectionsService());
+    }
+  }, [mapRef, directionsService]);
+
+  // Fetch planned routes for all orders when directionsService is available
+  useEffect(() => {
+    if (directionsService && orders.length > 0) {
+      fetchPlannedRoutesForOrders();
+    }
+  }, [directionsService, orders]);
+
+  // Fetch planned route from Google Directions API
+  const fetchPlannedRoute = async (
+    origin: google.maps.LatLngLiteral,
+    destination: google.maps.LatLngLiteral
+  ): Promise<google.maps.LatLngLiteral[]> => {
+    if (!directionsService) return [];
+
+    try {
+      const result = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
+        directionsService.route(
+          {
+            origin,
+            destination,
+            travelMode: google.maps.TravelMode.DRIVING,
+            unitSystem: google.maps.UnitSystem.METRIC,
+            avoidHighways: false,
+            avoidTolls: false,
+          },
+          (result, status) => {
+            if (status === google.maps.DirectionsStatus.OK && result) {
+              resolve(result);
+            } else {
+              reject(new Error(`Directions request failed: ${status}`));
+            }
+          }
+        );
+      });
+
+      if (result.routes && result.routes.length > 0) {
+        const route = result.routes[0];
+        const path: google.maps.LatLngLiteral[] = [];
+        
+        route.legs.forEach(leg => {
+          leg.steps.forEach(step => {
+            step.path.forEach(point => {
+              path.push({
+                lat: point.lat(),
+                lng: point.lng()
+              });
+            });
+          });
+        });
+        
+        return path;
+      }
+    } catch (error) {
+      console.error("Error fetching planned route:", error);
+    }
+
+    return [];
+  };
+
+  // Fetch planned routes for all orders
+  const fetchPlannedRoutesForOrders = async () => {
+    const newPlannedRoutes: Record<string, google.maps.LatLngLiteral[]> = {};
+
+    for (const order of orders) {
+      if (order.loading_point_location && order.unloading_point_location) {
+        const loadingPoint = toLatLngLiteral(parsePostGISPoint(order.loading_point_location));
+        const unloadingPoint = toLatLngLiteral(parsePostGISPoint(order.unloading_point_location));
+        
+        const plannedRoute = await fetchPlannedRoute(loadingPoint, unloadingPoint);
+        if (plannedRoute.length > 0) {
+          newPlannedRoutes[order.id] = plannedRoute;
+        }
+      }
+    }
+
+    setPlannedRoutes(newPlannedRoutes);
+  };
 
   const checkAuth = async () => {
     const {
@@ -246,6 +335,103 @@ export default function TrackingPage() {
       }));
   };
 
+  // Calculate distance between two points using Haversine formula
+  const calculateDistance = (
+    point1: google.maps.LatLngLiteral,
+    point2: google.maps.LatLngLiteral
+  ): number => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (point2.lat - point1.lat) * (Math.PI / 180);
+    const dLon = (point2.lng - point1.lng) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(point1.lat * (Math.PI / 180)) *
+        Math.cos(point2.lat * (Math.PI / 180)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Get enhanced route visualization data for an order
+  const getEnhancedRouteData = (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return null;
+
+    const actualRoute = getOrderRoute(orderId);
+    const plannedRoute = plannedRoutes[orderId] || [];
+    const orderLocations = getOrderLocations();
+    const latestLocation = orderLocations.find(loc => loc.order_id === orderId);
+
+    if (!latestLocation || actualRoute.length === 0) {
+      // Return planned route if no actual tracking data yet
+      if (plannedRoute.length > 1) {
+        return {
+          completedPath: [],
+          remainingPath: plannedRoute,
+          plannedRoute: plannedRoute,
+          currentPosition: plannedRoute[0],
+          progressPercentage: 0
+        };
+      }
+      return null;
+    }
+
+    const currentPosition = {
+      lat: latestLocation.latitude || latestLocation.location?.latitude || 0,
+      lng: latestLocation.longitude || latestLocation.location?.longitude || 0,
+    };
+
+    let completedPath = actualRoute;
+    let remainingPath: google.maps.LatLngLiteral[] = [];
+
+    // If we have a planned route, calculate remaining path from current position
+    if (plannedRoute.length > 1) {
+      // Find nearest point on planned route to current position
+      let nearestPointIndex = 0;
+      let minDistance = Infinity;
+      
+      for (let i = 0; i < plannedRoute.length; i++) {
+        const distance = calculateDistance(currentPosition, plannedRoute[i]);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestPointIndex = i;
+        }
+      }
+
+      // Remaining path from current position via planned route
+      remainingPath = [currentPosition, ...plannedRoute.slice(nearestPointIndex + 1)];
+    } else {
+      // Fallback to direct line to destination
+      const unloadingPoint = toLatLngLiteral(parsePostGISPoint(order.unloading_point_location));
+      remainingPath = [currentPosition, unloadingPoint];
+    }
+
+    // Calculate progress percentage
+    let progressPercentage = 0;
+    if (plannedRoute.length > 1) {
+      const totalPlannedDistance = plannedRoute.reduce((total, point, index) => {
+        if (index === 0) return 0;
+        return total + calculateDistance(plannedRoute[index - 1], point);
+      }, 0);
+
+      const completedDistance = actualRoute.reduce((total, point, index) => {
+        if (index === 0) return 0;
+        return total + calculateDistance(actualRoute[index - 1], point);
+      }, 0);
+
+      progressPercentage = totalPlannedDistance > 0 ? (completedDistance / totalPlannedDistance) * 100 : 0;
+    }
+
+    return {
+      completedPath,
+      remainingPath,
+      plannedRoute,
+      currentPosition,
+      progressPercentage: Math.min(progressPercentage, 100)
+    };
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -356,22 +542,81 @@ export default function TrackingPage() {
           </div>
 
           <LoadScriptTyped googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-            <GoogleMapTyped mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={mapZoom} options={mapOptions}>
-              {/* Render routes for all orders or selected order */}
+            <GoogleMapTyped 
+              mapContainerStyle={mapContainerStyle} 
+              center={mapCenter} 
+              zoom={mapZoom} 
+              options={mapOptions}
+              onLoad={(map: google.maps.Map) => setMapRef(map)}
+            >
+              {/* Enhanced route visualization for all orders or selected order */}
               {(selectedOrder ? [selectedOrder] : orders).map((order) => {
-                const route = getOrderRoute(order.id);
-                if (route.length === 0) return null;
+                const enhancedRoute = getEnhancedRouteData(order.id);
+                const isHighlighted = selectedOrder?.id === order.id;
 
                 return (
-                  <PolylineTyped
-                    key={`route-${order.id}`}
-                    path={route}
-                    options={{
-                      strokeColor: "#4F46E5",
-                      strokeOpacity: 0.6,
-                      strokeWeight: 4,
-                    }}
-                  />
+                  <React.Fragment key={order.id}>
+                    {/* Planned Route (light gray background) */}
+                    {enhancedRoute?.plannedRoute && enhancedRoute.plannedRoute.length > 1 && (
+                      <PolylineTyped
+                        path={enhancedRoute.plannedRoute}
+                        options={{
+                          strokeColor: "#9CA3AF",
+                          strokeOpacity: isHighlighted ? 0.7 : 0.3,
+                          strokeWeight: isHighlighted ? 4 : 2,
+                          strokeLineCap: "round",
+                          strokeLineJoin: "round",
+                          zIndex: 0,
+                        }}
+                      />
+                    )}
+
+                    {/* Completed Route (green) */}
+                    {enhancedRoute?.completedPath && enhancedRoute.completedPath.length > 1 && (
+                      <PolylineTyped
+                        path={enhancedRoute.completedPath}
+                        options={{
+                          strokeColor: "#10B981",
+                          strokeOpacity: 1,
+                          strokeWeight: isHighlighted ? 6 : 4,
+                          strokeLineCap: "round",
+                          strokeLineJoin: "round",
+                          zIndex: 2,
+                        }}
+                      />
+                    )}
+
+                    {/* Remaining Route (red) */}
+                    {enhancedRoute?.remainingPath && enhancedRoute.remainingPath.length > 1 && (
+                      <PolylineTyped
+                        path={enhancedRoute.remainingPath}
+                        options={{
+                          strokeColor: "#EF4444",
+                          strokeOpacity: 0.8,
+                          strokeWeight: isHighlighted ? 5 : 3,
+                          strokeLineCap: "round",
+                          strokeLineJoin: "round",
+                          zIndex: 1,
+                        }}
+                      />
+                    )}
+
+                    {/* Fallback: Basic route if no enhanced data available */}
+                    {!enhancedRoute && (() => {
+                      const route = getOrderRoute(order.id);
+                      if (route.length === 0) return null;
+                      return (
+                        <PolylineTyped
+                          path={route}
+                          options={{
+                            strokeColor: "#4F46E5",
+                            strokeOpacity: 0.6,
+                            strokeWeight: 4,
+                          }}
+                        />
+                      );
+                    })()}
+                  </React.Fragment>
                 );
               })}
 
@@ -382,6 +627,7 @@ export default function TrackingPage() {
 
                 // Highlight selected order
                 const isHighlighted = selectedOrder?.id === order.id;
+                const enhancedRoute = getEnhancedRouteData(order.id);
 
                 const position: google.maps.LatLngLiteral = {
                   lat: location.latitude || location.location?.latitude || 0,
@@ -395,13 +641,14 @@ export default function TrackingPage() {
                     icon={{
                       // Custom SVG path for circle (equivalent to SymbolPath.CIRCLE)
                       path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                      scale: isHighlighted ? 12 : 8,
-                      fillColor: isHighlighted ? "#4F46E5" : "#10B981",
+                      scale: isHighlighted ? 15 : 10,
+                      fillColor: isHighlighted ? "#3B82F6" : "#10B981",
                       fillOpacity: 1,
                       strokeColor: "#FFFFFF",
-                      strokeWeight: 2,
+                      strokeWeight: isHighlighted ? 3 : 2,
+                      zIndex: 3,
                     }}
-                    title={`Order: ${order.order_number || 'N/A'}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}`}
+                    title={`Order: ${order.order_number || 'N/A'}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}${enhancedRoute?.progressPercentage ? `\nProgress: ${enhancedRoute.progressPercentage.toFixed(1)}%` : ''}`}
                     onClick={() => setSelectedOrder(order)}
                   />
                 );
@@ -451,11 +698,23 @@ export default function TrackingPage() {
             </GoogleMapTyped>
           </LoadScriptTyped>
 
-          {/* Map Legend */}
+          {/* Enhanced Map Legend */}
           <div className="mt-4 flex flex-wrap gap-4 text-sm">
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full bg-green-500 mr-2"></div>
               <span>Vehicle Location</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-8 h-1 bg-green-500 mr-2"></div>
+              <span>Completed Route</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-8 h-1 bg-red-500 mr-2"></div>
+              <span>Remaining Route</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-8 h-1 bg-gray-400 mr-2"></div>
+              <span>Planned Route</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full bg-red-500 mr-2"></div>
@@ -464,10 +723,6 @@ export default function TrackingPage() {
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
               <span>Unloading Point</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-1 bg-indigo-500 mr-2"></div>
-              <span>Vehicle Route</span>
             </div>
           </div>
         </div>
