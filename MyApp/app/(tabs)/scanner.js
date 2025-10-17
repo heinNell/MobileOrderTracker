@@ -149,10 +149,16 @@ const styles = StyleSheet.create({
     flexDirection: "row", 
     alignItems: "center", 
     justifyContent: "center",
-    paddingVertical: 16, 
+    paddingVertical: 18, 
     paddingHorizontal: 32, 
+    minHeight: 56, // Larger touch target for primary action
     borderRadius: 12, 
     marginVertical: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   buttonText: { 
     color: colors.white, 
@@ -170,7 +176,7 @@ const styles = StyleSheet.create({
   infoItem: { 
     flexDirection: "row", 
     alignItems: "center", 
-    marginBottom: 16, 
+    marginBottom: 20, // Increased spacing for comfort
     paddingHorizontal: 10 
   },
   infoText: { 

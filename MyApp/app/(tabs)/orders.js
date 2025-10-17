@@ -582,7 +582,8 @@ const styles = StyleSheet.create({
   retryButton: { 
     backgroundColor: colors.primary, 
     paddingHorizontal: 24, 
-    paddingVertical: 16, 
+    paddingVertical: 18, 
+    minHeight: 52, // Ensure 52dp minimum
     borderRadius: 12,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -633,12 +634,12 @@ const styles = StyleSheet.create({
   orderCard: { 
     backgroundColor: colors.white, 
     borderRadius: 16, 
-    padding: 20, 
+    padding: 24, // Increased for better breathing room
     marginBottom: 16, 
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowOpacity: 0.10, // Slightly more prominent
+    shadowRadius: 12,
     elevation: 6,
     borderWidth: 1,
     borderColor: colors.gray100,
@@ -670,7 +671,7 @@ const styles = StyleSheet.create({
   },
   statusText: { 
     color: colors.white, 
-    fontSize: 12, 
+    fontSize: 13, // Improved readability 
     fontWeight: "700",
     letterSpacing: 0.5
   },
@@ -741,13 +742,14 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   
-  // Enhanced button styles
+  // Enhanced button styles with better touch targets
   refreshButton: { 
     flexDirection: "row", 
     alignItems: "center", 
     backgroundColor: colors.primary, 
     paddingHorizontal: 24, 
-    paddingVertical: 16, 
+    paddingVertical: 18, 
+    minHeight: 52, // Ensure 52dp minimum
     borderRadius: 12,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
@@ -762,16 +764,16 @@ const styles = StyleSheet.create({
     marginLeft: 8 
   },
   
-  // Starting point card modernization
+  // Starting point card modernization  
   startingPointCard: { 
     backgroundColor: colors.white, 
     borderRadius: 16, 
-    padding: 20, 
+    padding: 24, // Increased padding for comfort
     marginBottom: 16, 
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowOpacity: 0.10, // Softer shadow
+    shadowRadius: 12,
     elevation: 6,
     borderWidth: 1,
     borderColor: colors.gray100,
@@ -811,36 +813,38 @@ const styles = StyleSheet.create({
     flexDirection: "row", 
     gap: 12 
   },
-  // Enhanced action buttons
+  // Enhanced action buttons with 52dp touch targets
   updateButton: { 
     flexDirection: "row", 
     alignItems: "center", 
     backgroundColor: colors.primary, 
-    paddingHorizontal: 18, 
-    paddingVertical: 12, 
-    borderRadius: 10, 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    minHeight: 52, // Ensure minimum touch target
+    borderRadius: 12, 
     flex: 1, 
     justifyContent: "center",
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   clearButton: { 
     flexDirection: "row", 
     alignItems: "center", 
     backgroundColor: colors.danger, 
-    paddingHorizontal: 18, 
-    paddingVertical: 12, 
-    borderRadius: 10, 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    minHeight: 52, // Ensure minimum touch target
+    borderRadius: 12, 
     flex: 1, 
     justifyContent: "center",
     shadowColor: colors.danger,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   dashboardButtonRow: { 
     marginTop: 12 
@@ -849,15 +853,16 @@ const styles = StyleSheet.create({
     flexDirection: "row", 
     alignItems: "center", 
     backgroundColor: colors.success, 
-    paddingHorizontal: 20, 
-    paddingVertical: 14, 
-    borderRadius: 10, 
+    paddingHorizontal: 24, 
+    paddingVertical: 16, 
+    minHeight: 52, // Ensure minimum touch target
+    borderRadius: 12, 
     justifyContent: "center",
     shadowColor: colors.success,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   noLocationInfo: { 
     padding: 20, 
@@ -880,7 +885,8 @@ const styles = StyleSheet.create({
     alignItems: "center", 
     backgroundColor: colors.success, 
     paddingHorizontal: 24, 
-    paddingVertical: 14, 
+    paddingVertical: 16, 
+    minHeight: 52, // Ensure minimum touch target
     borderRadius: 12, 
     justifyContent: "center",
     shadowColor: colors.success,
