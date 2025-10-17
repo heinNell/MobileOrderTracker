@@ -3,20 +3,27 @@
 import { GoogleMap, LoadScript, Marker, Polyline } from "@react-google-maps/api";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import
+  {
+    calculateDistanceMatrix,
+    calculateETAFromDistanceMatrix,
+    type DistanceMatrixElement
+  } from "../../../../lib/distanceMatrixUtils";
+import
+  {
+    createEnhancedRouteData,
+    ETACalculator,
+    formatDistance,
+    formatDuration,
+    formatTime,
+    getStatusColor,
+    parsePostGISPoint,
+    RouteProgressCalculator,
+    type EnhancedRouteData,
+    type ETAData,
+    type LatLngLiteral,
+  } from "../../../../lib/routeUtils";
 import { supabase } from "../../../../lib/supabase";
-import {
-  RouteProgressCalculator,
-  ETACalculator,
-  createEnhancedRouteData,
-  parsePostGISPoint,
-  formatDuration,
-  formatDistance,
-  formatTime,
-  getStatusColor,
-  type LatLngLiteral,
-  type EnhancedRouteData,
-  type ETAData,
-} from "../../../../lib/routeUtils";
 
 // Type definitions
 interface TrackingData {
@@ -51,6 +58,22 @@ const LoadScriptTyped = LoadScript as any;
 const MarkerTyped = Marker as any;
 const PolylineTyped = Polyline as any;
 
+// Helper function to format distance from Distance Matrix result
+const formatDistanceFromMatrix = (distanceMeters: number): string => {
+  if (distanceMeters < 1000) {
+    return `${Math.round(distanceMeters)} m`;
+  }
+  return `${(distanceMeters / 1000).toFixed(1)} km`;
+};
+
+// Helper function to get ETA color class based on delay
+const getETAColorClass = (trafficDelay?: number): string => {
+  if (!trafficDelay) return "text-green-600";
+  if (trafficDelay < 5) return "text-green-600";
+  if (trafficDelay < 15) return "text-yellow-600";
+  return "text-red-600";
+};
+
 export default function PublicOrderTracking() {
   const params = useParams();
   const orderId = params.orderId as string;
@@ -65,6 +88,13 @@ export default function PublicOrderTracking() {
   const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
   const [directionsRoute, setDirectionsRoute] = useState<LatLngLiteral[]>([]);
   const [etaData, setETAData] = useState<ETAData | null>(null);
+  const [distanceMatrixData, setDistanceMatrixData] = useState<DistanceMatrixElement | null>(null);
+  const [realTimeETA, setRealTimeETA] = useState<{
+    arrivalTime: Date;
+    durationMinutes: number;
+    distanceKm: number;
+    trafficDelay?: number;
+  } | null>(null);
 
   // Refs for optimized services
   const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
@@ -347,6 +377,62 @@ export default function PublicOrderTracking() {
     [trackingData, route]
   );
 
+  // Fetch real-time distance matrix data for accurate ETA
+  const fetchDistanceMatrix = useCallback(async () => {
+    if (!trackingData || !currentPosition.lat || currentPosition.lat === 0) return;
+
+    try {
+      const unloadingPoint = parsePostGISPoint(trackingData.unloading_point_location);
+      
+      if (unloadingPoint.lat === 0) return;
+
+      console.log("Fetching Distance Matrix data...");
+      const matrixResult = await calculateDistanceMatrix(
+        [currentPosition],
+        [unloadingPoint],
+        google.maps.TravelMode.DRIVING
+      );
+
+      if (matrixResult && isMountedRef.current) {
+        setDistanceMatrixData(matrixResult);
+        
+        // Calculate real-time ETA from Distance Matrix
+        const etaCalc = calculateETAFromDistanceMatrix(matrixResult);
+        setRealTimeETA({
+          arrivalTime: etaCalc.arrivalTime,
+          durationMinutes: etaCalc.durationMinutes,
+          distanceKm: etaCalc.distanceKm,
+          trafficDelay: matrixResult.duration_in_traffic 
+            ? (matrixResult.duration_in_traffic.value - matrixResult.duration.value) / 60
+            : undefined,
+        });
+
+        console.log("Distance Matrix data updated:", {
+          distance: matrixResult.distance.text,
+          duration: matrixResult.duration.text,
+          durationInTraffic: matrixResult.duration_in_traffic?.text,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching Distance Matrix:", error);
+    }
+  }, [trackingData, currentPosition]);
+
+  // Update Distance Matrix data periodically
+  useEffect(() => {
+    if (!trackingData || !mapRef) return;
+
+    // Initial fetch
+    fetchDistanceMatrix();
+
+    // Refresh every 5 minutes for traffic updates
+    const intervalId = setInterval(() => {
+      fetchDistanceMatrix();
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [trackingData, mapRef, fetchDistanceMatrix]);
+
   const mapCenter = useMemo(() => {
     const points: LatLngLiteral[] = [];
     
@@ -517,19 +603,37 @@ export default function PublicOrderTracking() {
 
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* ETA Card */}
+              {/* ETA Card with Real-time Distance Matrix Data */}
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
                 <div className="flex items-center">
                   <span className="text-2xl">⏱️</span>
                   <div className="ml-3">
                     <p className="text-sm font-medium text-blue-600">Estimated Arrival</p>
-                    <p className="text-2xl font-bold text-blue-900">
-                      {etaData?.estimatedDurationMinutes ? formatDuration(etaData.estimatedDurationMinutes) : "Calculating..."}
-                    </p>
-                    {etaData && (
-                      <p className="text-xs text-blue-700 mt-1">
-                        {etaData.estimatedArrivalTime.toLocaleTimeString()}
-                      </p>
+                    {realTimeETA ? (
+                      <>
+                        <p className={`text-2xl font-bold ${getETAColorClass(realTimeETA.trafficDelay)}`}>
+                          {formatDuration(realTimeETA.durationMinutes)}
+                        </p>
+                        <p className="text-xs text-blue-700 mt-1">
+                          {realTimeETA.arrivalTime.toLocaleTimeString()}
+                        </p>
+                        {realTimeETA.trafficDelay && realTimeETA.trafficDelay > 5 && (
+                          <p className="text-xs text-orange-600 mt-1">
+                            +{Math.round(realTimeETA.trafficDelay)}min traffic
+                          </p>
+                        )}
+                      </>
+                    ) : etaData?.estimatedDurationMinutes ? (
+                      <>
+                        <p className="text-2xl font-bold text-blue-900">
+                          {formatDuration(etaData.estimatedDurationMinutes)}
+                        </p>
+                        <p className="text-xs text-blue-700 mt-1">
+                          {etaData.estimatedArrivalTime.toLocaleTimeString()}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-lg text-blue-700">Calculating...</p>
                     )}
                   </div>
                 </div>
@@ -548,15 +652,26 @@ export default function PublicOrderTracking() {
                 </div>
               </div>
 
-              {/* Distance Remaining */}
+              {/* Distance Remaining - with Distance Matrix Data */}
               <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
                 <div className="flex items-center">
                   <span className="text-2xl">🎯</span>
                   <div className="ml-3">
                     <p className="text-sm font-medium text-purple-600">Distance Remaining</p>
-                    <p className="text-2xl font-bold text-purple-900">
-                      {formatDistance(enhancedRoute.distanceMetrics.remainingDistance)}
-                    </p>
+                    {distanceMatrixData ? (
+                      <>
+                        <p className="text-2xl font-bold text-purple-900">
+                          {formatDistanceFromMatrix(distanceMatrixData.distance.value)}
+                        </p>
+                        <p className="text-xs text-purple-700 mt-1">
+                          (Live traffic data)
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-2xl font-bold text-purple-900">
+                        {formatDistance(enhancedRoute.distanceMetrics.remainingDistance)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
