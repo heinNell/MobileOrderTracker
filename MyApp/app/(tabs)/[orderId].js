@@ -36,18 +36,13 @@ const IS_SMALL_DEVICE = SCREEN_WIDTH < 375;
 
 // Modern mobile-first color palette with enhanced accessibility
 const colors = {
-  // Base colors
   white: "#ffffff",
   black: "#000000",
-  
-  // Primary colors with gradients
   primary: "#2563eb",
   primaryLight: "#3b82f6",
   primaryDark: "#1d4ed8",
   primaryGradientStart: "#3b82f6",
   primaryGradientEnd: "#1d4ed8",
-  
-  // Gray scale with improved contrast
   gray50: "#f8fafc",
   gray100: "#f1f5f9",
   gray200: "#e2e8f0",
@@ -58,8 +53,6 @@ const colors = {
   gray700: "#334155",
   gray800: "#1e293b",
   gray900: "#0f172a",
-  
-  // Status colors with better contrast
   success: "#10b981",
   successLight: "#34d399",
   successDark: "#059669",
@@ -72,12 +65,8 @@ const colors = {
   info: "#3b82f6",
   infoLight: "#60a5fa",
   infoDark: "#2563eb",
-  
-  // Background colors
   background: "#f8fafc",
   surface: "#ffffff",
-  
-  // Semantic background colors
   blue50: "#eff6ff",
   blue100: "#dbeafe",
   blue800: "#1e40af",
@@ -89,8 +78,6 @@ const colors = {
   indigo50: "#eef2ff",
   indigo500: "#6366f1",
   purple500: "#8b5cf6",
-  
-  // Border and shadow
   border: "#e2e8f0",
   shadow: "rgba(15, 23, 42, 0.1)",
   shadowDark: "rgba(15, 23, 42, 0.2)",
@@ -135,7 +122,7 @@ const decodePolyline = (encoded) => {
   return coordinates;
 };
 
-// Reusable Info Row Component with improved touch targets
+// Reusable Info Row Component
 const InfoRow = ({ icon, iconColor, label, value, isLast = false }) => (
   <View style={[styles.infoRow, isLast && styles.infoRowLast]}>
     <View style={styles.infoIconContainer}>
@@ -150,7 +137,7 @@ const InfoRow = ({ icon, iconColor, label, value, isLast = false }) => (
   </View>
 );
 
-// Timeline Item Component with visual progress indicator
+// Timeline Item Component
 const TimelineItem = ({ icon, color, label, value, isCompleted, isLast }) => (
   <View style={[styles.timelineItem, isLast && styles.timelineItemLast]}>
     <View style={styles.timelineIconSection}>
@@ -216,6 +203,7 @@ export default function OrderDetailsScreen() {
   const [directionsError, setDirectionsError] = useState(null);
   const [directionsLoading, setDirectionsLoading] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
+  const [driverLocation, setDriverLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(null);
   const [locationError, setLocationError] = useState(null);
   const [backgroundLocationStarted, setBackgroundLocationStarted] = useState(false);
@@ -255,7 +243,8 @@ export default function OrderDetailsScreen() {
       setDirections(null);
       setDirectionsError(null);
       setUserLocation(null);
-      setBackgroundLocationStarted(false); // Reset background tracking
+      setDriverLocation(null);
+      setBackgroundLocationStarted(false);
     } catch (err) {
       console.error("Error loading order details:", err);
       setError(err.message);
@@ -277,7 +266,6 @@ export default function OrderDetailsScreen() {
   }, []);
 
   // Start background location tracking if user is the assigned driver and order is active
-  // Background tracking is disabled on web platform
   useEffect(() => {
     if (
       Platform.OS !== 'web' &&
@@ -308,7 +296,6 @@ export default function OrderDetailsScreen() {
     let watchId;
     
     if (Platform.OS === 'web') {
-      // Use browser Geolocation API for web
       if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
           (position) => {
@@ -328,7 +315,6 @@ export default function OrderDetailsScreen() {
         setLocationError("Geolocation is not supported in this browser.");
       }
     } else if (locationPermission === "granted") {
-      // Use expo-location for native platforms
       (async () => {
         try {
           subscription = await Location.watchPositionAsync(
@@ -396,7 +382,64 @@ export default function OrderDetailsScreen() {
     }
   }, [order, loadingCoord, unloadingCoord]);
 
-  // Fetch directions (use userLocation as origin if user is driver)
+  const isDriver = useMemo(() => currentUser && order?.assigned_driver?.id === currentUser.id, [currentUser, order]);
+
+  // Supabase real-time subscription for order updates
+  useEffect(() => {
+    if (!orderId) return;
+
+    const orderSubscription = supabase
+      .channel(`order:${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          setOrder((prevOrder) => ({
+            ...prevOrder,
+            ...payload.new,
+            assigned_driver: prevOrder?.assigned_driver || payload.new.assigned_driver,
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(orderSubscription);
+    };
+  }, [orderId]);
+
+  // Supabase real-time subscription for driver location updates
+  useEffect(() => {
+    if (!order || isDriver) return;
+
+    const locationSubscription = supabase
+      .channel(`order_locations:${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'order_locations',
+          filter: `order_id=eq.${orderId}`,
+        },
+        (payload) => {
+          const { latitude, longitude } = payload.new;
+          setDriverLocation({ latitude, longitude });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(locationSubscription);
+    };
+  }, [order, isDriver, orderId]);
+
+  // Fetch directions
   useEffect(() => {
     if (loadingCoord && unloadingCoord && !directions) {
       const fetchDirections = async () => {
@@ -404,12 +447,13 @@ export default function OrderDetailsScreen() {
         setDirectionsError(null);
         try {
           const apiKey = Constants.expoConfig.extra.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-          const origin =
-            currentUser &&
-            order.assigned_driver?.id === currentUser.id &&
-            userLocation
-              ? `${userLocation.latitude},${userLocation.longitude}`
-              : `${loadingCoord.latitude},${loadingCoord.longitude}`;
+          let originCoord = loadingCoord;
+          if (isDriver && userLocation) {
+            originCoord = userLocation;
+          } else if (!isDriver && driverLocation) {
+            originCoord = driverLocation;
+          }
+          const origin = `${originCoord.latitude},${originCoord.longitude}`;
           const destination = `${unloadingCoord.latitude},${unloadingCoord.longitude}`;
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&mode=driving&key=${apiKey}`;
           const response = await fetch(url);
@@ -427,7 +471,7 @@ export default function OrderDetailsScreen() {
       };
       fetchDirections();
     }
-  }, [loadingCoord, unloadingCoord, userLocation, currentUser, order, directions]);
+  }, [loadingCoord, unloadingCoord, userLocation, driverLocation, currentUser, order, directions, isDriver]);
 
   // Memoized data
   const timelineData = useMemo(() => {
@@ -485,7 +529,8 @@ export default function OrderDetailsScreen() {
     const coords = [];
     if (loadingCoord) coords.push(loadingCoord);
     if (unloadingCoord) coords.push(unloadingCoord);
-    if (userLocation) coords.push(userLocation);
+    if (isDriver && userLocation) coords.push(userLocation);
+    if (!isDriver && driverLocation) coords.push(driverLocation);
 
     if (directions) {
       const bounds = directions.bounds;
@@ -510,7 +555,7 @@ export default function OrderDetailsScreen() {
       };
     }
     return null;
-  }, [loadingCoord, unloadingCoord, userLocation, directions]);
+  }, [loadingCoord, unloadingCoord, userLocation, driverLocation, directions, isDriver]);
 
   useEffect(() => {
     if (orderId) {
@@ -684,14 +729,12 @@ export default function OrderDetailsScreen() {
         <Text style={styles.sectionTitle}>Route Map</Text>
         <View style={styles.card}>
           {Platform.OS === 'web' ? (
-            // Web platform - show placeholder
             <View style={styles.centeredDisabled}>
               <MaterialIcons name="map" size={48} color={colors.primary} />
               <Text style={styles.infoText}>📍 Map view is available on mobile app</Text>
               <Text style={styles.loadingText}>Install the mobile app to see interactive maps with directions</Text>
             </View>
           ) : (
-            // Native platform - show map
             <>
               {mapLoading && (
                 <View style={styles.centeredDisabled}>
@@ -723,12 +766,20 @@ export default function OrderDetailsScreen() {
                       pinColor={colors.danger}
                     />
                   )}
-                  {userLocation && (
+                  {isDriver && userLocation && (
                     <Marker
                       coordinate={userLocation}
                       title="Your Location"
                       description="Current position"
                       pinColor={colors.info}
+                    />
+                  )}
+                  {!isDriver && driverLocation && (
+                    <Marker
+                      coordinate={driverLocation}
+                      title="Driver Location"
+                      description="Current driver position"
+                      pinColor={colors.primary}
                     />
                   )}
                   {directions ? (
@@ -912,7 +963,6 @@ const getStatusIcon = (status) => {
 };
 
 const styles = StyleSheet.create({
-  // Container Styles
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -927,9 +977,14 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: colors.background,
   },
-  centeredDisabled: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: colors.background, pointerEvents: 'none' },
-
-  // Loading & Error States
+  centeredDisabled: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    padding: 24, 
+    backgroundColor: colors.background, 
+    pointerEvents: 'none' 
+  },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
@@ -1008,15 +1063,16 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     transform: [{ scale: 0.98 }],
   },
-  retryButtonDisabled: { opacity: 0.6, pointerEvents: 'none' },
+  retryButtonDisabled: { 
+    opacity: 0.6, 
+    pointerEvents: 'none' 
+  },
   retryButtonText: {
     color: colors.white,
     fontSize: 16,
     fontWeight: "700",
     marginLeft: 8,
   },
-
-  // Hero Header
   hero: {
     backgroundColor: colors.primary,
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
@@ -1076,8 +1132,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginLeft: 6,
   },
-
-  // Quick Stats Grid
   quickStatsContainer: {
     flexDirection: "row",
     marginHorizontal: 16,
@@ -1126,8 +1180,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
-
-  // Section Styles
   section: {
     marginHorizontal: 16,
     marginBottom: 20,
@@ -1139,8 +1191,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingLeft: 4,
   },
-
-  // Card Styles
   card: {
     backgroundColor: colors.white,
     borderRadius: 16,
@@ -1157,8 +1207,6 @@ const styles = StyleSheet.create({
       },
     }),
   },
-
-  // Info Row Styles
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1196,8 +1244,6 @@ const styles = StyleSheet.create({
     color: colors.gray900,
     lineHeight: 21,
   },
-
-  // Timeline Styles
   timelineItem: {
     flexDirection: "row",
     paddingHorizontal: 16,
@@ -1256,8 +1302,6 @@ const styles = StyleSheet.create({
     color: colors.gray500,
     fontStyle: "italic",
   },
-
-  // Button Styles with Enhanced Touch Targets
   primaryButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1287,7 +1331,10 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     transform: [{ scale: 0.98 }],
   },
-  primaryButtonDisabled: { opacity: 0.6, pointerEvents: 'none' },
+  primaryButtonDisabled: { 
+    opacity: 0.6, 
+    pointerEvents: 'none' 
+  },
   primaryButtonText: {
     color: colors.white,
     fontSize: 16,
@@ -1317,7 +1364,10 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  secondaryButtonDisabled: { opacity: 0.6, pointerEvents: 'none' },
+  secondaryButtonDisabled: { 
+    opacity: 0.6, 
+    pointerEvents: 'none' 
+  },
   secondaryButtonPressed: {
     backgroundColor: colors.gray50,
     borderColor: colors.gray300,
@@ -1328,8 +1378,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginLeft: 8,
   },
-
-  // Info Alert
   infoAlert: {
     flexDirection: "row",
     alignItems: "center",
@@ -1348,19 +1396,55 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 20,
   },
-
-  // Bottom Spacing
   bottomSpacer: {
     height: Platform.OS === 'ios' ? 20 : 12,
   },
-
-  // Map Styles
-  map: { width: "100%", height: 300, borderRadius: 12 },
-  directionsSummary: { flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: colors.gray50, borderRadius: 8, marginTop: 12, marginBottom: 8 },
-  summaryText: { marginLeft: 8, fontSize: 14, fontWeight: "600", color: colors.gray900 },
-  stepsContainer: { maxHeight: 200 },
-  stepRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.gray100 },
-  stepInstruction: { flex: 1, marginLeft: 8, fontSize: 14, color: colors.gray800 },
-  stepDetails: { fontSize: 12, color: colors.gray600, marginLeft: 8 },
-  infoText: { fontSize: 14, color: colors.gray600, textAlign: "center", padding: 16 },
+  map: { 
+    width: "100%", 
+    height: 300, 
+    borderRadius: 12 
+  },
+  directionsSummary: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    padding: 12, 
+    backgroundColor: colors.gray50, 
+    borderRadius: 8, 
+    marginTop: 12, 
+    marginBottom: 8 
+  },
+  summaryText: { 
+    marginLeft: 8, 
+    fontSize: 14, 
+    fontWeight: "600", 
+    color: colors.gray900 
+  },
+  stepsContainer: { 
+    maxHeight: 200 
+  },
+  stepRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 8, 
+    borderBottomWidth: 1, 
+    borderBottomColor: colors.gray100 
+  },
+  stepInstruction: { 
+    flex: 1, 
+    marginLeft: 8, 
+    fontSize: 14, 
+    color: colors.gray800 
+  },
+  stepDetails: { 
+    fontSize: 12, 
+    color: colors.gray600, 
+    marginLeft: 8 
+  },
+  infoText: { 
+    fontSize: 14, 
+    color: colors.gray600, 
+    textAlign: "center", 
+    padding: 16 
+  },
 });
+
