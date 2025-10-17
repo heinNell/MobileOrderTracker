@@ -164,7 +164,12 @@ export default function OrderDetailPage({
       setIncidents(incidentData || []);
 
       // Fetch location updates (driver locations)
-      const { data: locationData, error: locationError } = await supabase
+      // First try with order_id filter, then fallback to driver_id if order has assigned driver
+      let locationData = [];
+      let locationError = null;
+      
+      // Try to fetch locations by order_id
+      const { data: locationsByOrder, error: orderLocationError } = await supabase
         .from("driver_locations")
         .select(`
           *,
@@ -176,9 +181,42 @@ export default function OrderDetailPage({
         `)
         .eq("order_id", orderId)
         .order("created_at", { ascending: false })
-        .limit(20); // Limit to last 20 updates
-
-      if (locationError) throw locationError;
+        .limit(20);
+        
+      if (orderLocationError) {
+        console.error("Error fetching locations by order_id:", orderLocationError);
+      } else if (locationsByOrder && locationsByOrder.length > 0) {
+        locationData = locationsByOrder;
+      }
+      
+      // If no locations found by order_id and order has assigned driver, try driver_id
+      if (locationData.length === 0 && orderData.assigned_driver_id) {
+        const { data: locationsByDriver, error: driverLocationError } = await supabase
+          .from("driver_locations")
+          .select(`
+            *,
+            driver:users!driver_locations_driver_id_fkey(
+              id,
+              full_name,
+              email
+            )
+          `)
+          .eq("driver_id", orderData.assigned_driver_id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+          
+        if (driverLocationError) {
+          console.error("Error fetching locations by driver_id:", driverLocationError);
+          locationError = driverLocationError;
+        } else {
+          locationData = locationsByDriver || [];
+        }
+      }
+      
+      if (locationError && locationData.length === 0) {
+        throw locationError;
+      }
+      
       setLocationUpdates(locationData || []);
     } catch (error) {
       console.error("Error fetching order details:", error);
@@ -239,7 +277,7 @@ export default function OrderDetailPage({
       )
       .subscribe();
 
-    // Subscribe to location updates (driver locations)
+    // Subscribe to location updates (driver locations) - by order_id
     const locationChannel = supabase
       .channel(`driver_locations:${orderId}`)
       .on(
@@ -251,17 +289,48 @@ export default function OrderDetailPage({
           filter: `order_id=eq.${orderId}`,
         },
         (payload) => {
-          console.log("New location update received:", payload.new);
+          console.log("New location update received (by order_id):", payload.new);
           setLocationUpdates((prev) => [payload.new as LocationUpdate, ...prev.slice(0, 19)]); // Keep last 20
         }
       )
       .subscribe();
+      
+    // Also subscribe to driver location updates if driver is assigned
+    let driverLocationChannel;
+    if (order?.assigned_driver_id) {
+      driverLocationChannel = supabase
+        .channel(`driver_locations_driver:${order.assigned_driver_id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "driver_locations",
+            filter: `driver_id=eq.${order.assigned_driver_id}`,
+          },
+          (payload) => {
+            console.log("New location update received (by driver_id):", payload.new);
+            // Only add if not already in the list (avoid duplicates if order_id is also set)
+            setLocationUpdates((prev) => {
+              const exists = prev.some(loc => loc.id === (payload.new as LocationUpdate).id);
+              if (!exists) {
+                return [payload.new as LocationUpdate, ...prev.slice(0, 19)];
+              }
+              return prev;
+            });
+          }
+        )
+        .subscribe();
+    }
 
     return () => {
       supabase.removeChannel(orderChannel);
       supabase.removeChannel(statusChannel);
       supabase.removeChannel(incidentChannel);
       supabase.removeChannel(locationChannel);
+      if (driverLocationChannel) {
+        supabase.removeChannel(driverLocationChannel);
+      }
     };
   };
 
