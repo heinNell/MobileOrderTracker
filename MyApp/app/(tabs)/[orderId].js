@@ -1,295 +1,261 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import Constants from "expo-constants";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import
-  {
-    ActivityIndicator,
-    Alert,
-    Linking,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-  } from "react-native";
-import { useAuth } from "../context/AuthContext";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { supabase } from "../lib/supabase";
-import LocationService from "../services/LocationService";
-import { parsePostGISPoint } from "../shared/locationUtils";
-import { useResponsive } from "../utils/responsive";
+import { startBackgroundLocation, stopBackgroundLocation } from "../services/LocationService";
 
-const STATUS_FLOW = {
-  pending: ["assigned", "activated", "in_progress"], // Allow direct start from pending
-  assigned: ["activated", "in_progress"], // Allow direct transition to in_progress
-  activated: ["in_progress"],
-  in_progress: ["in_transit", "arrived", "loading", "loaded", "unloading"], // Allow skipping to any loading/delivery stage
-  in_transit: ["arrived", "loading", "loaded", "unloading"], // Allow skipping ahead
-  arrived: ["loading", "loaded", "unloading"], // Allow skipping loading step
-  loading: ["loaded", "unloading"], // Allow skipping directly to unloading
-  loaded: ["in_transit", "unloading"], // Allow going back to transit if needed
-  unloading: ["completed"]
-};
+// Conditionally import react-native-maps only on native platforms
+let MapView, Marker, Polyline, PROVIDER_GOOGLE;
+if (Platform.OS !== 'web') {
+  try {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default;
+    Marker = Maps.Marker;
+    Polyline = Maps.Polyline;
+    PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
+  } catch (error) {
+    console.warn('react-native-maps not available:', error);
+  }
+}
 
-const STATUS_ACTIONS = [
-  { status: "pending", label: "Assign Driver", color: "#6b7280" },
-  { status: "assigned", label: "Activate Order", color: "#2563eb" },
-  { status: "activated", label: "Start Order", color: "#10b981" },
-  { status: "in_progress", label: "Mark In Transit", color: "#8B5CF6" },
-  { status: "in_transit", label: "Mark Arrived", color: "#10B981" },
-  { status: "arrived", label: "Start Loading", color: "#F59E0B" },
-  { status: "loading", label: "Loading Complete", color: "#10B981" },
-  { status: "loaded", label: "Start Unloading", color: "#F59E0B" },
-  { status: "unloading", label: "Complete Delivery", color: "#059669" },
-];
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const IS_SMALL_DEVICE = SCREEN_WIDTH < 375;
 
-// Helper function to validate status transitions
-// eslint-disable-next-line no-unused-vars
-const isValidStatusTransition = (currentStatus, newStatus) => {
-  if (!currentStatus || !newStatus) return false;
-  const allowedTransitions = STATUS_FLOW[currentStatus] || [];
-  return allowedTransitions.includes(newStatus);
-};
-
-// Helper function to get next available actions for current status
-// eslint-disable-next-line no-unused-vars
-const getNextActions = (currentStatus) => {
-  if (!currentStatus) return [];
-  const nextStatuses = STATUS_FLOW[currentStatus] || [];
-  return STATUS_ACTIONS.filter(action => nextStatuses.includes(action.status));
-};
-
-const locationService = new LocationService();
-
-// Color palette
+// Modern mobile-first color palette with enhanced accessibility
 const colors = {
-  white: "#fff",
+  // Base colors
+  white: "#ffffff",
+  black: "#000000",
+  
+  // Primary colors with gradients
   primary: "#2563eb",
-  gray100: "#f3f4f6",
-  gray200: "#e5e7eb",
-  gray400: "#9ca3af",
-  gray500: "#6b7280",
-  gray600: "#374151",
-  gray700: "#111827",
-  red500: "#ef4444",
+  primaryLight: "#3b82f6",
+  primaryDark: "#1d4ed8",
+  primaryGradientStart: "#3b82f6",
+  primaryGradientEnd: "#1d4ed8",
+  
+  // Gray scale with improved contrast
+  gray50: "#f8fafc",
+  gray100: "#f1f5f9",
+  gray200: "#e2e8f0",
+  gray300: "#cbd5e1",
+  gray400: "#94a3b8",
+  gray500: "#64748b",
+  gray600: "#475569",
+  gray700: "#334155",
+  gray800: "#1e293b",
+  gray900: "#0f172a",
+  
+  // Status colors with better contrast
+  success: "#10b981",
+  successLight: "#34d399",
+  successDark: "#059669",
+  danger: "#ef4444",
+  dangerLight: "#f87171",
+  dangerDark: "#dc2626",
+  warning: "#f59e0b",
+  warningLight: "#fbbf24",
+  warningDark: "#d97706",
+  info: "#3b82f6",
+  infoLight: "#60a5fa",
+  infoDark: "#2563eb",
+  
+  // Background colors
+  background: "#f8fafc",
+  surface: "#ffffff",
+  
+  // Semantic background colors
+  blue50: "#eff6ff",
+  blue100: "#dbeafe",
+  blue800: "#1e40af",
+  green50: "#f0fdf4",
   green500: "#10b981",
   green600: "#059669",
-  blue500: "#3b82f6",
-  blue600: "#2563eb",
-  purple500: "#8b5cf6",
+  red50: "#fef2f2",
+  red500: "#ef4444",
+  indigo50: "#eef2ff",
   indigo500: "#6366f1",
-  amber500: "#f59e0b",
-  blue50: "#eff6ff",
-  blue800: "#1e40af",
+  purple500: "#8b5cf6",
+  
+  // Border and shadow
+  border: "#e2e8f0",
+  shadow: "rgba(15, 23, 42, 0.1)",
+  shadowDark: "rgba(15, 23, 42, 0.2)",
 };
 
+// Polyline Decoder
+const decodePolyline = (encoded) => {
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const coordinates = [];
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const dlat = (result & 1) !== 0 ? ~(result >> 1) : (result >> 1);
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    const dlng = (result & 1) !== 0 ? ~(result >> 1) : (result >> 1);
+    lng += dlng;
+
+    coordinates.push({ latitude: lat * 1e-5, longitude: lng * 1e-5 });
+  }
+
+  return coordinates;
+};
+
+// Reusable Info Row Component with improved touch targets
+const InfoRow = ({ icon, iconColor, label, value, isLast = false }) => (
+  <View style={[styles.infoRow, isLast && styles.infoRowLast]}>
+    <View style={styles.infoIconContainer}>
+      <MaterialIcons name={icon} size={20} color={iconColor || colors.gray600} />
+    </View>
+    <View style={styles.infoContent}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={3}>
+        {value}
+      </Text>
+    </View>
+  </View>
+);
+
+// Timeline Item Component with visual progress indicator
+const TimelineItem = ({ icon, color, label, value, isCompleted, isLast }) => (
+  <View style={[styles.timelineItem, isLast && styles.timelineItemLast]}>
+    <View style={styles.timelineIconSection}>
+      <View style={[
+        styles.timelineIconWrapper,
+        { backgroundColor: isCompleted ? color : colors.gray300 }
+      ]}>
+        <MaterialIcons 
+          name={icon} 
+          size={18} 
+          color={colors.white} 
+        />
+      </View>
+      {!isLast && (
+        <View style={[
+          styles.timelineLine,
+          { backgroundColor: isCompleted ? color : colors.gray300 }
+        ]} />
+      )}
+    </View>
+    <View style={styles.timelineContent}>
+      <Text style={[
+        styles.timelineLabel,
+        isCompleted && styles.timelineLabelCompleted
+      ]}>
+        {label}
+      </Text>
+      <Text style={[
+        styles.timelineValue,
+        !isCompleted && styles.timelineValuePending
+      ]}>
+        {value}
+      </Text>
+    </View>
+  </View>
+);
+
+// Quick Stats Card Component
+const QuickStatCard = ({ icon, label, value, color }) => (
+  <View style={styles.quickStatCard}>
+    <View style={[styles.quickStatIcon, { backgroundColor: color + '15' }]}>
+      <MaterialIcons name={icon} size={20} color={color} />
+    </View>
+    <Text style={styles.quickStatLabel}>{label}</Text>
+    <Text style={styles.quickStatValue} numberOfLines={1}>
+      {value}
+    </Text>
+  </View>
+);
+
 export default function OrderDetailsScreen() {
-  const router = useRouter();
   const { orderId } = useLocalSearchParams();
-  const { user } = useAuth();
+  const router = useRouter();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [statusUpdating, setStatusUpdating] = useState(false);
-  const [isTracking, setIsTracking] = useState(false);
   const [error, setError] = useState(null);
+  const [loadingCoord, setLoadingCoord] = useState(null);
+  const [unloadingCoord, setUnloadingCoord] = useState(null);
+  const [mapError, setMapError] = useState(null);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [directions, setDirections] = useState(null);
+  const [directionsError, setDirectionsError] = useState(null);
+  const [directionsLoading, setDirectionsLoading] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationPermission, setLocationPermission] = useState(null);
+  const [locationError, setLocationError] = useState(null);
+  const [backgroundLocationStarted, setBackgroundLocationStarted] = useState(false);
 
-  // Responsive utilities
-  const { spacing, fontSizes, scale, touchTarget } = useResponsive();
+  // Get current user from Supabase auth
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Memoized location parsing - must be before any early returns
-  const loadingPoint = useMemo(
-    () => order?.loading_point_location ? parsePostGISPoint(order.loading_point_location) : null,
-    [order?.loading_point_location]
-  );
-  const unloadingPoint = useMemo(
-    () => order?.unloading_point_location ? parsePostGISPoint(order.unloading_point_location) : null,
-    [order?.unloading_point_location]
-  );
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+    };
+    fetchUser();
+  }, []);
 
-  // Responsive styles
-  const responsiveStyles = useMemo(() => ({
-    header: {
-      padding: spacing.lg,
-    },
-    title: {
-      fontSize: fontSizes['2xl'],
-      marginBottom: spacing.xs,
-    },
-    statusBadge: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
-      borderRadius: scale(12),
-    },
-    statusText: {
-      fontSize: fontSizes.sm,
-    },
-    card: {
-      margin: spacing.md,
-      marginBottom: 0,
-      padding: spacing.md,
-      borderRadius: scale(12),
-    },
-    cardTitle: {
-      fontSize: fontSizes.lg,
-      marginBottom: spacing.md,
-    },
-    infoRow: {
-      paddingVertical: spacing.sm,
-    },
-    label: {
-      fontSize: fontSizes.sm,
-      marginLeft: spacing.xs,
-    },
-    value: {
-      fontSize: fontSizes.sm,
-    },
-    locationSection: {
-      marginBottom: spacing.lg,
-      paddingBottom: spacing.lg,
-    },
-    locationTitle: {
-      fontSize: fontSizes.md,
-      marginLeft: spacing.xs,
-    },
-    locationName: {
-      fontSize: fontSizes.lg,
-      marginBottom: spacing.xs,
-    },
-    locationAddress: {
-      fontSize: fontSizes.sm,
-      marginBottom: spacing.sm,
-      lineHeight: fontSizes.lg,
-    },
-    navigateButton: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      minHeight: touchTarget(48),
-      borderRadius: scale(8),
-    },
-    navigateButtonText: {
-      fontSize: fontSizes.sm,
-      marginLeft: spacing.xs,
-    },
-    trackingContainer: {
-      padding: spacing.md,
-      marginBottom: spacing.md,
-      borderRadius: scale(12),
-    },
-    trackingButton: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      minHeight: touchTarget(48),
-      borderRadius: scale(8),
-    },
-    trackingButtonText: {
-      fontSize: fontSizes.md,
-      marginLeft: spacing.xs,
-    },
-    trackingDescription: {
-      fontSize: fontSizes.sm,
-      marginTop: spacing.xs,
-    },
-    primaryButton: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.lg,
-      minHeight: touchTarget(48),
-      borderRadius: scale(10),
-      marginBottom: spacing.sm,
-    },
-    primaryButtonText: {
-      fontSize: fontSizes.lg,
-      marginLeft: spacing.xs,
-    },
-    actionButton: {
-      paddingVertical: spacing.sm,
-      minHeight: touchTarget(44),
-      borderRadius: scale(8),
-      marginBottom: spacing.xs,
-    },
-    actionButtonText: {
-      fontSize: fontSizes.md,
-    },
-    infoContainer: {
-      padding: spacing.sm,
-      borderRadius: scale(8),
-      marginTop: spacing.sm,
-    },
-    infoText: {
-      marginLeft: spacing.xs,
-      fontSize: fontSizes.sm,
-    },
-    completedContainer: {
-      padding: spacing.lg,
-      marginTop: spacing.sm,
-    },
-    completedText: {
-      fontSize: fontSizes.lg,
-      marginTop: spacing.md,
-    },
-  }), [spacing, fontSizes, scale, touchTarget]);
-
-  // Fetch order details
   const loadOrderDetails = useCallback(async () => {
-    if (!orderId) return;
-    
-    console.log('🔍 Loading order details for orderId:', orderId);
-    
-    // Validate orderId format to prevent UUID errors
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    
-    if (!uuidRegex.test(orderId)) {
-      console.error('❌ Invalid order ID format:', orderId);
-      console.error('❌ This might be a navigation error. Expected UUID, got:', typeof orderId, orderId);
-      
-      // Check if this is a navigation to scanner
-      if (orderId === 'scanner' || orderId === 'qr-scanner') {
-        console.log('🔄 Detected scanner route, redirecting...');
-        router.replace('/(tabs)/scanner');
-        return;
-      }
-      
-      setError(`Invalid order ID format: ${orderId}`);
-      setLoading(false);
-      return;
-    }
-    
     try {
       setLoading(true);
       setError(null);
-
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(orderId)) {
+        throw new Error(`Invalid order ID format: ${orderId}`);
+      }
       const { data, error } = await supabase
         .from("orders")
         .select(`
           *,
-          assigned_driver:users!orders_assigned_driver_id_fkey(
-            id,
-            full_name,
-            email
-          )
+          assigned_driver:users!orders_assigned_driver_id_fkey(id, full_name, email)
         `)
         .eq("id", orderId)
         .single();
-
       if (error) throw error;
       setOrder(data);
-
-      // Auto-start tracking for assigned orders
-      if (data && user && data.assigned_driver_id === user.id) {
-        const trackableStatuses = ["assigned", "activated", "in_progress", "in_transit", "loading", "loaded"];
-        if (trackableStatuses.includes(data.status) && !isTracking) {
-          try {
-            const ok = await locationService.startTracking(data.id);
-            if (ok) {
-              setIsTracking(true);
-              console.log("✅ Auto-started tracking for order:", data.id);
-            }
-          } catch (autoTrackError) {
-            console.warn("Auto-tracking failed:", autoTrackError);
-          }
-        }
-      }
+      setLoadingCoord(null);
+      setUnloadingCoord(null);
+      setMapError(null);
+      setDirections(null);
+      setDirectionsError(null);
+      setUserLocation(null);
+      setBackgroundLocationStarted(false); // Reset background tracking
     } catch (err) {
       console.error("Error loading order details:", err);
       setError(err.message);
@@ -297,359 +263,314 @@ export default function OrderDetailsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orderId, user, isTracking, router]);
+  }, [orderId]);
 
+  // Request foreground location permission
   useEffect(() => {
-    loadOrderDetails();
-  }, [loadOrderDetails]);
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status);
+      if (status !== "granted") {
+        setLocationError("Location permission denied. Enable it in settings to see your position on the map.");
+      }
+    })();
+  }, []);
 
-  // Subscribe to real-time updates
+  // Start background location tracking if user is the assigned driver and order is active
+  // Background tracking is disabled on web platform
   useEffect(() => {
-    if (!order?.id) return;
-    
-    const channel = supabase
-      .channel(`order:${order.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-          filter: `id=eq.${order.id}`,
-        },
-        (payload) => {
-          setOrder(payload.new);
+    if (
+      Platform.OS !== 'web' &&
+      order &&
+      currentUser &&
+      order.assigned_driver?.id === currentUser.id &&
+      ["activated", "in_progress", "in_transit", "arrived", "loading", "loaded", "unloading"].includes(order.status) &&
+      !backgroundLocationStarted
+    ) {
+      startBackgroundLocation(order.id).then((success) => {
+        if (success) {
+          setBackgroundLocationStarted(true);
+        } else {
+          setLocationError("Failed to start background location tracking. Check permissions.");
         }
-      )
-      .subscribe();
-
+      });
+    }
     return () => {
-      supabase.removeChannel(channel);
+      if (backgroundLocationStarted) {
+        stopBackgroundLocation();
+      }
     };
-  }, [order?.id]);
+  }, [order, currentUser, backgroundLocationStarted]);
 
-  // Check tracking status
+  // Track foreground user location with web compatibility
   useEffect(() => {
-    const checkTracking = async () => {
-      if (!order?.id) return;
-      const currentTracked = await locationService.getCurrentOrderId();
-      setIsTracking(currentTracked === order.id);
+    let subscription;
+    let watchId;
+    
+    if (Platform.OS === 'web') {
+      // Use browser Geolocation API for web
+      if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            setUserLocation({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            });
+            setLocationError(null);
+          },
+          (err) => {
+            console.error("Web location tracking error:", err);
+            setLocationError("Failed to track location. Check browser settings.");
+          },
+          { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+        );
+      } else {
+        setLocationError("Geolocation is not supported in this browser.");
+      }
+    } else if (locationPermission === "granted") {
+      // Use expo-location for native platforms
+      (async () => {
+        try {
+          subscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.High,
+              distanceInterval: 10,
+              timeInterval: 1000,
+            },
+            (location) => {
+              setUserLocation({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              });
+              setLocationError(null);
+            }
+          );
+        } catch (err) {
+          console.error("Foreground location tracking error:", err);
+          setLocationError("Failed to track location. Check device settings.");
+        }
+      })();
+    }
+    
+    return () => {
+      if (Platform.OS === 'web' && watchId !== undefined) {
+        navigator.geolocation.clearWatch(watchId);
+      } else if (subscription) {
+        subscription.remove();
+      }
     };
-    checkTracking();
-  }, [order?.id]);
+  }, [locationPermission]);
+
+  // Geocode locations
+  useEffect(() => {
+    if (order && !loadingCoord && !unloadingCoord) {
+      const geocodeLocations = async () => {
+        setMapLoading(true);
+        setMapError(null);
+        try {
+          const loadingResults = await Location.geocodeAsync(order.loading_point_name);
+          const unloadingResults = await Location.geocodeAsync(order.unloading_point_name);
+          if (loadingResults.length > 0) {
+            setLoadingCoord({
+              latitude: loadingResults[0].latitude,
+              longitude: loadingResults[0].longitude,
+            });
+          }
+          if (unloadingResults.length > 0) {
+            setUnloadingCoord({
+              latitude: unloadingResults[0].latitude,
+              longitude: unloadingResults[0].longitude,
+            });
+          }
+          if (!loadingResults.length || !unloadingResults.length) {
+            setMapError("Unable to geocode one or more locations.");
+          }
+        } catch (err) {
+          console.error("Geocoding error:", err);
+          setMapError("Failed to load map locations. Check your connection or address formats.");
+        } finally {
+          setMapLoading(false);
+        }
+      };
+      geocodeLocations();
+    }
+  }, [order, loadingCoord, unloadingCoord]);
+
+  // Fetch directions (use userLocation as origin if user is driver)
+  useEffect(() => {
+    if (loadingCoord && unloadingCoord && !directions) {
+      const fetchDirections = async () => {
+        setDirectionsLoading(true);
+        setDirectionsError(null);
+        try {
+          const apiKey = Constants.expoConfig.extra.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+          const origin =
+            currentUser &&
+            order.assigned_driver?.id === currentUser.id &&
+            userLocation
+              ? `${userLocation.latitude},${userLocation.longitude}`
+              : `${loadingCoord.latitude},${loadingCoord.longitude}`;
+          const destination = `${unloadingCoord.latitude},${unloadingCoord.longitude}`;
+          const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&mode=driving&key=${apiKey}`;
+          const response = await fetch(url);
+          const data = await response.json();
+          if (data.status !== "OK") {
+            throw new Error(data.error_message || "Failed to fetch directions.");
+          }
+          setDirections(data.routes[0]);
+        } catch (err) {
+          console.error("Directions error:", err);
+          setDirectionsError("Unable to fetch driving directions. Please check locations or API key.");
+        } finally {
+          setDirectionsLoading(false);
+        }
+      };
+      fetchDirections();
+    }
+  }, [loadingCoord, unloadingCoord, userLocation, currentUser, order, directions]);
+
+  // Memoized data
+  const timelineData = useMemo(() => {
+    if (!order) return [];
+    return [
+      {
+        key: "created",
+        icon: "event",
+        color: colors.indigo500,
+        label: "Order Created",
+        value: new Date(order.created_at).toLocaleString(),
+        isCompleted: true,
+      },
+      {
+        key: "activated",
+        icon: "check-circle",
+        color: colors.success,
+        label: "Load Activated",
+        value: order.load_activated_at
+          ? new Date(order.load_activated_at).toLocaleString()
+          : "Pending activation",
+        isCompleted: !!order.load_activated_at,
+      },
+      {
+        key: "delivered",
+        icon: "done-all",
+        color: colors.successDark,
+        label: "Delivered",
+        value: order.delivered_at
+          ? new Date(order.delivered_at).toLocaleString()
+          : "In progress",
+        isCompleted: !!order.delivered_at,
+      },
+    ];
+  }, [order]);
+
+  const actionButtons = useMemo(() => {
+    if (!order) return { showActivate: false, showManage: false, showInfo: false };
+    return {
+      showActivate: order.status === "assigned" && !order.load_activated_at,
+      showManage: order.load_activated_at && [
+        "activated",
+        "in_progress",
+        "in_transit",
+        "arrived",
+        "loading",
+        "loaded",
+        "unloading",
+      ].includes(order.status),
+      showInfo: order.status === "assigned" && order.load_activated_at,
+    };
+  }, [order]);
+
+  const mapRegion = useMemo(() => {
+    const coords = [];
+    if (loadingCoord) coords.push(loadingCoord);
+    if (unloadingCoord) coords.push(unloadingCoord);
+    if (userLocation) coords.push(userLocation);
+
+    if (directions) {
+      const bounds = directions.bounds;
+      return {
+        latitude: (bounds.northeast.lat + bounds.southwest.lat) / 2,
+        longitude: (bounds.northeast.lng + bounds.southwest.lng) / 2,
+        latitudeDelta: (bounds.northeast.lat - bounds.southwest.lat) * 1.2,
+        longitudeDelta: (bounds.northeast.lng - bounds.southwest.lng) * 1.2,
+      };
+    } else if (coords.length > 0) {
+      const latitudes = coords.map(c => c.latitude);
+      const longitudes = coords.map(c => c.longitude);
+      const minLat = Math.min(...latitudes);
+      const maxLat = Math.max(...latitudes);
+      const minLng = Math.min(...longitudes);
+      const maxLng = Math.max(...longitudes);
+      return {
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: Math.max((maxLat - minLat) * 1.5, 0.1),
+        longitudeDelta: Math.max((maxLng - minLng) * 1.5, 0.1),
+      };
+    }
+    return null;
+  }, [loadingCoord, unloadingCoord, userLocation, directions]);
+
+  useEffect(() => {
+    if (orderId) {
+      loadOrderDetails();
+    }
+  }, [orderId, loadOrderDetails]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadOrderDetails();
   }, [loadOrderDetails]);
 
-  const isValidStatusTransition = (currentStatus, newStatus) => {
-    return STATUS_FLOW[currentStatus]?.includes(newStatus);
-  };
-
-  const getNextActions = useCallback(() => {
-    if (!order) {
-      console.log('🔍 getNextActions: No order available');
-      return [];
-    }
-    
-    console.log('🔍 getNextActions:', {
-      currentStatus: order.status,
-      orderId: order.id
-    });
-    
-    const currentIndex = STATUS_ACTIONS.findIndex(
-      (a) => a.status === order.status
-    );
-    
-    console.log('🔍 Current status index:', currentIndex);
-    
-    const nextActions = STATUS_ACTIONS.slice(currentIndex + 1);
-    console.log('🔍 Next actions available:', nextActions.map(a => ({ status: a.status, label: a.label })));
-    
-    return nextActions;
-  }, [order]);
-
-  const updateStatus = useCallback(
-    async (newStatus) => {
-      console.log('🔄 Status update requested:', {
-        currentStatus: order?.status,
-        newStatus,
-        orderId: order?.id,
-        userId: user?.id,
-        assignedDriverId: order?.assigned_driver_id
-      });
-
-      if (!order?.id || !user) {
-        console.error('❌ Missing order or user:', { orderId: order?.id, userId: user?.id });
-        Alert.alert('Error', 'Order or user information is missing');
-        return;
-      }
-
-      // Check if order is assigned to current driver
-      if (!order.assigned_driver_id || order.assigned_driver_id !== user.id) {
-        console.warn('⚠️ Order not assigned to current driver, attempting to assign...');
-        
-        // Try to assign the driver to this order first
-        try {
-          const { error: assignError } = await supabase
-            .from("orders")
-            .update({
-              assigned_driver_id: user.id,
-              driver_id: user.id,
-              status: order.status === 'pending' ? 'assigned' : order.status,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", order.id);
-
-          if (assignError) {
-            console.error('❌ Failed to assign driver:', assignError);
-            Alert.alert(
-              'Assignment Required',
-              'This order needs to be assigned to you by a dispatcher before you can update it.',
-              [{ text: 'OK' }]
-            );
-            return;
-          }
-
-          console.log('✅ Driver assigned successfully, reloading order...');
-          // Reload the order to get updated data
-          await loadOrderDetails();
-          
-          Alert.alert(
-            'Order Assigned',
-            'This order has been assigned to you. Please try the status update again.',
-            [{ text: 'OK' }]
-          );
-          return;
-        } catch (assignmentError) {
-          console.error('❌ Assignment error:', assignmentError);
-          Alert.alert(
-            'Error',
-            'Failed to assign order. Please contact dispatch.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-      }
-
-      // Validate transition
-      if (!isValidStatusTransition(order.status, newStatus)) {
-        console.error('❌ Invalid status transition:', { from: order.status, to: newStatus });
-        Alert.alert('Invalid Status', `Cannot change status from ${order.status} to ${newStatus}`);
-        return;
-      }
-
-      console.log('✅ Status transition is valid, showing confirmation');
-
-      // Note: Alert.prompt is iOS-only, using Alert.alert for cross-platform compatibility
-      Alert.alert(
-        'Status Update',
-        `Change status from "${order.status}" to "${newStatus}"?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Update',
-            onPress: async () => {
-              try {
-                console.log('📝 Starting status update process...');
-                setStatusUpdating(true);
-
-                console.log('💾 Inserting status update record...');
-                // Insert status update (notes removed for cross-platform compatibility)
-                const { error: statusError } = await supabase
-                  .from("status_updates")
-                  .insert({
-                    order_id: order.id,
-                    driver_id: user.id, // Fixed: Use driver_id to match database schema
-                    status: newStatus,
-                    notes: null, // Notes functionality removed for cross-platform compatibility
-                    created_at: new Date().toISOString(),
-                  });
-
-                if (statusError) {
-                  console.error('❌ Status update insert error:', statusError);
-                  throw statusError;
-                }
-                console.log('✅ Status update record created');
-
-                console.log('🔄 Updating order status...');
-                // Update order
-                const updateData = { status: newStatus };
-                if ((newStatus === "in_progress" || newStatus === "in_transit") && !order.actual_start_time) {
-                  updateData.actual_start_time = new Date().toISOString();
-                }
-                if (newStatus === "completed") {
-                  console.log('🏁 Completing order - setting end times and stopping tracking...');
-                  updateData.actual_end_time = new Date().toISOString();
-                  updateData.delivered_at = new Date().toISOString();
-                  console.log('🛑 Calling locationService.stopTracking()...');
-                  await locationService.stopTracking();
-                  console.log('✅ locationService.stopTracking() completed');
-                  setIsTracking(false);
-                  console.log('✅ setIsTracking(false) called');
-                }
-
-                console.log('📊 Update data:', updateData);
-                const { error: orderError } = await supabase
-                  .from("orders")
-                  .update(updateData)
-                  .eq("id", order.id);
-
-                if (orderError) {
-                  console.error('❌ Order update error:', orderError);
-                  throw orderError;
-                }
-                console.log('✅ Order status updated successfully in database to:', newStatus);
-
-                // If completing the order, show success and navigate away
-                if (newStatus === "completed") {
-                  Alert.alert(
-                    "✅ Delivery Complete!", 
-                    `Order ${order.order_number} has been completed successfully.`,
-                    [
-                      {
-                        text: "OK",
-                        onPress: () => {
-                          console.log('🏠 Navigating back to dashboard after completion');
-                          router.replace('/(tabs)/orders'); // Navigate back to orders list
-                        }
-                      }
-                    ]
-                  );
-                } else {
-                  Alert.alert("Success", `Status updated to "${newStatus}" successfully`);
-                  console.log('🔄 Refreshing order data...');
-                  // Refresh order data
-                  loadOrderDetails();
-                }
-              } catch (e) {
-                console.error("❌ Update status error:", e);
-                Alert.alert("Error", `Failed to update status: ${e?.message || 'Unknown error'}`);
-              } finally {
-                setStatusUpdating(false);
-                console.log('🏁 Status update process completed');
-              }
-            },
-          },
-        ],
-        'plain-text'
-      );
-    },
-    [order, user, loadOrderDetails, router]
-  );
-
-  const startTracking = useCallback(async () => {
-    if (!order?.id) return;
-    try {
-      const ok = await locationService.startTracking(order.id);
-      if (ok) {
-        setIsTracking(true);
-        Alert.alert("Success", "Location tracking started");
-      } else {
-        Alert.alert("Error", "Failed to start location tracking");
-      }
-    } catch (e) {
-      console.error("Start tracking error:", e);
-      Alert.alert("Error", "Failed to start location tracking");
-    }
-  }, [order?.id]);
-
-  const stopTracking = useCallback(async () => {
-    try {
-      await locationService.stopTracking();
-      setIsTracking(false);
-      Alert.alert("Success", "Location tracking stopped");
-    } catch (e) {
-      console.error("Stop tracking error:", e);
-      Alert.alert("Error", "Failed to stop tracking");
-    }
-  }, []);
-
-  const openMaps = useCallback((destination, label) => {
-    try {
-      if (!destination) {
-        Alert.alert("Error", "Missing coordinates for this location");
-        return;
-      }
-      const scheme = Platform.select({ ios: "maps:", android: "geo:" });
-      const url = Platform.select({
-        ios: `${scheme}?daddr=${destination.latitude},${destination.longitude}`,
-        android: `${scheme}${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}(${encodeURIComponent(label)})`,
-      });
-      
-      if (url) {
-        Linking.openURL(url).catch((err) => {
-          console.error("Error opening maps:", err);
-          Alert.alert("Error", "Unable to open maps application.");
-        });
-      }
-    } catch (error) {
-      console.error("Error in openMaps:", error);
-      Alert.alert("Error", "Failed to open navigation.");
-    }
-  }, []);
-
-  const handleBack = useCallback(() => {
-    if (isTracking) {
-      Alert.alert(
-        'Location Tracking Active',
-        'Do you want to stop tracking before leaving?',
-        [
-          {
-            text: 'Stop and Leave',
-            onPress: async () => {
-              await stopTracking();
-              router.back();
-            },
-          },
-          {
-            text: 'Keep Tracking',
-            onPress: () => router.back(),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
-      return;
-    }
-    router.back();
-  }, [isTracking, stopTracking, router]);
-
-  // Loading state
   if (loading && !order) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading order details...</Text>
       </View>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <View style={styles.centered}>
-        <MaterialIcons name="error-outline" size={64} color="#ef4444" />
-        <Text style={styles.errorText}>Error: {error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadOrderDetails}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
+        <View style={styles.errorIconWrapper}>
+          <MaterialIcons name="error-outline" size={56} color={colors.danger} />
+        </View>
+        <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.retryButton,
+            pressed && styles.retryButtonPressed,
+            loading && styles.retryButtonDisabled,
+          ]}
+          onPress={loadOrderDetails}
+          disabled={loading}
+        >
+          <MaterialIcons name="refresh" size={20} color={colors.white} />
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </Pressable>
       </View>
     );
   }
 
-  // Order not found
   if (!order) {
     return (
       <View style={styles.centered}>
-        <MaterialIcons name="inbox" size={64} color="#9ca3af" />
-        <Text style={styles.errorText}>Order not found</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
+        <View style={styles.emptyIconWrapper}>
+          <MaterialIcons name="inbox" size={56} color={colors.gray400} />
+        </View>
+        <Text style={styles.emptyTitle}>Order Not Found</Text>
+        <Text style={styles.emptyText}>We couldn&apos;t find the order you&apos;re looking for</Text>
+        <Pressable
+          style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+          onPress={() => router.back()}
+        >
+          <MaterialIcons name="arrow-back" size={20} color={colors.white} />
           <Text style={styles.retryButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     );
   }
@@ -657,525 +578,789 @@ export default function OrderDetailsScreen() {
   return (
     <ScrollView
       style={styles.container}
+      contentContainerStyle={styles.scrollContent}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
       }
+      showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
-      <View style={[styles.header, responsiveStyles.header]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#374151" />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={[styles.title, responsiveStyles.title]}>Order #{order.order_number}</Text>
-          <View style={[styles.statusBadge, getStatusStyle(order.status), responsiveStyles.statusBadge]}>
-            <Text style={[styles.statusText, responsiveStyles.statusText]}>
-              {order.status.replace('_', ' ').toUpperCase()}
-            </Text>
+      {/* Hero Header */}
+      <View style={styles.hero}>
+        <View style={styles.heroContent}>
+          <Text style={styles.heroKicker}>ORDER DETAILS</Text>
+          <Text style={styles.heroTitle}>#{order.order_number}</Text>
+          <View style={[styles.statusBadge, getStatusStyle(order.status)]}>
+            <MaterialIcons name={getStatusIcon(order.status)} size={14} color={colors.white} />
+            <Text style={styles.statusText}>{order.status.toUpperCase()}</Text>
           </View>
         </View>
       </View>
 
-      {/* Order Information */}
-      <View style={[styles.card, responsiveStyles.card]}>
-        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Order Information</Text>
-        
-        <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-          <MaterialIcons name="numbers" size={20} color="#6b7280" />
-          <Text style={[styles.label, responsiveStyles.label]}>Order Number:</Text>
-          <Text style={[styles.value, responsiveStyles.value]}>{order.order_number}</Text>
-        </View>
-
-        <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-          <MaterialIcons name="info-outline" size={20} color="#6b7280" />
-          <Text style={[styles.label, responsiveStyles.label]}>Status:</Text>
-          <Text style={[styles.value, responsiveStyles.value]}>{order.status.replace('_', ' ')}</Text>
-        </View>
-
-        {order.assigned_driver && (
-          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-            <MaterialIcons name="person" size={20} color="#6b7280" />
-            <Text style={[styles.label, responsiveStyles.label]}>Driver:</Text>
-            <Text style={[styles.value, responsiveStyles.value]}>{order.assigned_driver.full_name}</Text>
-          </View>
-        )}
+      {/* Quick Stats Grid */}
+      <View style={styles.quickStatsContainer}>
+        <QuickStatCard
+          icon="person"
+          label="Driver"
+          value={order.assigned_driver?.full_name || "Unassigned"}
+          color={colors.indigo500}
+        />
+        <QuickStatCard
+          icon="straighten"
+          label="Distance"
+          value={directions ? directions.legs[0].distance.text : order.estimated_distance_km ? `${order.estimated_distance_km} km` : "TBD"}
+          color={colors.purple500}
+        />
+        <QuickStatCard
+          icon="schedule"
+          label="Created"
+          value={new Date(order.created_at).toLocaleDateString()}
+          color={colors.warning}
+        />
       </View>
 
-      {/* Location Details */}
-      <View style={[styles.card, responsiveStyles.card]}>
-        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Location Details</Text>
-
-        <View style={[styles.locationSection, responsiveStyles.locationSection]}>
-          <View style={styles.locationHeader}>
-            <MaterialIcons name="place" size={20} color="#10b981" />
-            <Text style={[styles.locationTitle, responsiveStyles.locationTitle]}>Loading Point</Text>
-          </View>
-          <Text style={[styles.locationName, responsiveStyles.locationName]}>{order.loading_point_name}</Text>
-          {order.loading_point_address && (
-            <Text style={[styles.locationAddress, responsiveStyles.locationAddress]}>{order.loading_point_address}</Text>
+      {/* Order Information Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Order Information</Text>
+        <View style={styles.card}>
+          <InfoRow
+            icon="numbers"
+            iconColor={colors.indigo500}
+            label="Order Number"
+            value={order.order_number}
+          />
+          <InfoRow
+            icon="info-outline"
+            iconColor={colors.blue800}
+            label="Status"
+            value={order.status}
+          />
+          {order.assigned_driver && (
+            <InfoRow
+              icon="person"
+              iconColor={colors.purple500}
+              label="Assigned Driver"
+              value={order.assigned_driver.full_name}
+              isLast
+            />
           )}
-          <TouchableOpacity
-            style={[styles.navigateButton, responsiveStyles.navigateButton]}
-            onPress={() => openMaps(loadingPoint, order.loading_point_name)}
-          >
-            <MaterialIcons name="navigation" size={20} color="#fff" />
-            <Text style={[styles.navigateButtonText, responsiveStyles.navigateButtonText]}>Navigate</Text>
-          </TouchableOpacity>
         </View>
+      </View>
 
-        <View style={[styles.locationSection, responsiveStyles.locationSection]}>
-          <View style={styles.locationHeader}>
-            <MaterialIcons name="location-on" size={20} color="#ef4444" />
-            <Text style={[styles.locationTitle, responsiveStyles.locationTitle]}>Delivery Point</Text>
-          </View>
-          <Text style={[styles.locationName, responsiveStyles.locationName]}>{order.unloading_point_name}</Text>
-          {order.unloading_point_address && (
-            <Text style={[styles.locationAddress, responsiveStyles.locationAddress]}>{order.unloading_point_address}</Text>
+      {/* Location Details Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Location Details</Text>
+        <View style={styles.card}>
+          <InfoRow
+            icon="place"
+            iconColor={colors.success}
+            label="Loading Point"
+            value={order.loading_point_name}
+          />
+          <InfoRow
+            icon="location-on"
+            iconColor={colors.danger}
+            label="Delivery Point"
+            value={order.unloading_point_name}
+          />
+          {order.estimated_distance_km && (
+            <InfoRow
+              icon="straighten"
+              iconColor={colors.warning}
+              label="Est. Distance"
+              value={`${order.estimated_distance_km} km`}
+              isLast
+            />
           )}
-          <TouchableOpacity
-            style={[styles.navigateButton, responsiveStyles.navigateButton]}
-            onPress={() => openMaps(unloadingPoint, order.unloading_point_name)}
-          >
-            <MaterialIcons name="navigation" size={20} color="#fff" />
-            <Text style={[styles.navigateButtonText, responsiveStyles.navigateButtonText]}>Navigate</Text>
-          </TouchableOpacity>
         </View>
-
-        {order.estimated_distance_km && (
-          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-            <MaterialIcons name="straighten" size={20} color="#6b7280" />
-            <Text style={[styles.label, responsiveStyles.label]}>Distance:</Text>
-            <Text style={[styles.value, responsiveStyles.value]}>{order.estimated_distance_km} km</Text>
-          </View>
-        )}
       </View>
 
-      {/* Timeline */}
-      <View style={[styles.card, responsiveStyles.card]}>
-        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Timeline</Text>
-
-        <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-          <MaterialIcons name="event" size={20} color="#6b7280" />
-          <Text style={[styles.label, responsiveStyles.label]}>Created:</Text>
-          <Text style={[styles.value, responsiveStyles.value]}>
-            {new Date(order.created_at).toLocaleString()}
-          </Text>
+      {/* Route Map Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Route Map</Text>
+        <View style={styles.card}>
+          {Platform.OS === 'web' ? (
+            // Web platform - show placeholder
+            <View style={styles.centeredDisabled}>
+              <MaterialIcons name="map" size={48} color={colors.primary} />
+              <Text style={styles.infoText}>📍 Map view is available on mobile app</Text>
+              <Text style={styles.loadingText}>Install the mobile app to see interactive maps with directions</Text>
+            </View>
+          ) : (
+            // Native platform - show map
+            <>
+              {mapLoading && (
+                <View style={styles.centeredDisabled}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading map...</Text>
+                </View>
+              )}
+              {mapError && (
+                <View style={styles.centeredDisabled}>
+                  <MaterialIcons name="error-outline" size={48} color={colors.danger} />
+                  <Text style={styles.errorText}>{mapError}</Text>
+                </View>
+              )}
+              {!mapLoading && !mapError && mapRegion && MapView && (
+                <MapView style={styles.map} initialRegion={mapRegion} provider={PROVIDER_GOOGLE}>
+                  {loadingCoord && (
+                    <Marker
+                      coordinate={loadingCoord}
+                      title="Loading Point"
+                      description={order.loading_point_name}
+                      pinColor={colors.success}
+                    />
+                  )}
+                  {unloadingCoord && (
+                    <Marker
+                      coordinate={unloadingCoord}
+                      title="Delivery Point"
+                      description={order.unloading_point_name}
+                      pinColor={colors.danger}
+                    />
+                  )}
+                  {userLocation && (
+                    <Marker
+                      coordinate={userLocation}
+                      title="Your Location"
+                      description="Current position"
+                      pinColor={colors.info}
+                    />
+                  )}
+                  {directions ? (
+                    <Polyline
+                      coordinates={decodePolyline(directions.overview_polyline.points)}
+                      strokeColor={colors.primary}
+                      strokeWidth={3}
+                    />
+                  ) : (
+                    loadingCoord &&
+                    unloadingCoord && (
+                      <Polyline
+                        coordinates={[loadingCoord, unloadingCoord]}
+                        strokeColor={colors.primary}
+                        strokeWidth={3}
+                      />
+                    )
+                  )}
+                </MapView>
+              )}
+              {!mapRegion && !mapLoading && !mapError && (
+                <Text style={styles.infoText}>Map data not available.</Text>
+              )}
+              {locationError && (
+                <View style={styles.infoAlert}>
+                  <MaterialIcons name="location-off" size={22} color={colors.danger} />
+                  <Text style={styles.infoAlertText}>{locationError}</Text>
+                </View>
+              )}
+              {directionsLoading && (
+                <View style={styles.centeredDisabled}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading directions...</Text>
+                </View>
+              )}
+              {directionsError && <Text style={styles.errorText}>{directionsError}</Text>}
+              {directions && !directionsLoading && (
+                <>
+                  <View style={styles.directionsSummary}>
+                    <MaterialIcons name="directions-car" size={20} color={colors.primary} />
+                    <Text style={styles.summaryText}>
+                      {directions.legs[0].distance.text} • {directions.legs[0].duration.text}
+                    </Text>
+                  </View>
+                  <ScrollView style={styles.stepsContainer} nestedScrollEnabled={true}>
+                    {directions.legs[0].steps.map((step, index) => (
+                      <View key={index} style={styles.stepRow}>
+                        <MaterialIcons name="directions" size={18} color={colors.gray600} />
+                        <Text style={styles.stepInstruction}>{step.html_instructions.replace(/<[^>]*>/g, '')}</Text>
+                        <Text style={styles.stepDetails}>
+                          {step.distance.text} • {step.duration.text}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+            </>
+          )}
         </View>
-
-        {order.load_activated_at && (
-          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-            <MaterialIcons name="check-circle" size={20} color="#10b981" />
-            <Text style={[styles.label, responsiveStyles.label]}>Activated:</Text>
-            <Text style={[styles.value, responsiveStyles.value]}>
-              {new Date(order.load_activated_at).toLocaleString()}
-            </Text>
-          </View>
-        )}
-
-        {order.actual_start_time && (
-          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-            <MaterialIcons name="play-circle-filled" size={20} color="#6366f1" />
-            <Text style={[styles.label, responsiveStyles.label]}>Started:</Text>
-            <Text style={[styles.value, responsiveStyles.value]}>
-              {new Date(order.actual_start_time).toLocaleString()}
-            </Text>
-          </View>
-        )}
-
-        {order.delivered_at && (
-          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
-            <MaterialIcons name="done-all" size={20} color="#059669" />
-            <Text style={[styles.label, responsiveStyles.label]}>Delivered:</Text>
-            <Text style={[styles.value, responsiveStyles.value]}>
-              {new Date(order.delivered_at).toLocaleString()}
-            </Text>
-          </View>
-        )}
       </View>
 
-      {/* Location Tracking */}
-      <View style={[styles.card, responsiveStyles.card]}>
-        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Location Tracking</Text>
-        <Text style={[styles.trackingDescription, responsiveStyles.trackingDescription]}>
-          {isTracking
-            ? "Your location is being tracked for this order"
-            : "Location tracking is currently disabled"}
-        </Text>
-        {isTracking ? (
-          <TouchableOpacity
-            style={[styles.stopTrackingButton, responsiveStyles.trackingButton]}
-            onPress={stopTracking}
-          >
-            <MaterialIcons name="location-off" size={20} color="#fff" />
-            <Text style={[styles.stopTrackingButtonText, responsiveStyles.trackingButtonText]}>Stop Tracking</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.startTrackingButton, responsiveStyles.trackingButton]}
-            onPress={startTracking}
-          >
-            <MaterialIcons name="location-on" size={20} color="#fff" />
-            <Text style={[styles.startTrackingButtonText, responsiveStyles.trackingButtonText]}>Start Tracking</Text>
-          </TouchableOpacity>
-        )}
+      {/* Timeline Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Order Timeline</Text>
+        <View style={styles.card}>
+          {timelineData.map((item, index) => (
+            <TimelineItem
+              key={item.key}
+              icon={item.icon}
+              color={item.color}
+              label={item.label}
+              value={item.value}
+              isCompleted={item.isCompleted}
+              isLast={index === timelineData.length - 1}
+            />
+          ))}
+        </View>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionContainer}>
-        {/* Load Activation */}
-        {order.status === "assigned" && !order.load_activated_at && (
-          <TouchableOpacity
-            style={[styles.primaryButton, responsiveStyles.primaryButton]}
+      {/* Action Buttons Section */}
+      <View style={styles.section}>
+        {actionButtons.showActivate && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.primaryButtonPressed,
+              loading && styles.primaryButtonDisabled,
+            ]}
             onPress={() =>
               router.push({
                 pathname: "/(tabs)/LoadActivationScreen",
                 params: { orderId: order.id, orderNumber: order.order_number },
               })
             }
+            disabled={loading}
           >
-            <MaterialIcons name="play-circle-filled" size={24} color="#fff" />
-            <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>Activate Load</Text>
-          </TouchableOpacity>
+            <MaterialIcons name="play-circle-filled" size={24} color={colors.white} />
+            <Text style={styles.primaryButtonText}>Activate Load</Text>
+          </Pressable>
         )}
-
-        {/* Scanner Access */}
-        {order.load_activated_at && 
-         ["activated", "in_progress", "in_transit", "arrived", "loading", "loaded", "unloading"].includes(order.status) && (
-          <TouchableOpacity
-            style={[styles.primaryButton, responsiveStyles.primaryButton]}
+        {actionButtons.showManage && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.successButton,
+              pressed && styles.primaryButtonPressed,
+              loading && styles.primaryButtonDisabled,
+            ]}
             onPress={() =>
               router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_number}`)
             }
+            disabled={loading}
           >
-            <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
-            <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
+            <MaterialIcons name="qr-code-scanner" size={24} color={colors.white} />
+            <Text style={styles.primaryButtonText}>
               {order.status === "activated" ? "Start Order" : "Manage Order"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
-
-        {/* Status Updates */}
-        {order.status !== "completed" && order.status !== "cancelled" && getNextActions(order.status).length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Update Status</Text>
-            {getNextActions(order.status).map((action) => (
-              <TouchableOpacity
-                key={action.status}
-                style={[
-                  styles.actionButton,
-                  responsiveStyles.actionButton,
-                  { backgroundColor: action.color },
-                  statusUpdating && styles.actionButtonDisabled,
-                ]}
-                onPress={() => updateStatus(action.status)}
-                disabled={statusUpdating}
-              >
-                <Text style={[styles.actionButtonText, responsiveStyles.actionButtonText]}>
-                  {statusUpdating ? "Updating..." : action.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </>
-        )}
-
-        {/* Info Message */}
-        {order.status === "assigned" && order.load_activated_at && (
-          <View style={[styles.infoContainer, responsiveStyles.infoContainer]}>
-            <MaterialIcons name="info-outline" size={20} color="#6366f1" />
-            <Text style={[styles.infoText, responsiveStyles.infoText]}>
+        {actionButtons.showInfo && (
+          <View style={styles.infoAlert}>
+            <MaterialIcons name="check-circle" size={22} color={colors.success} />
+            <Text style={styles.infoAlertText}>
               Load is activated! You can now scan QR codes to start the order.
             </Text>
           </View>
         )}
-
-        {/* Completed/Cancelled Message */}
-        {(order.status === "completed" || order.status === "cancelled") && (
-          <View style={[styles.completedContainer, responsiveStyles.completedContainer]}>
-            <MaterialIcons 
-              name={order.status === "completed" ? "check-circle" : "cancel"} 
-              size={48} 
-              color={order.status === "completed" ? colors.green600 : colors.red500} 
-            />
-            <Text style={[
-              styles.completedText,
-              responsiveStyles.completedText,
-              order.status === "completed" ? styles.completedTextGreen : styles.cancelledTextRed
-            ]}>
-              This order has been {order.status === "completed" ? "completed" : "cancelled"}.
-            </Text>
-          </View>
-        )}
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed && styles.secondaryButtonPressed,
+            loading && styles.secondaryButtonDisabled,
+          ]}
+          onPress={() => router.back()}
+          disabled={loading}
+        >
+          <MaterialIcons name="arrow-back" size={20} color={colors.gray700} />
+          <Text style={styles.secondaryButtonText}>Back to Orders</Text>
+        </Pressable>
       </View>
+
+      <View style={styles.bottomSpacer} />
     </ScrollView>
   );
 }
 
+// Helper Functions
 const getStatusStyle = (status) => {
-  const styles = {
-    pending: { backgroundColor: "#9ca3af" },
-    assigned: { backgroundColor: "#3b82f6" },
-    activated: { backgroundColor: "#10b981" },
-    in_progress: { backgroundColor: "#6366f1" },
-    in_transit: { backgroundColor: "#8b5cf6" },
-    arrived: { backgroundColor: "#10b981" },
-    loading: { backgroundColor: "#f59e0b" },
-    loaded: { backgroundColor: "#10b981" },
-    unloading: { backgroundColor: "#f59e0b" },
-    delivered: { backgroundColor: "#059669" },
-    completed: { backgroundColor: "#10b981" },
-    cancelled: { backgroundColor: "#ef4444" },
+  const statusStyles = {
+    pending: { backgroundColor: colors.gray500 },
+    assigned: { backgroundColor: colors.info },
+    activated: { backgroundColor: colors.success },
+    in_progress: { backgroundColor: colors.indigo500 },
+    in_transit: { backgroundColor: colors.primary },
+    delivered: { backgroundColor: colors.successDark },
+    completed: { backgroundColor: colors.success },
+    arrived: { backgroundColor: colors.warning },
+    loading: { backgroundColor: colors.warning },
+    loaded: { backgroundColor: colors.success },
+    unloading: { backgroundColor: colors.warningDark },
   };
-  return styles[status] || { backgroundColor: "#6b7280" };
+  return statusStyles[status] || { backgroundColor: colors.gray500 };
+};
+
+const getStatusIcon = (status) => {
+  const iconMap = {
+    pending: "schedule",
+    assigned: "assignment",
+    activated: "check-circle",
+    in_progress: "local-shipping",
+    in_transit: "directions",
+    delivered: "done-all",
+    completed: "task-alt",
+    arrived: "location-on",
+    loading: "upload",
+    loaded: "inventory",
+    unloading: "download",
+  };
+  return iconMap[status] || "info";
 };
 
 const styles = StyleSheet.create({
+  // Container Styles
   container: {
     flex: 1,
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.gray100,
+    padding: 24,
+    backgroundColor: colors.background,
   },
+  centeredDisabled: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: colors.background, pointerEvents: 'none' },
+
+  // Loading & Error States
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: colors.gray500,
+    color: colors.gray600,
+    fontWeight: "600",
+  },
+  errorIconWrapper: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.red50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.gray900,
+    marginBottom: 8,
+    textAlign: "center",
   },
   errorText: {
-    fontSize: 18,
-    color: colors.red500,
+    fontSize: 15,
+    color: colors.gray600,
     textAlign: "center",
-    marginTop: 16,
+    marginBottom: 24,
+    paddingHorizontal: 32,
+    lineHeight: 22,
+  },
+  emptyIconWrapper: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.gray100,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.gray900,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: colors.gray600,
+    textAlign: "center",
+    marginBottom: 24,
+    paddingHorizontal: 32,
   },
   retryButton: {
-    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    minHeight: 52,
+    minWidth: 180,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadowDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
+  retryButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  retryButtonDisabled: { opacity: 0.6, pointerEvents: 'none' },
   retryButtonText: {
     color: colors.white,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    marginLeft: 8,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray200,
+
+  // Hero Header
+  hero: {
+    backgroundColor: colors.primary,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadowDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  backButton: {
-    marginRight: 16,
-    padding: 8,
+  heroContent: {
+    alignItems: "flex-start",
   },
-  headerContent: {
-    flex: 1,
+  heroKicker: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryLight,
+    letterSpacing: 1.5,
+    marginBottom: 4,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: colors.gray700,
-    marginBottom: 8,
+  heroTitle: {
+    fontSize: IS_SMALL_DEVICE ? 26 : 32,
+    fontWeight: "800",
+    color: colors.white,
+    letterSpacing: -0.5,
+    marginBottom: 16,
   },
   statusBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   statusText: {
     color: colors.white,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    marginLeft: 6,
   },
-  card: {
-    backgroundColor: colors.white,
-    margin: 16,
-    marginBottom: 0,
-    padding: 16,
-    borderRadius: 12,
-    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
-    elevation: 3,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.gray700,
-    marginBottom: 16,
-  },
-  infoRow: {
+
+  // Quick Stats Grid
+  quickStatsContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray100,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: colors.gray500,
-    marginLeft: 8,
-    width: 120,
-  },
-  value: {
-    fontSize: 14,
-    color: colors.gray700,
-    flex: 1,
-  },
-  locationSection: {
+    marginHorizontal: 16,
+    marginTop: -24,
     marginBottom: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray100,
+    gap: 12,
   },
-  locationHeader: {
-    flexDirection: "row",
+  quickStatCard: {
+    flex: 1,
+    backgroundColor: colors.white,
+    padding: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    minHeight: 100,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  quickStatIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
   },
-  locationTitle: {
-    fontSize: 16,
+  quickStatLabel: {
+    fontSize: 11,
+    color: colors.gray500,
     fontWeight: "600",
-    color: colors.gray700,
-    marginLeft: 8,
-  },
-  locationName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.gray700,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
     marginBottom: 4,
   },
-  locationAddress: {
+  quickStatValue: {
     fontSize: 14,
-    color: colors.gray500,
-    marginBottom: 12,
-    lineHeight: 20,
+    color: colors.gray900,
+    fontWeight: "700",
+    textAlign: "center",
   },
-  navigateButton: {
-    backgroundColor: colors.blue500,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  navigateButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  trackingDescription: {
-    fontSize: 14,
-    color: colors.gray500,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  startTrackingButton: {
-    backgroundColor: colors.green500,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  startTrackingButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  stopTrackingButton: {
-    backgroundColor: colors.red500,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  stopTrackingButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  actionContainer: {
-    padding: 16,
-    paddingBottom: 32,
+
+  // Section Styles
+  section: {
+    marginHorizontal: 16,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.gray700,
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.gray800,
     marginBottom: 12,
-    marginTop: 8,
+    paddingLeft: 4,
   },
+
+  // Card Styles
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+
+  // Info Row Styles
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray100,
+  },
+  infoRowLast: {
+    borderBottomWidth: 0,
+  },
+  infoIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.gray50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.gray500,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.gray900,
+    lineHeight: 21,
+  },
+
+  // Timeline Styles
+  timelineItem: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  timelineItemLast: {
+    paddingBottom: 16,
+  },
+  timelineIconSection: {
+    alignItems: "center",
+    marginRight: 14,
+  },
+  timelineIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  timelineLine: {
+    width: 3,
+    flex: 1,
+    marginTop: 6,
+  },
+  timelineContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  timelineLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.gray600,
+    marginBottom: 4,
+  },
+  timelineLabelCompleted: {
+    color: colors.gray800,
+  },
+  timelineValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.gray900,
+    lineHeight: 20,
+  },
+  timelineValuePending: {
+    color: colors.gray500,
+    fontStyle: "italic",
+  },
+
+  // Button Styles with Enhanced Touch Targets
   primaryButton: {
-    backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 12,
     marginBottom: 12,
+    minHeight: 52,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primaryDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
+  successButton: {
+    backgroundColor: colors.success,
+  },
+  primaryButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  primaryButtonDisabled: { opacity: 0.6, pointerEvents: 'none' },
   primaryButtonText: {
     color: colors.white,
-    fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  actionButton: {
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  actionButtonDisabled: {
-    opacity: 0.6,
-  },
-  actionButtonText: {
-    color: colors.white,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    marginLeft: 10,
   },
-  infoContainer: {
+  secondaryButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.blue50,
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
+    justifyContent: "center",
+    backgroundColor: colors.white,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.gray200,
+    minHeight: 52,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
-  infoText: {
-    flex: 1,
+  secondaryButtonDisabled: { opacity: 0.6, pointerEvents: 'none' },
+  secondaryButtonPressed: {
+    backgroundColor: colors.gray50,
+    borderColor: colors.gray300,
+  },
+  secondaryButtonText: {
+    color: colors.gray700,
+    fontSize: 16,
+    fontWeight: "700",
     marginLeft: 8,
-    fontSize: 14,
-    color: colors.blue800,
   },
-  completedContainer: {
+
+  // Info Alert
+  infoAlert: {
+    flexDirection: "row",
     alignItems: "center",
-    padding: 20,
-    marginTop: 12,
+    backgroundColor: colors.green50,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.successLight,
+    marginBottom: 12,
   },
-  completedText: {
-    fontSize: 18,
+  infoAlertText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 14,
+    color: colors.successDark,
     fontWeight: "600",
-    textAlign: "center",
-    marginTop: 16,
+    lineHeight: 20,
   },
-  completedTextGreen: {
-    color: colors.green600,
+
+  // Bottom Spacing
+  bottomSpacer: {
+    height: Platform.OS === 'ios' ? 20 : 12,
   },
-  cancelledTextRed: {
-    color: colors.red500,
-  },
+
+  // Map Styles
+  map: { width: "100%", height: 300, borderRadius: 12 },
+  directionsSummary: { flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: colors.gray50, borderRadius: 8, marginTop: 12, marginBottom: 8 },
+  summaryText: { marginLeft: 8, fontSize: 14, fontWeight: "600", color: colors.gray900 },
+  stepsContainer: { maxHeight: 200 },
+  stepRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.gray100 },
+  stepInstruction: { flex: 1, marginLeft: 8, fontSize: 14, color: colors.gray800 },
+  stepDetails: { fontSize: 12, color: colors.gray600, marginLeft: 8 },
+  infoText: { fontSize: 14, color: colors.gray600, textAlign: "center", padding: 16 },
 });
