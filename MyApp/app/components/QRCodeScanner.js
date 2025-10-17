@@ -1,11 +1,10 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera"; // ✅ Fixed import
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import
   {
     ActivityIndicator,
     Alert,
-    Dimensions,
     Platform,
     StyleSheet,
     Text,
@@ -13,9 +12,7 @@ import
     View,
   } from "react-native";
 import { supabase } from "../lib/supabase";
-
-const { width } = Dimensions.get("window");
-const SCAN_AREA_SIZE = width * 0.7;
+import { useResponsive } from "../utils/responsive";
 
 // Color palette
 const colors = {
@@ -32,6 +29,17 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+
+  // Responsive utilities - dynamically updates on orientation change
+  const { width, height, isTablet } = useResponsive();
+
+  // Calculate scan area size - updates when screen dimensions change
+  const scanAreaSize = useMemo(() => {
+    const maxSize = isTablet ? 500 : 350;
+    const smallerDimension = Math.min(width, height);
+    const calculatedSize = Math.min(smallerDimension * 0.65, maxSize);
+    return calculatedSize;
+  }, [width, height, isTablet]);
 
   useEffect(() => {
     console.log('📷 Camera permission status:', permission);
@@ -211,7 +219,7 @@ export function QRCodeScanner({ onScanSuccess, onScanError, onClose }) {
 
           {/* Middle Section - Scan Area */}
           <View style={styles.middleOverlay}>
-            <View style={styles.scanArea}>
+            <View style={[styles.scanArea, { width: scanAreaSize, height: scanAreaSize }]}>
               {/* Corner Markers */}
               <View style={[styles.corner, styles.topLeft]} />
               <View style={[styles.corner, styles.topRight]} />
@@ -347,8 +355,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scanArea: {
-    width: SCAN_AREA_SIZE,
-    height: SCAN_AREA_SIZE,
+    // width and height set dynamically via inline styles
     position: "relative",
     justifyContent: "center",
     alignItems: "center",

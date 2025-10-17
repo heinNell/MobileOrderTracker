@@ -120,7 +120,7 @@ const fetchOrdersFixed = async (page = 1) => {
       orderCount: count || 0,
       lastError: null,
     }));
-  } catch (error: any) {
+  } catch (error) {
     console.error("fetchOrders error:", error);
     setDebugInfo((prev) => ({
       ...prev,

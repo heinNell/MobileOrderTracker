@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import
   {
     ActivityIndicator,
@@ -18,6 +18,7 @@ import
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
+import { useResponsive } from "../utils/responsive";
 
 const locationService = new LocationService();
 
@@ -128,6 +129,73 @@ function DriverDashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true); // Add auto-refresh toggle
   const { user, signOut, isAuthenticated } = useAuth();
   const router = useRouter();
+  
+  // Responsive utilities for mobile-first design
+  const { spacing, fontSizes, isSmallScreen, scale, touchTarget } = useResponsive();
+
+  // Dynamic responsive styles (memoized for performance)
+  const responsiveStyles = useMemo(() => ({
+    header: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.lg,
+    },
+    title: {
+      fontSize: fontSizes['3xl'],
+    },
+    subtitle: {
+      fontSize: fontSizes.md,
+      marginTop: spacing.xs,
+    },
+    statsContainer: {
+      flexDirection: isSmallScreen ? 'column' : 'row',
+      gap: isSmallScreen ? spacing.sm : spacing.md,
+      marginTop: spacing.md,
+    },
+    statCard: {
+      padding: spacing.md,
+      marginBottom: isSmallScreen ? spacing.sm : 0,
+    },
+    statNumber: {
+      fontSize: isSmallScreen ? fontSizes['2xl'] : fontSizes['3xl'],
+    },
+    statLabel: {
+      fontSize: fontSizes.sm,
+      marginTop: spacing.xs,
+    },
+    card: {
+      padding: spacing.lg,
+      margin: spacing.md,
+      borderRadius: scale(16),
+    },
+    cardTitle: {
+      fontSize: fontSizes.lg,
+    },
+    cardSubtitle: {
+      fontSize: fontSizes.sm,
+      marginTop: spacing.xs,
+    },
+    button: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      minHeight: touchTarget(44),
+      borderRadius: scale(12),
+    },
+    buttonText: {
+      fontSize: fontSizes.md,
+      marginLeft: spacing.xs,
+    },
+    orderItem: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.sm,
+    },
+    orderNumber: {
+      fontSize: fontSizes.lg,
+    },
+    orderDetails: {
+      fontSize: fontSizes.sm,
+      marginTop: spacing.xs,
+    },
+  }), [spacing, fontSizes, isSmallScreen, scale, touchTarget]);
 
   // Define activateOrderWithTracking before loadDriverData to avoid initialization issues
   const activateOrderWithTracking = useCallback(async (order) => {
@@ -464,11 +532,11 @@ function DriverDashboard() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View style={styles.header}>
+        <View style={[styles.header, responsiveStyles.header]}>
           <View style={styles.headerContent}>
             <View>
-              <Text style={styles.title}>Driver Dashboard</Text>
-              <Text style={styles.subtitle}>
+              <Text style={[styles.title, responsiveStyles.title]}>Driver Dashboard</Text>
+              <Text style={[styles.subtitle, responsiveStyles.subtitle]}>
                 Welcome back, {user?.email?.split("@")[0]}
               </Text>
             </View>

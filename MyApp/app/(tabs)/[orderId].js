@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
 import { parsePostGISPoint } from "../shared/locationUtils";
+import { useResponsive } from "../utils/responsive";
 
 const STATUS_FLOW = {
   pending: ["assigned", "activated", "in_progress"], // Allow direct start from pending
@@ -94,6 +95,9 @@ export default function OrderDetailsScreen() {
   const [isTracking, setIsTracking] = useState(false);
   const [error, setError] = useState(null);
 
+  // Responsive utilities
+  const { spacing, fontSizes, scale, touchTarget } = useResponsive();
+
   // Memoized location parsing - must be before any early returns
   const loadingPoint = useMemo(
     () => order?.loading_point_location ? parsePostGISPoint(order.loading_point_location) : null,
@@ -103,6 +107,128 @@ export default function OrderDetailsScreen() {
     () => order?.unloading_point_location ? parsePostGISPoint(order.unloading_point_location) : null,
     [order?.unloading_point_location]
   );
+
+  // Responsive styles
+  const responsiveStyles = useMemo(() => ({
+    header: {
+      padding: spacing.lg,
+    },
+    title: {
+      fontSize: fontSizes['2xl'],
+      marginBottom: spacing.xs,
+    },
+    statusBadge: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: scale(12),
+    },
+    statusText: {
+      fontSize: fontSizes.sm,
+    },
+    card: {
+      margin: spacing.md,
+      marginBottom: 0,
+      padding: spacing.md,
+      borderRadius: scale(12),
+    },
+    cardTitle: {
+      fontSize: fontSizes.lg,
+      marginBottom: spacing.md,
+    },
+    infoRow: {
+      paddingVertical: spacing.sm,
+    },
+    label: {
+      fontSize: fontSizes.sm,
+      marginLeft: spacing.xs,
+    },
+    value: {
+      fontSize: fontSizes.sm,
+    },
+    locationSection: {
+      marginBottom: spacing.lg,
+      paddingBottom: spacing.lg,
+    },
+    locationTitle: {
+      fontSize: fontSizes.md,
+      marginLeft: spacing.xs,
+    },
+    locationName: {
+      fontSize: fontSizes.lg,
+      marginBottom: spacing.xs,
+    },
+    locationAddress: {
+      fontSize: fontSizes.sm,
+      marginBottom: spacing.sm,
+      lineHeight: fontSizes.lg,
+    },
+    navigateButton: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      minHeight: touchTarget(48),
+      borderRadius: scale(8),
+    },
+    navigateButtonText: {
+      fontSize: fontSizes.sm,
+      marginLeft: spacing.xs,
+    },
+    trackingContainer: {
+      padding: spacing.md,
+      marginBottom: spacing.md,
+      borderRadius: scale(12),
+    },
+    trackingButton: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      minHeight: touchTarget(48),
+      borderRadius: scale(8),
+    },
+    trackingButtonText: {
+      fontSize: fontSizes.md,
+      marginLeft: spacing.xs,
+    },
+    trackingDescription: {
+      fontSize: fontSizes.sm,
+      marginTop: spacing.xs,
+    },
+    primaryButton: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      minHeight: touchTarget(48),
+      borderRadius: scale(10),
+      marginBottom: spacing.sm,
+    },
+    primaryButtonText: {
+      fontSize: fontSizes.lg,
+      marginLeft: spacing.xs,
+    },
+    actionButton: {
+      paddingVertical: spacing.sm,
+      minHeight: touchTarget(44),
+      borderRadius: scale(8),
+      marginBottom: spacing.xs,
+    },
+    actionButtonText: {
+      fontSize: fontSizes.md,
+    },
+    infoContainer: {
+      padding: spacing.sm,
+      borderRadius: scale(8),
+      marginTop: spacing.sm,
+    },
+    infoText: {
+      marginLeft: spacing.xs,
+      fontSize: fontSizes.sm,
+    },
+    completedContainer: {
+      padding: spacing.lg,
+      marginTop: spacing.sm,
+    },
+    completedText: {
+      fontSize: fontSizes.lg,
+      marginTop: spacing.md,
+    },
+  }), [spacing, fontSizes, scale, touchTarget]);
 
   // Fetch order details
   const loadOrderDetails = useCallback(async () => {
@@ -536,14 +662,14 @@ export default function OrderDetailsScreen() {
       }
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, responsiveStyles.header]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>Order #{order.order_number}</Text>
-          <View style={[styles.statusBadge, getStatusStyle(order.status)]}>
-            <Text style={styles.statusText}>
+          <Text style={[styles.title, responsiveStyles.title]}>Order #{order.order_number}</Text>
+          <View style={[styles.statusBadge, getStatusStyle(order.status), responsiveStyles.statusBadge]}>
+            <Text style={[styles.statusText, responsiveStyles.statusText]}>
               {order.status.replace('_', ' ').toUpperCase()}
             </Text>
           </View>
@@ -551,116 +677,116 @@ export default function OrderDetailsScreen() {
       </View>
 
       {/* Order Information */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Order Information</Text>
+      <View style={[styles.card, responsiveStyles.card]}>
+        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Order Information</Text>
         
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, responsiveStyles.infoRow]}>
           <MaterialIcons name="numbers" size={20} color="#6b7280" />
-          <Text style={styles.label}>Order Number:</Text>
-          <Text style={styles.value}>{order.order_number}</Text>
+          <Text style={[styles.label, responsiveStyles.label]}>Order Number:</Text>
+          <Text style={[styles.value, responsiveStyles.value]}>{order.order_number}</Text>
         </View>
 
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, responsiveStyles.infoRow]}>
           <MaterialIcons name="info-outline" size={20} color="#6b7280" />
-          <Text style={styles.label}>Status:</Text>
-          <Text style={styles.value}>{order.status.replace('_', ' ')}</Text>
+          <Text style={[styles.label, responsiveStyles.label]}>Status:</Text>
+          <Text style={[styles.value, responsiveStyles.value]}>{order.status.replace('_', ' ')}</Text>
         </View>
 
         {order.assigned_driver && (
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
             <MaterialIcons name="person" size={20} color="#6b7280" />
-            <Text style={styles.label}>Driver:</Text>
-            <Text style={styles.value}>{order.assigned_driver.full_name}</Text>
+            <Text style={[styles.label, responsiveStyles.label]}>Driver:</Text>
+            <Text style={[styles.value, responsiveStyles.value]}>{order.assigned_driver.full_name}</Text>
           </View>
         )}
       </View>
 
       {/* Location Details */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Location Details</Text>
+      <View style={[styles.card, responsiveStyles.card]}>
+        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Location Details</Text>
 
-        <View style={styles.locationSection}>
+        <View style={[styles.locationSection, responsiveStyles.locationSection]}>
           <View style={styles.locationHeader}>
             <MaterialIcons name="place" size={20} color="#10b981" />
-            <Text style={styles.locationTitle}>Loading Point</Text>
+            <Text style={[styles.locationTitle, responsiveStyles.locationTitle]}>Loading Point</Text>
           </View>
-          <Text style={styles.locationName}>{order.loading_point_name}</Text>
+          <Text style={[styles.locationName, responsiveStyles.locationName]}>{order.loading_point_name}</Text>
           {order.loading_point_address && (
-            <Text style={styles.locationAddress}>{order.loading_point_address}</Text>
+            <Text style={[styles.locationAddress, responsiveStyles.locationAddress]}>{order.loading_point_address}</Text>
           )}
           <TouchableOpacity
-            style={styles.navigateButton}
+            style={[styles.navigateButton, responsiveStyles.navigateButton]}
             onPress={() => openMaps(loadingPoint, order.loading_point_name)}
           >
             <MaterialIcons name="navigation" size={20} color="#fff" />
-            <Text style={styles.navigateButtonText}>Navigate</Text>
+            <Text style={[styles.navigateButtonText, responsiveStyles.navigateButtonText]}>Navigate</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.locationSection}>
+        <View style={[styles.locationSection, responsiveStyles.locationSection]}>
           <View style={styles.locationHeader}>
             <MaterialIcons name="location-on" size={20} color="#ef4444" />
-            <Text style={styles.locationTitle}>Delivery Point</Text>
+            <Text style={[styles.locationTitle, responsiveStyles.locationTitle]}>Delivery Point</Text>
           </View>
-          <Text style={styles.locationName}>{order.unloading_point_name}</Text>
+          <Text style={[styles.locationName, responsiveStyles.locationName]}>{order.unloading_point_name}</Text>
           {order.unloading_point_address && (
-            <Text style={styles.locationAddress}>{order.unloading_point_address}</Text>
+            <Text style={[styles.locationAddress, responsiveStyles.locationAddress]}>{order.unloading_point_address}</Text>
           )}
           <TouchableOpacity
-            style={styles.navigateButton}
+            style={[styles.navigateButton, responsiveStyles.navigateButton]}
             onPress={() => openMaps(unloadingPoint, order.unloading_point_name)}
           >
             <MaterialIcons name="navigation" size={20} color="#fff" />
-            <Text style={styles.navigateButtonText}>Navigate</Text>
+            <Text style={[styles.navigateButtonText, responsiveStyles.navigateButtonText]}>Navigate</Text>
           </TouchableOpacity>
         </View>
 
         {order.estimated_distance_km && (
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
             <MaterialIcons name="straighten" size={20} color="#6b7280" />
-            <Text style={styles.label}>Distance:</Text>
-            <Text style={styles.value}>{order.estimated_distance_km} km</Text>
+            <Text style={[styles.label, responsiveStyles.label]}>Distance:</Text>
+            <Text style={[styles.value, responsiveStyles.value]}>{order.estimated_distance_km} km</Text>
           </View>
         )}
       </View>
 
       {/* Timeline */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Timeline</Text>
+      <View style={[styles.card, responsiveStyles.card]}>
+        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Timeline</Text>
 
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, responsiveStyles.infoRow]}>
           <MaterialIcons name="event" size={20} color="#6b7280" />
-          <Text style={styles.label}>Created:</Text>
-          <Text style={styles.value}>
+          <Text style={[styles.label, responsiveStyles.label]}>Created:</Text>
+          <Text style={[styles.value, responsiveStyles.value]}>
             {new Date(order.created_at).toLocaleString()}
           </Text>
         </View>
 
         {order.load_activated_at && (
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
             <MaterialIcons name="check-circle" size={20} color="#10b981" />
-            <Text style={styles.label}>Activated:</Text>
-            <Text style={styles.value}>
+            <Text style={[styles.label, responsiveStyles.label]}>Activated:</Text>
+            <Text style={[styles.value, responsiveStyles.value]}>
               {new Date(order.load_activated_at).toLocaleString()}
             </Text>
           </View>
         )}
 
         {order.actual_start_time && (
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
             <MaterialIcons name="play-circle-filled" size={20} color="#6366f1" />
-            <Text style={styles.label}>Started:</Text>
-            <Text style={styles.value}>
+            <Text style={[styles.label, responsiveStyles.label]}>Started:</Text>
+            <Text style={[styles.value, responsiveStyles.value]}>
               {new Date(order.actual_start_time).toLocaleString()}
             </Text>
           </View>
         )}
 
         {order.delivered_at && (
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, responsiveStyles.infoRow]}>
             <MaterialIcons name="done-all" size={20} color="#059669" />
-            <Text style={styles.label}>Delivered:</Text>
-            <Text style={styles.value}>
+            <Text style={[styles.label, responsiveStyles.label]}>Delivered:</Text>
+            <Text style={[styles.value, responsiveStyles.value]}>
               {new Date(order.delivered_at).toLocaleString()}
             </Text>
           </View>
@@ -668,28 +794,28 @@ export default function OrderDetailsScreen() {
       </View>
 
       {/* Location Tracking */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Location Tracking</Text>
-        <Text style={styles.trackingDescription}>
+      <View style={[styles.card, responsiveStyles.card]}>
+        <Text style={[styles.cardTitle, responsiveStyles.cardTitle]}>Location Tracking</Text>
+        <Text style={[styles.trackingDescription, responsiveStyles.trackingDescription]}>
           {isTracking
             ? "Your location is being tracked for this order"
             : "Location tracking is currently disabled"}
         </Text>
         {isTracking ? (
           <TouchableOpacity
-            style={styles.stopTrackingButton}
+            style={[styles.stopTrackingButton, responsiveStyles.trackingButton]}
             onPress={stopTracking}
           >
             <MaterialIcons name="location-off" size={20} color="#fff" />
-            <Text style={styles.stopTrackingButtonText}>Stop Tracking</Text>
+            <Text style={[styles.stopTrackingButtonText, responsiveStyles.trackingButtonText]}>Stop Tracking</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={styles.startTrackingButton}
+            style={[styles.startTrackingButton, responsiveStyles.trackingButton]}
             onPress={startTracking}
           >
             <MaterialIcons name="location-on" size={20} color="#fff" />
-            <Text style={styles.startTrackingButtonText}>Start Tracking</Text>
+            <Text style={[styles.startTrackingButtonText, responsiveStyles.trackingButtonText]}>Start Tracking</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -699,7 +825,7 @@ export default function OrderDetailsScreen() {
         {/* Load Activation */}
         {order.status === "assigned" && !order.load_activated_at && (
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, responsiveStyles.primaryButton]}
             onPress={() =>
               router.push({
                 pathname: "/(tabs)/LoadActivationScreen",
@@ -708,7 +834,7 @@ export default function OrderDetailsScreen() {
             }
           >
             <MaterialIcons name="play-circle-filled" size={24} color="#fff" />
-            <Text style={styles.primaryButtonText}>Activate Load</Text>
+            <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>Activate Load</Text>
           </TouchableOpacity>
         )}
 
@@ -716,13 +842,13 @@ export default function OrderDetailsScreen() {
         {order.load_activated_at && 
          ["activated", "in_progress", "in_transit", "arrived", "loading", "loaded", "unloading"].includes(order.status) && (
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, responsiveStyles.primaryButton]}
             onPress={() =>
               router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_number}`)
             }
           >
             <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
-            <Text style={styles.primaryButtonText}>
+            <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
               {order.status === "activated" ? "Start Order" : "Manage Order"}
             </Text>
           </TouchableOpacity>
@@ -737,13 +863,14 @@ export default function OrderDetailsScreen() {
                 key={action.status}
                 style={[
                   styles.actionButton,
+                  responsiveStyles.actionButton,
                   { backgroundColor: action.color },
                   statusUpdating && styles.actionButtonDisabled,
                 ]}
                 onPress={() => updateStatus(action.status)}
                 disabled={statusUpdating}
               >
-                <Text style={styles.actionButtonText}>
+                <Text style={[styles.actionButtonText, responsiveStyles.actionButtonText]}>
                   {statusUpdating ? "Updating..." : action.label}
                 </Text>
               </TouchableOpacity>
@@ -753,9 +880,9 @@ export default function OrderDetailsScreen() {
 
         {/* Info Message */}
         {order.status === "assigned" && order.load_activated_at && (
-          <View style={styles.infoContainer}>
+          <View style={[styles.infoContainer, responsiveStyles.infoContainer]}>
             <MaterialIcons name="info-outline" size={20} color="#6366f1" />
-            <Text style={styles.infoText}>
+            <Text style={[styles.infoText, responsiveStyles.infoText]}>
               Load is activated! You can now scan QR codes to start the order.
             </Text>
           </View>
@@ -763,7 +890,7 @@ export default function OrderDetailsScreen() {
 
         {/* Completed/Cancelled Message */}
         {(order.status === "completed" || order.status === "cancelled") && (
-          <View style={styles.completedContainer}>
+          <View style={[styles.completedContainer, responsiveStyles.completedContainer]}>
             <MaterialIcons 
               name={order.status === "completed" ? "check-circle" : "cancel"} 
               size={48} 
@@ -771,6 +898,7 @@ export default function OrderDetailsScreen() {
             />
             <Text style={[
               styles.completedText,
+              responsiveStyles.completedText,
               order.status === "completed" ? styles.completedTextGreen : styles.cancelledTextRed
             ]}>
               This order has been {order.status === "completed" ? "completed" : "cancelled"}.
