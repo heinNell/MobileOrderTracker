@@ -2,17 +2,18 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import
+    {
+        ActivityIndicator,
+        Dimensions,
+        Platform,
+        Pressable,
+        RefreshControl,
+        ScrollView,
+        StyleSheet,
+        Text,
+        View,
+    } from "react-native";
 import { supabase } from "../lib/supabase";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
