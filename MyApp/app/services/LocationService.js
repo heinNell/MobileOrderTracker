@@ -1,11 +1,108 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { calculateDistance } from '../shared/locationUtils';
+import { getDistance } from 'geolib';
+import * as Notifications from 'expo-notifications';
+
+// Task name for background location updates
+const BACKGROUND_LOCATION_TASK = 'background-location-task';
+
+// Define background location task
+TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+  if (error) {
+    console.error('Background location error:', error);
+    return;
+  }
+
+  const { locations } = data;
+  const { latitude, longitude, accuracy, speed, heading } = locations[0].coords;
+  const timestamp = new Date(locations[0].timestamp).toISOString();
+
+  console.log('Background location:', { latitude, longitude });
+
+  try {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('No authenticated user for background location update');
+      return;
+    }
+
+    // Get tracking order ID from storage
+    const orderId = await storage.getItem('trackingOrderId');
+    if (!orderId) {
+      console.warn('No active order ID in background task');
+      return;
+    }
+
+    // Fetch order details for loading point
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('loading_point_name')
+      .eq('id', orderId)
+      .single();
+
+    if (orderError || !order) {
+      console.error('Error fetching order for proximity check:', orderError);
+      return;
+    }
+
+    // Calculate proximity to loading point
+    const loadingCoord = await Location.geocodeAsync(order.loading_point_name);
+    if (loadingCoord.length > 0) {
+      const distance = getDistance(
+        { latitude, longitude },
+        { latitude: loadingCoord[0].latitude, longitude: loadingCoord[0].longitude }
+      );
+      if (distance < 100) {
+        console.log('Driver is within 100m of loading point!');
+        // Trigger notification
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Near Loading Point',
+            body: 'You are within 100 meters of the loading point for your order!',
+            sound: 'default',
+          },
+          trigger: null,
+        });
+      }
+    }
+
+    // Update Supabase with driver's location
+    const locationData = {
+      driver_id: user.id,
+      order_id: orderId,
+      latitude,
+      longitude,
+      location: { lat: latitude, lng: longitude },
+      accuracy: accuracy || null,
+      accuracy_meters: accuracy || null,
+      speed: speed || null,
+      speed_kmh: speed ? speed * 3.6 : null,
+      heading: heading || null,
+      timestamp,
+      created_at: new Date().toISOString(),
+      is_manual_update: false,
+    };
+
+    const { error: updateError } = await supabase
+      .from('driver_locations')
+      .insert(locationData);
+
+    if (updateError) {
+      console.error('Supabase update error:', updateError);
+    } else {
+      console.log('📍 Background location updated:', { orderId, latitude, longitude });
+    }
+  } catch (err) {
+    console.error('Background task error:', err);
+  }
+});
 
 // Web-compatible storage adapter
-const storage = Platform.OS === 'web' 
+const storage = Platform.OS === 'web'
   ? {
       getItem: (key) => {
         if (typeof window !== 'undefined') {
@@ -44,6 +141,91 @@ class LocationService {
     this.initialized = false;
   }
 
+  // Start background location tracking
+  async startTracking(orderId) {
+    try {
+      await this.ensureInitialized();
+
+      if (this.isTracking && this.currentOrderId === orderId) {
+        console.log('Already tracking this order');
+        return true;
+      }
+
+      // Stop any existing tracking
+      await this.stopTracking();
+
+      // Request background location permission
+      const { status } = await Location.requestBackgroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Background location permission not granted');
+      }
+
+      this.currentOrderId = orderId;
+      this.isTracking = true;
+
+      // Store tracking and active order IDs
+      await storage.setItem('trackingOrderId', orderId);
+      await storage.setItem('activeOrderId', orderId);
+
+      // Start background location updates
+      await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 10, // Update every 10 meters
+        timeInterval: 1000, // Update every 1 second
+        deferredUpdatesInterval: 1000, // Batch updates
+        foregroundService: {
+          notificationTitle: 'Order Tracker',
+          notificationBody: 'Tracking your location for delivery.',
+          notificationColor: '#2563eb',
+        },
+      });
+
+      // Get initial location
+      await this.updateLocation(orderId);
+
+      console.log('✅ Started background tracking for order:', orderId);
+      return true;
+    } catch (error) {
+      console.error('Error starting tracking:', error);
+      this.isTracking = false;
+      this.currentOrderId = null;
+      await storage.removeItem('trackingOrderId');
+      await storage.removeItem('activeOrderId');
+      throw error;
+    }
+  }
+
+  // Stop background location tracking
+  async stopTracking() {
+    try {
+      console.log('🛑 stopTracking() called - clearing tracking state...');
+
+      if (this.trackingInterval) {
+        clearInterval(this.trackingInterval);
+        this.trackingInterval = null;
+        console.log('✅ Cleared tracking interval');
+      }
+
+      if (await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK)) {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+        console.log('✅ Stopped background location updates');
+      }
+
+      this.isTracking = false;
+      this.currentOrderId = null;
+      console.log('✅ Reset in-memory state: isTracking=false, currentOrderId=null');
+
+      // Clear both tracking state AND active order
+      await storage.multiRemove(['trackingOrderId', 'activeOrderId']);
+      console.log('✅ Removed trackingOrderId and activeOrderId from storage');
+
+      console.log('✅ Stopped tracking and cleared active order - COMPLETE');
+    } catch (error) {
+      console.error('❌ Error stopping tracking:', error);
+      throw error;
+    }
+  }
+
   // Get current location
   async getCurrentLocation() {
     try {
@@ -77,10 +259,10 @@ class LocationService {
     try {
       const location = await this.getCurrentLocation();
       this.startingPoint = location;
-      
+
       // Store in storage for persistence
       await storage.setItem('orderStartingPoint', JSON.stringify(location));
-      
+
       console.log('✅ Starting point set:', location);
       return location;
     } catch (error) {
@@ -121,84 +303,7 @@ class LocationService {
     }
   }
 
-  // Start tracking for an order
-  async startTracking(orderId) {
-    try {
-      await this.ensureInitialized();
-      
-      if (this.isTracking && this.currentOrderId === orderId) {
-        console.log('Already tracking this order');
-        return true;
-      }
-
-      // Stop any existing tracking
-      await this.stopTracking();
-
-      // Request background location permission
-      const { status } = await Location.requestBackgroundPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('Background location permission not granted');
-      }
-
-      this.currentOrderId = orderId;
-      this.isTracking = true;
-
-      // Store both tracking and active order IDs
-      await storage.setItem('trackingOrderId', orderId);
-      await storage.setItem('activeOrderId', orderId);
-
-      // Start location tracking interval
-      this.trackingInterval = setInterval(async () => {
-        try {
-          await this.updateLocation();
-        } catch (error) {
-          console.error('Error updating location:', error);
-        }
-      }, 30000); // Update every 30 seconds
-
-      // Get initial location
-      await this.updateLocation();
-
-      console.log('✅ Started tracking for order:', orderId);
-      return true;
-    } catch (error) {
-      console.error('Error starting tracking:', error);
-      this.isTracking = false;
-      this.currentOrderId = null;
-      throw error;
-    }
-  }
-
-  // Stop tracking
-  async stopTracking() {
-    try {
-      console.log('🛑 stopTracking() called - clearing tracking state...');
-      
-      if (this.trackingInterval) {
-        clearInterval(this.trackingInterval);
-        this.trackingInterval = null;
-        console.log('✅ Cleared tracking interval');
-      }
-
-      this.isTracking = false;
-      this.currentOrderId = null;
-      console.log('✅ Reset in-memory state: isTracking=false, currentOrderId=null');
-
-      // Clear both tracking state AND active order
-      await storage.removeItem('trackingOrderId');
-      console.log('✅ Removed trackingOrderId from storage');
-      
-      await storage.removeItem('activeOrderId');
-      console.log('✅ Removed activeOrderId from storage');
-
-      console.log('✅ Stopped tracking and cleared active order - COMPLETE');
-    } catch (error) {
-      console.error('❌ Error stopping tracking:', error);
-      throw error;
-    }
-  }
-
-  // ✨ NEW METHOD: Check if tracking is currently active
+  // Check if tracking is currently active
   async isTrackingActive() {
     try {
       // First check in-memory state
@@ -208,7 +313,7 @@ class LocationService {
 
       // Then check storage for persistence across app restarts
       const storedOrderId = await storage.getItem('trackingOrderId');
-      
+
       if (storedOrderId) {
         // Update in-memory state if found in storage
         this.currentOrderId = storedOrderId;
@@ -223,7 +328,7 @@ class LocationService {
     }
   }
 
-  // Enhanced location data processing with bulletproof validation
+  // Process location data with validation
   processLocationData(location, orderId, isManualUpdate = false) {
     // Helper function to safely parse numbers
     const parseNumberField = (value) => {
@@ -239,7 +344,6 @@ class LocationService {
     let latitude = null;
     let longitude = null;
 
-    // Try to get coordinates from different possible locations
     if (location?.latitude !== undefined && location?.longitude !== undefined) {
       latitude = parseNumberField(location.latitude);
       longitude = parseNumberField(location.longitude);
@@ -264,11 +368,11 @@ class LocationService {
       throw new Error(`Invalid longitude: ${longitude}`);
     }
 
-    // Prepare the insert data with proper types
+    // Prepare the insert data
     return {
-      latitude: latitude,
-      longitude: longitude,
-      location: { lat: latitude, lng: longitude }, // JSONB field - restored after fixing database trigger
+      latitude,
+      longitude,
+      location: { lat: latitude, lng: longitude },
       accuracy: parseNumberField(location.accuracy),
       accuracy_meters: parseNumberField(location.accuracy || location.accuracy_meters),
       speed: parseNumberField(location.speed),
@@ -277,21 +381,21 @@ class LocationService {
       timestamp: location.timestamp || new Date().toISOString(),
       created_at: new Date().toISOString(),
       is_manual_update: Boolean(isManualUpdate),
-      notes: location.notes || null
+      notes: location.notes || null,
     };
   }
 
-  // Update location in database (called both manually and during tracking)
+  // Update location in database
   async updateLocation(orderId = null, location = null) {
     try {
       await this.ensureInitialized();
-      
+
       if (!location) {
         location = await this.getCurrentLocation();
       }
 
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         console.warn('No authenticated user for location update');
         return;
@@ -309,7 +413,7 @@ class LocationService {
           .select('id')
           .eq('id', orderId)
           .single();
-        
+
         if (orderCheckError || !orderExists) {
           console.warn('⚠️ Order not found, setting order_id to null:', orderId);
           orderId = null;
@@ -319,19 +423,19 @@ class LocationService {
       console.log('📍 Processing location update:', {
         orderId,
         rawLocation: location,
-        tracking: this.isTracking
+        tracking: this.isTracking,
       });
 
-      // Process location data with enhanced validation
+      // Process location data
       const processedData = this.processLocationData(location, orderId, !this.isTracking);
-      
+
       const locationData = {
         driver_id: user.id,
-        order_id: orderId, // This will be the current active order or null
-        ...processedData
+        order_id: orderId,
+        ...processedData,
       };
 
-      // Insert location record (now allows history with no unique constraint)
+      // Insert location record
       const { error } = await supabase
         .from('driver_locations')
         .insert(locationData);
@@ -343,7 +447,7 @@ class LocationService {
           orderId,
           lat: location.latitude.toFixed(6),
           lng: location.longitude.toFixed(6),
-          tracking: this.isTracking
+          tracking: this.isTracking,
         });
       }
     } catch (error) {
@@ -351,30 +455,36 @@ class LocationService {
     }
   }
 
-  // Initialize the service and detect active order
+  // Initialize the service
   async initialize() {
     if (this.initialized) return;
-    
+
     try {
-      // Check for actively tracking order first
+      // Request notification permissions
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Notification permission not granted');
+      }
+
+      // Check for actively tracking order
       const trackingOrderId = await storage.getItem('trackingOrderId');
-      
+
       // Check for active order (from QR scanning)
       const activeOrderId = await storage.getItem('activeOrderId');
-      
+
       // Use tracking order if available, otherwise use active order
       this.currentOrderId = trackingOrderId || activeOrderId;
-      
+
       if (this.currentOrderId) {
         console.log('📍 LocationService initialized with order:', this.currentOrderId);
-        
-        // If we have a tracking order, restore tracking state
+
+        // Restore tracking state
         if (trackingOrderId) {
           this.isTracking = true;
           console.log('🔄 Restoring tracking state for order:', trackingOrderId);
         }
       }
-      
+
       this.initialized = true;
     } catch (error) {
       console.error('Error initializing LocationService:', error);
@@ -382,30 +492,28 @@ class LocationService {
     }
   }
 
-  // Ensure service is initialized before any operation
+  // Ensure service is initialized
   async ensureInitialized() {
     if (!this.initialized) {
       await this.initialize();
     }
   }
 
-  // Get current active order ID (checks both tracking and active order)
+  // Get current active order ID
   async getCurrentOrderId() {
     await this.ensureInitialized();
-    
+
     if (this.currentOrderId) {
       return this.currentOrderId;
     }
 
     try {
-      // Check for actively tracking order first
       const trackingOrderId = await storage.getItem('trackingOrderId');
       if (trackingOrderId) {
         this.currentOrderId = trackingOrderId;
         return trackingOrderId;
       }
-      
-      // Check for active order (from QR scanning)
+
       const activeOrderId = await storage.getItem('activeOrderId');
       if (activeOrderId) {
         this.currentOrderId = activeOrderId;
@@ -475,29 +583,27 @@ class LocationService {
         return null;
       }
 
-      return calculateDistance(startingPoint, currentLocation);
+      return getDistance(startingPoint, currentLocation);
     } catch (error) {
       console.error('Error calculating distance from start:', error);
       return null;
     }
   }
 
-  // Send immediate location update to dashboard (for real-time tracking)
+  // Send immediate location update
   async sendImmediateLocationUpdate() {
     try {
       await this.ensureInitialized();
-      
+
       const location = await this.getCurrentLocation();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         throw new Error('User not authenticated');
       }
 
-      // Get current order ID
       const orderId = await this.getCurrentOrderId();
 
-      // Validate that order exists before inserting location
       let validatedOrderId = orderId;
       if (orderId) {
         const { data: orderExists, error: orderCheckError } = await supabase
@@ -505,42 +611,37 @@ class LocationService {
           .select('id')
           .eq('id', orderId)
           .single();
-        
+
         if (orderCheckError || !orderExists) {
           console.warn('⚠️ Order not found for immediate update, setting order_id to null:', orderId);
           validatedOrderId = null;
         }
       }
 
-      console.log('� Sending immediate location update:', {
+      console.log('📍 Sending immediate location update:', {
         orderId: validatedOrderId,
-        rawLocation: location
+        rawLocation: location,
       });
 
-      // Process location data with enhanced validation
       const processedData = this.processLocationData(location, validatedOrderId, true);
-      
+
       const locationData = {
         driver_id: user.id,
-        order_id: validatedOrderId, // Will be current active order or null
-        ...processedData
+        order_id: validatedOrderId,
+        ...processedData,
       };
 
-      // Debug: Log the exact data being sent to database
-      console.log('🔍 Debug locationData being sent to DB:', JSON.stringify(locationData, null, 2));
-
-      // Insert location record (allows history tracking)
       const { error } = await supabase
         .from('driver_locations')
         .insert(locationData);
 
       if (error) throw error;
 
-      console.log('📍 Manual location update sent to dashboard:', {
+      console.log('📍 Manual location update sent:', {
         orderId: validatedOrderId,
         lat: locationData.latitude,
         lng: locationData.longitude,
-        processedSuccessfully: true
+        processedSuccessfully: true,
       });
       return { latitude: locationData.latitude, longitude: locationData.longitude };
     } catch (error) {
@@ -549,19 +650,18 @@ class LocationService {
     }
   }
 
-  // Enhanced cleanup method for logout
+  // Cleanup for logout
   async cleanup() {
     try {
       await this.stopTracking();
-      
-      // Clear all stored data
+
       await storage.multiRemove([
         'trackingOrderId',
         'orderStartingPoint',
-        'lastKnownLocation'
+        'lastKnownLocation',
+        'activeOrderId',
       ]);
 
-      // Reset all instance variables
       this.currentOrderId = null;
       this.isTracking = false;
       this.trackingInterval = null;
@@ -574,7 +674,7 @@ class LocationService {
     }
   }
 
-  // Set current order without starting tracking (for auto-activation)
+  // Set current order without starting tracking
   async setCurrentOrder(orderId) {
     try {
       await this.ensureInitialized();
@@ -588,5 +688,28 @@ class LocationService {
   }
 }
 
-// Export the class so it can be instantiated
+// Singleton instance
+const locationServiceInstance = new LocationService();
+
+// Export helper functions for backward compatibility
+export const startBackgroundLocation = (orderId) => {
+  return locationServiceInstance.startTracking(orderId);
+};
+
+export const stopBackgroundLocation = () => {
+  return locationServiceInstance.stopTracking();
+};
+
+export const getCurrentLocation = () => {
+  return locationServiceInstance.getCurrentLocation();
+};
+
+export const updateLocation = (orderId, location) => {
+  return locationServiceInstance.updateLocation(orderId, location);
+};
+
+export const isTrackingActive = () => {
+  return locationServiceInstance.isTrackingActive();
+};
+
 export default LocationService;

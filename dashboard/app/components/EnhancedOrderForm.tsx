@@ -10,6 +10,17 @@ interface DriverOption {
   full_name: string;
   phone?: string;
   email?: string;
+  is_active: boolean;
+}
+
+// Geofence type for location selection
+interface GeofenceOption {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  location_text?: string;
 }
 
 interface OrderFormProps {
@@ -27,6 +38,8 @@ export default function EnhancedOrderForm({
 }: OrderFormProps) {
   const [availableDrivers, setAvailableDrivers] = useState<DriverOption[]>([]);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [availableGeofences, setAvailableGeofences] = useState<GeofenceOption[]>([]);
+  const [loadingGeofences, setLoadingGeofences] = useState(false);
   const [formData, setFormData] = useState({
     // Basic order info
     assigned_driver_id: order?.assigned_driver_id || "",
@@ -61,10 +74,176 @@ export default function EnhancedOrderForm({
   >("basic");
   const [loading, setLoading] = useState(false);
 
-  // Fetch available drivers on component mount
+  // Fetch available drivers and geofences on component mount
   useEffect(() => {
     fetchDrivers();
+    fetchGeofences();
   }, []);
+
+  // Initialize form data when order prop changes (for editing)
+  useEffect(() => {
+    if (order && isEditing) {
+      console.log("Initializing form with order data:", order);
+      
+      // Parse coordinates from PostGIS format if needed
+      let loadingLat = "";
+      let loadingLng = "";
+      let unloadingLat = "";
+      let unloadingLng = "";
+
+      try {
+        if (typeof order.loading_point_location === "string") {
+          const match = order.loading_point_location.match(/POINT\(([^)]+)\)/);
+          if (match) {
+            const [lng, lat] = match[1].split(" ").map(Number);
+            loadingLat = lat.toString();
+            loadingLng = lng.toString();
+          }
+        }
+
+        if (typeof order.unloading_point_location === "string") {
+          const match = order.unloading_point_location.match(/POINT\(([^)]+)\)/);
+          if (match) {
+            const [lng, lat] = match[1].split(" ").map(Number);
+            unloadingLat = lat.toString();
+            unloadingLng = lng.toString();
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to parse coordinates:", error);
+      }
+
+      // Set all form fields from order data
+      setFormData({
+        assigned_driver_id: order.assigned_driver_id || "",
+        sku: order.sku || "",
+        loading_point_name: order.loading_point_name || "",
+        loading_point_address: order.loading_point_address || "",
+        loading_lat: loadingLat,
+        loading_lng: loadingLng,
+        unloading_point_name: order.unloading_point_name || "",
+        unloading_point_address: order.unloading_point_address || "",
+        unloading_lat: unloadingLat,
+        unloading_lng: unloadingLng,
+        estimated_distance: order.estimated_distance_km?.toString() || "",
+        estimated_duration: order.estimated_duration_minutes?.toString() || "",
+        delivery_instructions: order.delivery_instructions || "",
+        special_handling_instructions: order.special_handling_instructions || "",
+        contact_name: order.contact_name || "",
+        contact_phone: order.contact_phone || "",
+        transporter_name: order.transporter_supplier?.name || "",
+        transporter_phone: order.transporter_supplier?.contact_phone || "",
+        transporter_email: order.transporter_supplier?.contact_email || "",
+        transporter_cost: order.transporter_supplier?.cost_amount?.toString() || "",
+        transporter_currency: order.transporter_supplier?.cost_currency || "USD",
+        transporter_notes: order.transporter_supplier?.notes || "",
+      });
+    }
+  }, [order, isEditing]);
+
+  const fetchGeofences = async () => {
+    try {
+      setLoadingGeofences(true);
+
+      // Get current user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error("No active session");
+        return;
+      }
+
+      // Get user's tenant_id
+      const { data: userData } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (!userData?.tenant_id) {
+        console.error("User has no tenant_id");
+        return;
+      }
+
+      console.log(`Fetching geofences for tenant ${userData.tenant_id}`);
+
+      // Fetch geofences - use geofences_api view if available, otherwise geofences table
+      const { data: geofences, error } = await supabase
+        .from("geofences_api")
+        .select("id, name, latitude, longitude, radius_meters, location_text")
+        .eq("tenant_id", userData.tenant_id)
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) {
+        console.error("Error fetching from geofences_api, trying geofences table:", error);
+        
+        // Fallback to geofences table
+        const { data: fallbackGeofences, error: fallbackError } = await supabase
+          .from("geofences")
+          .select("id, name, location, radius_meters")
+          .eq("tenant_id", userData.tenant_id)
+          .eq("is_active", true)
+          .order("name");
+
+        if (fallbackError) {
+          console.error("Error fetching geofences:", fallbackError);
+          return;
+        }
+
+        // Parse location from PostGIS format
+        const parsedGeofences = (fallbackGeofences || []).map(g => {
+          let lat = 0, lng = 0;
+          if (g.location && typeof g.location === 'string') {
+            const match = g.location.match(/POINT\(([^)]+)\)/);
+            if (match) {
+              [lng, lat] = match[1].split(" ").map(Number);
+            }
+          }
+          return {
+            id: g.id,
+            name: g.name,
+            latitude: lat,
+            longitude: lng,
+            radius_meters: g.radius_meters
+          };
+        });
+
+        setAvailableGeofences(parsedGeofences);
+        console.log(`Loaded ${parsedGeofences.length} geofences (fallback)`);
+        return;
+      }
+
+      // Parse geofences from API view
+      const parsedGeofences = (geofences || []).map(g => {
+        let lat = g.latitude || 0;
+        let lng = g.longitude || 0;
+        
+        // If lat/lng not in columns, try parsing from location_text
+        if ((!lat || !lng) && g.location_text) {
+          const match = g.location_text.match(/POINT\(([^)]+)\)/);
+          if (match) {
+            [lng, lat] = match[1].split(" ").map(Number);
+          }
+        }
+
+        return {
+          id: g.id,
+          name: g.name,
+          latitude: lat,
+          longitude: lng,
+          radius_meters: g.radius_meters,
+          location_text: g.location_text
+        };
+      });
+
+      setAvailableGeofences(parsedGeofences);
+      console.log(`Loaded ${parsedGeofences.length} geofences`);
+    } catch (error) {
+      console.error("Error in fetchGeofences:", error);
+    } finally {
+      setLoadingGeofences(false);
+    }
+  };
 
   const fetchDrivers = async () => {
     try {
@@ -74,7 +253,10 @@ export default function EnhancedOrderForm({
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        console.error("No active session");
+        return;
+      }
 
       // Get user's tenant_id
       const { data: userData } = await supabase
@@ -83,21 +265,28 @@ export default function EnhancedOrderForm({
         .eq("id", session.user.id)
         .maybeSingle();
 
-      if (!userData?.tenant_id) return;
+      if (!userData?.tenant_id) {
+        console.error("User has no tenant_id");
+        return;
+      }
 
-      // Fetch active drivers in the same tenant
+      console.log(`EnhancedOrderForm: Fetching drivers for tenant ${userData.tenant_id}`);
+
+      // Fetch ALL drivers in the same tenant (including inactive)
       const { data: drivers, error } = await supabase
         .from("users")
-        .select("id, full_name, phone, email")
+        .select("id, full_name, phone, email, is_active")
         .eq("role", "driver")
-        .eq("is_active", true)
         .eq("tenant_id", userData.tenant_id)
+        .order("is_active", { ascending: false })  // Active first
         .order("full_name");
 
       if (error) {
         console.error("Error fetching drivers:", error);
         return;
       }
+
+      console.log(`EnhancedOrderForm: Loaded ${drivers?.length || 0} drivers (${drivers?.filter(d => d.is_active).length || 0} active, ${drivers?.filter(d => !d.is_active).length || 0} inactive)`);
 
       setAvailableDrivers(drivers || []);
     } catch (error) {
@@ -107,43 +296,44 @@ export default function EnhancedOrderForm({
     }
   };
 
-  // Initialize coordinates if editing
-  React.useEffect(() => {
-    if (order && isEditing) {
-      // Parse coordinates from PostGIS format if needed
-      try {
-        if (typeof order.loading_point_location === "string") {
-          const match = order.loading_point_location.match(/POINT\(([^)]+)\)/);
-          if (match) {
-            const [lng, lat] = match[1].split(" ").map(Number);
-            setFormData((prev) => ({
-              ...prev,
-              loading_lng: lng.toString(),
-              loading_lat: lat.toString(),
-            }));
-          }
-        }
-
-        if (typeof order.unloading_point_location === "string") {
-          const match =
-            order.unloading_point_location.match(/POINT\(([^)]+)\)/);
-          if (match) {
-            const [lng, lat] = match[1].split(" ").map(Number);
-            setFormData((prev) => ({
-              ...prev,
-              unloading_lng: lng.toString(),
-              unloading_lat: lat.toString(),
-            }));
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to parse coordinates:", error);
-      }
-    }
-  }, [order, isEditing]);
-
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleLoadingGeofenceSelect = (geofenceId: string) => {
+    if (!geofenceId) {
+      // Clear selection - allow manual entry
+      return;
+    }
+
+    const geofence = availableGeofences.find(g => g.id === geofenceId);
+    if (geofence) {
+      setFormData((prev) => ({
+        ...prev,
+        loading_point_name: geofence.name,
+        loading_point_address: geofence.name, // Use name as address if no separate address field in geofence
+        loading_lat: geofence.latitude.toString(),
+        loading_lng: geofence.longitude.toString(),
+      }));
+    }
+  };
+
+  const handleUnloadingGeofenceSelect = (geofenceId: string) => {
+    if (!geofenceId) {
+      // Clear selection - allow manual entry
+      return;
+    }
+
+    const geofence = availableGeofences.find(g => g.id === geofenceId);
+    if (geofence) {
+      setFormData((prev) => ({
+        ...prev,
+        unloading_point_name: geofence.name,
+        unloading_point_address: geofence.name,
+        unloading_lat: geofence.latitude.toString(),
+        unloading_lng: geofence.longitude.toString(),
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -424,7 +614,15 @@ export default function EnhancedOrderForm({
                           Unassigned (will be pending status)
                         </option>
                         {availableDrivers.map((driver) => (
-                          <option key={driver.id} value={driver.id}>
+                          <option 
+                            key={driver.id} 
+                            value={driver.id}
+                            style={{
+                              color: driver.is_active ? 'inherit' : '#ef4444',
+                              fontWeight: driver.is_active ? 'normal' : 'bold'
+                            }}
+                          >
+                            {!driver.is_active && '⚠️ INACTIVE - '}
                             {driver.full_name}
                             {driver.phone && ` - ${driver.phone}`}
                             {driver.email && ` (${driver.email})`}
@@ -435,34 +633,64 @@ export default function EnhancedOrderForm({
                   </div>
 
                   {formData.assigned_driver_id && (
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
-                      <div className="flex items-start">
-                        <svg
-                          className="w-5 h-5 text-blue-600 mt-0.5 mr-2"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        <div>
-                          <p className="text-sm font-medium text-blue-900">
-                            Driver will be notified
-                          </p>
-                          <p className="text-sm text-blue-700 mt-1">
-                            When you create this order, the selected driver will
-                            receive a push notification and the order status
-                            will be set to "assigned". The driver can then
-                            activate the load and start the delivery process.
-                          </p>
+                    (() => {
+                      const selectedDriver = availableDrivers.find(d => d.id === formData.assigned_driver_id);
+                      const isInactive = selectedDriver && !selectedDriver.is_active;
+                      return (
+                        <div className={`p-4 border rounded-md ${
+                          isInactive 
+                            ? 'bg-red-50 border-red-200' 
+                            : 'bg-blue-50 border-blue-200'
+                        }`}>
+                          <div className="flex items-start">
+                            <svg
+                              className={`w-5 h-5 mt-0.5 mr-2 ${
+                                isInactive ? 'text-red-600' : 'text-blue-600'
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d={isInactive 
+                                  ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                  : "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                }
+                              />
+                            </svg>
+                            <div>
+                              {isInactive ? (
+                                <>
+                                  <p className="text-sm font-medium text-red-900">
+                                    ⚠️ Warning: Inactive Driver Selected
+                                  </p>
+                                  <p className="text-sm text-red-700 mt-1">
+                                    This driver is currently marked as INACTIVE. They will still
+                                    receive the notification, but they may not be available for
+                                    this order. Consider selecting an active driver instead.
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-medium text-blue-900">
+                                    Driver will be notified
+                                  </p>
+                                  <p className="text-sm text-blue-700 mt-1">
+                                    When you create this order, the selected driver will
+                                    receive a push notification and the order status
+                                    will be set to "assigned". The driver can then
+                                    activate the load and start the delivery process.
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()
                   )}
 
                   {!formData.assigned_driver_id && (
@@ -505,6 +733,35 @@ export default function EnhancedOrderForm({
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
                     Loading Point
                   </h3>
+                  
+                  {/* Geofence Selector */}
+                  {loadingGeofences ? (
+                    <div className="flex items-center justify-center py-4 mb-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2 text-gray-600 text-sm">Loading locations...</span>
+                    </div>
+                  ) : availableGeofences.length > 0 ? (
+                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                      <label className="block text-sm font-medium text-blue-900 mb-2">
+                        📍 Quick Select from Saved Locations
+                      </label>
+                      <select
+                        onChange={(e) => handleLoadingGeofenceSelect(e.target.value)}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">-- Select a saved location or enter manually below --</option>
+                        {availableGeofences.map((geofence) => (
+                          <option key={geofence.id} value={geofence.id}>
+                            {geofence.name} ({geofence.latitude.toFixed(4)}, {geofence.longitude.toFixed(4)})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-blue-700 mt-2">
+                        💡 Tip: Select a location to auto-fill the fields below, or enter details manually
+                      </p>
+                    </div>
+                  ) : null}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -585,6 +842,35 @@ export default function EnhancedOrderForm({
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
                     Unloading Point (Destination)
                   </h3>
+                  
+                  {/* Geofence Selector */}
+                  {loadingGeofences ? (
+                    <div className="flex items-center justify-center py-4 mb-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                      <span className="ml-2 text-gray-600 text-sm">Loading locations...</span>
+                    </div>
+                  ) : availableGeofences.length > 0 ? (
+                    <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
+                      <label className="block text-sm font-medium text-green-900 mb-2">
+                        📍 Quick Select from Saved Locations
+                      </label>
+                      <select
+                        onChange={(e) => handleUnloadingGeofenceSelect(e.target.value)}
+                        className="w-full px-3 py-2 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                      >
+                        <option value="">-- Select a saved location or enter manually below --</option>
+                        {availableGeofences.map((geofence) => (
+                          <option key={geofence.id} value={geofence.id}>
+                            {geofence.name} ({geofence.latitude.toFixed(4)}, {geofence.longitude.toFixed(4)})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-green-700 mt-2">
+                        💡 Tip: Select a location to auto-fill the fields below, or enter details manually
+                      </p>
+                    </div>
+                  ) : null}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -35,8 +35,13 @@ export default function ScannerScreen() {
     console.log("✅ Scan successful:", order);
     setScanning(false);
     try {
-      // Store as active order
-      await storage.setItem('activeOrderId', order.id);
+      // Validate order has a valid ID
+      if (!order || !order.id) {
+        throw new Error("Invalid order: missing ID");
+      }
+      
+      // Store as active order (ensure it's a string)
+      await storage.setItem('activeOrderId', String(order.id));
       
       // Initialize LocationService and start tracking
       const LocationService = require("../services/LocationService").default;

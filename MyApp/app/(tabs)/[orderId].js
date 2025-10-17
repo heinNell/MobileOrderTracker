@@ -20,7 +20,7 @@ import LocationService from "../services/LocationService";
 import { parsePostGISPoint } from "../shared/locationUtils";
 
 const STATUS_FLOW = {
-  pending: ["assigned", "activated"],
+  pending: ["assigned", "activated", "in_progress"], // Allow direct start from pending
   assigned: ["activated", "in_progress"], // Allow direct transition to in_progress
   activated: ["in_progress"],
   in_progress: ["in_transit", "arrived", "loading", "loaded", "unloading"], // Allow skipping to any loading/delivery stage

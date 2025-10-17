@@ -104,7 +104,22 @@ export default function OrdersScreen() {
     const loadActiveOrderId = async () => {
       try {
         const activeId = await storage.getItem('activeOrderId');
-        setActiveOrderId(activeId);
+        
+        // Validate activeOrderId - check if it's valid
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const isValid = activeId && 
+                        activeId !== 'undefined' && 
+                        activeId !== 'null' && 
+                        uuidRegex.test(activeId);
+        
+        if (isValid) {
+          setActiveOrderId(activeId);
+        } else if (activeId) {
+          // Invalid value found - clean it up
+          console.warn('Invalid activeOrderId found, cleaning up:', activeId);
+          await storage.removeItem('activeOrderId');
+          setActiveOrderId(null);
+        }
       } catch (error) {
         console.error('Error loading active order ID:', error);
       }
@@ -173,6 +188,7 @@ export default function OrdersScreen() {
       setError(null);
       if (!user) {
         setError("Please log in to view orders");
+        setLoading(false);
         return;
       }
 

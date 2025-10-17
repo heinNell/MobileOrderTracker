@@ -132,12 +132,20 @@ function DriverDashboard() {
   // Define activateOrderWithTracking before loadDriverData to avoid initialization issues
   const activateOrderWithTracking = useCallback(async (order) => {
     try {
+      // Validate order has a valid ID
+      if (!order || !order.id) {
+        throw new Error("Invalid order: missing ID");
+      }
+      
+      // Ensure order.id is a string
+      const orderId = String(order.id);
+      
       // Set as active order (same as QR scan)
-      await storage.setItem("activeOrderId", order.id);
+      await storage.setItem("activeOrderId", orderId);
       
       // Initialize and start location tracking
       await locationService.initialize();
-      await locationService.setCurrentOrder(order.id);
+      await locationService.setCurrentOrder(orderId);
       await locationService.startTracking();
       
       // Update UI state
@@ -172,8 +180,15 @@ function DriverDashboard() {
 
       let activeOrderData = null;
       const activeOrderId = await storage.getItem("activeOrderId");
+      
+      // Validate activeOrderId - check if it's a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isValidUUID = activeOrderId && 
+                          activeOrderId !== 'undefined' && 
+                          activeOrderId !== 'null' && 
+                          uuidRegex.test(activeOrderId);
 
-      if (activeOrderId) {
+      if (isValidUUID) {
         const { data, error: activeError } = await supabase
           .from("orders")
           .select("*")
@@ -191,6 +206,11 @@ function DriverDashboard() {
         } else {
           activeOrderData = data;
         }
+      } else if (activeOrderId) {
+        // activeOrderId exists but is invalid - clean it up
+        console.warn("Invalid activeOrderId found in storage:", activeOrderId);
+        await storage.removeItem("activeOrderId");
+        console.log("Cleaned up invalid activeOrderId");
       }
 
       // If no active order, look for newly assigned orders
@@ -210,11 +230,16 @@ function DriverDashboard() {
           
           // Set the active order, but tracking requires user gesture
           try {
-            await storage.setItem("activeOrderId", activeOrderData.id);
-            await locationService.initialize();
-            await locationService.setCurrentOrder(activeOrderData.id);
-            // Note: Location tracking will be prompted in UI - user must start manually
-            console.log("Order activated. Location tracking available for user to start.");
+            // Ensure we have a valid order ID before storing
+            if (activeOrderData && activeOrderData.id) {
+              await storage.setItem("activeOrderId", String(activeOrderData.id));
+              await locationService.initialize();
+              await locationService.setCurrentOrder(activeOrderData.id);
+              // Note: Location tracking will be prompted in UI - user must start manually
+              console.log("Order activated. Location tracking available for user to start.");
+            } else {
+              console.error("Cannot activate order: missing ID");
+            }
           } catch (activationError) {
             console.error("Error in auto-activation:", activationError);
           }

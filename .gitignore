@@ -285,3 +285,6 @@ export_env.ps1
 *.apk
 *.apk
 MyApp/*.apk
+
+# Ignore all files in the mobile-app directory
+/mobile-app/*

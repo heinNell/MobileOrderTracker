@@ -559,10 +559,11 @@ const callEdgeFunction = async (
     }
 
     return result;
-  } catch (fetchError) {
+  } catch (fetchError: unknown) {
     console.error(`Error calling ${functionName}:`, fetchError);
+    const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
     throw new Error(
-      `Edge function ${functionName} failed: ${fetchError.message}`
+      `Edge function ${functionName} failed: ${errorMessage}`
     );
   }
 };
@@ -598,16 +599,18 @@ export const testQRCodeFlow = async (
     const mobileLink = generateMobileDeepLink(orderId);
     testResult.mobileLink = mobileLink.startsWith(QR_CONFIG.mobileAppScheme);
     testResult.details.mobileLink = mobileLink;
-  } catch (error) {
-    testResult.details.error = error.message;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    testResult.details.error = errorMessage;
   }
 
   return testResult;
 };
 
 // Export all functions for backward compatibility
-export {
-  generateMobileDeepLink as trackOrderLocation,
-  validateQRCode as updateOrderStatus,
-  generateWebFallbackUrl as calculateDeliveryRoute,
+export
+{
+  generateWebFallbackUrl as calculateDeliveryRoute, generateMobileDeepLink as trackOrderLocation,
+  validateQRCode as updateOrderStatus
 };
+

@@ -77,12 +77,6 @@ export default function OrderDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (orderId) {
-      loadOrderDetails();
-    }
-  }, [orderId, loadOrderDetails]);
-
   const loadOrderDetails = useCallback(async () => {
     try {
       setLoading(true);
@@ -120,6 +114,12 @@ export default function OrderDetailsScreen() {
       setRefreshing(false);
     }
   }, [orderId]);
+
+  useEffect(() => {
+    if (orderId) {
+      loadOrderDetails();
+    }
+  }, [orderId, loadOrderDetails]);
 
   const onRefresh = () => {
     setRefreshing(true);

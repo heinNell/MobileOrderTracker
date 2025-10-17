@@ -202,7 +202,9 @@ export class RouteProgressCalculator {
     // Prevent unbounded memory growth
     if (this.distanceCache.size >= this.CACHE_SIZE_LIMIT) {
       const firstKey = this.distanceCache.keys().next().value;
-      this.distanceCache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.distanceCache.delete(firstKey);
+      }
     }
 
     this.distanceCache.set(key, distance);

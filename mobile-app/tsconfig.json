@@ -5,17 +5,10 @@
     "verbatimModuleSyntax": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@shared/*": [
-        "../shared/*"
-      ]
+      "@/*": ["./src/*"],
+      "@shared/*": ["../shared/*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "../shared/**/*.ts"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", "../shared/**/*.ts"],
+  "exclude": ["node_modules", "mobile-app"]
 }

@@ -70,14 +70,48 @@ export default function DriversPage() {
 
   const fetchDrivers = async () => {
     try {
+      // Get current user's tenant
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error("No active session");
+        setDrivers([]);
+        setLoading(false);
+        return;
+      }
+      
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      
+      if (userError) {
+        console.error("Error fetching user data:", userError);
+        setDrivers([]);
+        setLoading(false);
+        return;
+      }
+      
+      if (!userData?.tenant_id) {
+        console.error("User has no tenant_id");
+        setDrivers([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log(`Fetching drivers for tenant: ${userData.tenant_id}`);
+
+      // Fetch drivers with tenant filter
       const { data, error } = await supabase
         .from("users")
         .select("*")
         .eq("role", "driver")
+        .eq("tenant_id", userData.tenant_id)  // Filter by current tenant
         .order("full_name", { ascending: true });
 
       if (error) throw error;
 
+      console.log(`Loaded ${data?.length || 0} drivers for tenant ${userData.tenant_id}`);
       setDrivers(data || []);
     } catch (error) {
       console.error("Error fetching drivers:", error);
@@ -275,19 +309,48 @@ export default function DriversPage() {
     driverId: string,
     currentStatus: boolean
   ) => {
+    // Find driver name for confirmation
+    const driver = drivers.find(d => d.id === driverId);
+    const driverName = driver?.full_name || "this driver";
+    
+    // Confirm deactivation
+    if (currentStatus) {
+      const confirmMsg = 
+        `⚠️ Deactivate ${driverName}?\n\n` +
+        `This will:\n` +
+        `• Remove them from driver selection lists\n` +
+        `• Hide them from active driver views\n` +
+        `• Keep their order history intact\n\n` +
+        `You can reactivate them later if needed.\n\n` +
+        `Are you sure?`;
+      
+      if (!window.confirm(confirmMsg)) {
+        return;
+      }
+    }
+
     try {
       const { error } = await supabase
         .from("users")
-        .update({ is_active: !currentStatus })
+        .update({ 
+          is_active: !currentStatus,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", driverId);
 
       if (error) throw error;
+
+      const action = currentStatus ? 'deactivated' : 'activated';
+      console.log(`Driver ${driverName} (${driverId}) ${action} at ${new Date().toISOString()}`);
+      
+      // Show success message
+      alert(`✅ Driver ${action} successfully`);
 
       // Refresh drivers
       fetchDrivers();
     } catch (error) {
       console.error("Error updating driver status:", error);
-      alert("Failed to update driver status");
+      alert("❌ Failed to update driver status. Please try again.");
     }
   };
 

@@ -198,15 +198,20 @@ export default function LoadActivationScreen() {
         throw new Error("Not authenticated");
       }
 
-      const activationData = {
-        order_id: orderId,
+      console.log("🔄 Activating load for order:", orderId);
+
+      // Prepare activation data
+      const now = new Date().toISOString();
+      const updateData = {
+        load_activated_at: now,
+        status: 'activated',
+        updated_at: now,
       };
 
+      // Add location data if available
       if (location) {
-        activationData.location = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        };
+        updateData.loading_point_latitude = location.coords.latitude;
+        updateData.loading_point_longitude = location.coords.longitude;
 
         try {
           const addresses = await Location.reverseGeocodeAsync({
@@ -216,7 +221,7 @@ export default function LoadActivationScreen() {
 
           if (addresses && addresses.length > 0) {
             const addr = addresses[0];
-            activationData.location_address = [
+            const address = [
               addr.street,
               addr.city,
               addr.region,
@@ -224,32 +229,87 @@ export default function LoadActivationScreen() {
             ]
               .filter(Boolean)
               .join(", ");
+            
+            if (address) {
+              updateData.loading_point_address = address;
+            }
           }
         } catch (geoError) {
           console.warn("Reverse geocoding failed:", geoError);
         }
       }
 
-      activationData.device_info = {
-        platform: Platform.OS,
-        app_version: "1.0.0",
-        os_version: Platform.Version,
-      };
+      console.log("📝 Update data:", updateData);
 
-      const { data, error } = await supabase.functions.invoke("activate-load", {
-        body: activationData,
-      });
+      // Update the order directly in the database
+      const { data: updatedOrder, error: updateError } = await supabase
+        .from("orders")
+        .update(updateData)
+        .eq("id", orderId)
+        .select()
+        .single();
 
-      if (error) {
-        console.error("Edge function error:", error);
-        throw new Error(error.message || "Failed to activate load");
+      if (updateError) {
+        console.error("❌ Database update error:", updateError);
+        throw updateError;
       }
 
-      if (!data.success) {
-        throw new Error(data.message || "Failed to activate load");
+      console.log("✅ Load activated successfully:", updatedOrder);
+
+      // Insert a status update record
+      try {
+        const { error: statusError } = await supabase
+          .from("status_updates")
+          .insert({
+            order_id: orderId,
+            driver_id: session.user.id,
+            status: 'activated',
+            notes: 'Load activated from mobile app',
+            created_at: now,
+          });
+
+        if (statusError) {
+          console.warn("⚠️ Status update insert failed:", statusError);
+          // Don't fail the whole operation if status update fails
+        }
+      } catch (statusErr) {
+        console.warn("⚠️ Status update error:", statusErr);
       }
 
-      console.log("Load activated successfully:", data);
+      // Store as active order
+      try {
+        const storage = Platform.OS === 'web' 
+          ? {
+              setItem: (key, value) => {
+                if (typeof window !== 'undefined') {
+                  window.localStorage.setItem(key, value);
+                }
+                return Promise.resolve();
+              },
+            }
+          : require('@react-native-async-storage/async-storage').default;
+        
+        await storage.setItem('activeOrderId', String(orderId));
+        console.log("✅ Active order ID stored:", orderId);
+      } catch (storageError) {
+        console.warn("⚠️ Failed to store active order ID:", storageError);
+      }
+
+      // Initialize location tracking
+      try {
+        const LocationService = require("../services/LocationService").default;
+        const locationService = new LocationService();
+        await locationService.initialize();
+        await locationService.setCurrentOrder(orderId);
+        await locationService.startTracking();
+        
+        // Send immediate location update so dashboard sees it right away
+        await locationService.sendImmediateLocationUpdate();
+        console.log("✅ Location tracking started and initial update sent");
+      } catch (trackError) {
+        console.warn("⚠️ Location tracking start failed:", trackError);
+        // Don't fail activation if tracking fails
+      }
 
       Alert.alert(
         "Load Activated!",
@@ -273,17 +333,21 @@ export default function LoadActivationScreen() {
         ]
       );
     } catch (error) {
-      console.error("Error activating load:", error);
+      console.error("❌ Error activating load:", error);
       let message = "Failed to activate load";
 
-      if (error.message.includes("not assigned")) {
+      if (error.message) {
+        message = error.message;
+      }
+
+      if (error.code === 'PGRST116') {
+        message = "Order not found or you don't have permission to activate it";
+      } else if (error.message.includes("not assigned")) {
         message = "You are not assigned to this order";
       } else if (error.message.includes("already activated")) {
         message = "This load has already been activated";
       } else if (error.message.includes("status")) {
         message = "Order is not in a valid status for activation";
-      } else if (error.message) {
-        message = error.message;
       }
 
       Alert.alert("Activation Failed", message);

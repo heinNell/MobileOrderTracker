@@ -12,11 +12,16 @@ export default function RootLayout() {
       if (__DEV__) {
         const originalWarn = console.warn;
         console.warn = (message, ...args) => {
-          if (
-            typeof message === "string" &&
-            message.includes("Cannot record touch end without a touch start")
-          ) {
-            return;
+          if (typeof message === "string") {
+            // Suppress specific React Native Web deprecation warnings
+            const suppressedWarnings = [
+              "Cannot record touch end without a touch start",
+              "pointerEvents is deprecated", // From expo-router/react-navigation
+            ];
+            
+            if (suppressedWarnings.some(warning => message.includes(warning))) {
+              return; // Suppress these warnings
+            }
           }
           originalWarn(message, ...args);
         };

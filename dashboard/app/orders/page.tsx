@@ -629,16 +629,24 @@ export default function EnhancedOrdersPage() {
       console.log("Original order:", editingOrder);
       
       // If updating driver assignment, verify the driver exists and has proper tenant_id
-      if (orderData.assigned_driver_id) {
+      // Only validate if assigned_driver_id is provided and not being cleared
+      if (orderData.assigned_driver_id && orderData.assigned_driver_id !== "") {
         const { data: driverData, error: driverError } = await supabase
           .from("users")
           .select("id, full_name, tenant_id, role")
           .eq("id", orderData.assigned_driver_id)
           .eq("role", "driver")
-          .single();
+          .maybeSingle(); // ✅ Use maybeSingle() instead of single() to handle no results
 
-        if (driverError || !driverData) {
-          throw new Error(`Driver not found or invalid: ${driverError?.message || "Unknown error"}`);
+        // Only throw error if there was a database error (not just no results)
+        if (driverError) {
+          console.error("Driver validation error:", driverError);
+          throw new Error(`Driver validation failed: ${driverError.message}`);
+        }
+
+        // If no driver found with this ID
+        if (!driverData) {
+          throw new Error(`Driver not found with ID: ${orderData.assigned_driver_id}. Please select a valid driver.`);
         }
 
         console.log("Driver data:", driverData);
@@ -646,7 +654,12 @@ export default function EnhancedOrdersPage() {
         // Check if driver's tenant_id matches order's tenant_id
         if (driverData.tenant_id !== editingOrder.tenant_id) {
           console.warn(`Tenant mismatch - Driver: ${driverData.tenant_id}, Order: ${editingOrder.tenant_id}`);
+          // Allow it but warn - some deployments may have cross-tenant assignment
         }
+      } else if (orderData.assigned_driver_id === "" || orderData.assigned_driver_id === null) {
+        // ✅ Clearing driver assignment - ensure it's explicitly set to undefined
+        orderData.assigned_driver_id = undefined;
+        console.log("Clearing driver assignment");
       }
 
       const { data: updatedOrder, error } = await supabase
