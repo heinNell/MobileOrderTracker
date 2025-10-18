@@ -43,6 +43,11 @@ interface TrackingData {
   last_update: string;
   loading_point_location?: string;
   unloading_point_location?: string;
+  // New coordinate fields
+  loading_point_latitude?: number;
+  loading_point_longitude?: number;
+  unloading_point_latitude?: number;
+  unloading_point_longitude?: number;
 }
 
 interface LocationPoint {
@@ -92,12 +97,13 @@ export default function PublicOrderTracking() {
   const [realTimeETA, setRealTimeETA] = useState<{
     arrivalTime: Date;
     durationMinutes: number;
-    distanceKm: number;
+    distanceKm?: number;
     trafficDelay?: number;
   } | null>(null);
 
-  // Refs for optimized services
+  // Google Maps service references  
   const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
+  const distanceMatrixServiceRef = useRef<google.maps.DistanceMatrixService | null>(null);
   const routeCalculatorRef = useRef(new RouteProgressCalculator());
   const etaCalculatorRef = useRef(new ETACalculator());
   const previousLocationRef = useRef<LocationPoint | null>(null);
@@ -129,6 +135,41 @@ export default function PublicOrderTracking() {
       console.log("DirectionsService initialized");
     }
   }, [mapRef]);
+
+  // Helper function to get coordinates from either lat/lng columns or PostGIS location
+  const getTrackingCoordinates = useCallback((data: TrackingData) => {
+    // First try to use the new latitude/longitude columns
+    if (data.loading_point_latitude && data.loading_point_longitude && 
+        data.unloading_point_latitude && data.unloading_point_longitude) {
+      return {
+        loadingPoint: {
+          lat: Number(data.loading_point_latitude),
+          lng: Number(data.loading_point_longitude)
+        },
+        unloadingPoint: {
+          lat: Number(data.unloading_point_latitude),
+          lng: Number(data.unloading_point_longitude)
+        }
+      };
+    }
+    
+    // Fallback to PostGIS location parsing
+    try {
+      const loadingPoint = data.loading_point_location 
+        ? parsePostGISPoint(data.loading_point_location)
+        : { lat: 0, lng: 0 };
+      const unloadingPoint = data.unloading_point_location 
+        ? parsePostGISPoint(data.unloading_point_location)
+        : { lat: 0, lng: 0 };
+      return { loadingPoint, unloadingPoint };
+    } catch (error) {
+      console.error(`Error parsing coordinates for order ${data.order_id}:`, error);
+      return {
+        loadingPoint: { lat: 0, lng: 0 },
+        unloadingPoint: { lat: 0, lng: 0 }
+      };
+    }
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -191,8 +232,7 @@ export default function PublicOrderTracking() {
       if (!trackingData || !directionsServiceRef.current) return;
 
       try {
-        const loadingPoint = parsePostGISPoint(trackingData.loading_point_location);
-        const unloadingPoint = parsePostGISPoint(trackingData.unloading_point_location);
+        const { loadingPoint, unloadingPoint } = getTrackingCoordinates(trackingData);
 
         if (loadingPoint.lat !== 0 && unloadingPoint.lat !== 0) {
           const plannedRoute = await fetchPlannedRoute(loadingPoint, unloadingPoint);
@@ -206,7 +246,7 @@ export default function PublicOrderTracking() {
     };
 
     updatePlannedRoute();
-  }, [trackingData, fetchPlannedRoute]);
+  }, [trackingData, fetchPlannedRoute, getTrackingCoordinates]);
 
   // Calculate route progress with optimized calculator and real-time ETA
   const calculateRouteProgress = useCallback(async (): Promise<void> => {
@@ -382,7 +422,7 @@ export default function PublicOrderTracking() {
     if (!trackingData || !currentPosition.lat || currentPosition.lat === 0) return;
 
     try {
-      const unloadingPoint = parsePostGISPoint(trackingData.unloading_point_location);
+      const { unloadingPoint } = getTrackingCoordinates(trackingData);
       
       if (unloadingPoint.lat === 0) return;
 
@@ -416,7 +456,7 @@ export default function PublicOrderTracking() {
     } catch (error) {
       console.error("Error fetching Distance Matrix:", error);
     }
-  }, [trackingData, currentPosition]);
+  }, [trackingData, currentPosition, getTrackingCoordinates]);
 
   // Update Distance Matrix data periodically
   useEffect(() => {
@@ -437,11 +477,10 @@ export default function PublicOrderTracking() {
     const points: LatLngLiteral[] = [];
     
     if (currentPosition.lat !== 0) points.push(currentPosition);
-    if (trackingData?.loading_point_location) {
-      points.push(parsePostGISPoint(trackingData.loading_point_location));
-    }
-    if (trackingData?.unloading_point_location) {
-      points.push(parsePostGISPoint(trackingData.unloading_point_location));
+    if (trackingData) {
+      const { loadingPoint, unloadingPoint } = getTrackingCoordinates(trackingData);
+      if (loadingPoint.lat !== 0) points.push(loadingPoint);
+      if (unloadingPoint.lat !== 0) points.push(unloadingPoint);
     }
     if (directionsRoute.length > 0) {
       points.push(...directionsRoute.slice(0, Math.min(5, directionsRoute.length)));
@@ -453,7 +492,7 @@ export default function PublicOrderTracking() {
     const avgLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
     const avgLng = points.reduce((sum, p) => sum + p.lng, 0) / points.length;
     return { lat: avgLat, lng: avgLng };
-  }, [trackingData, directionsRoute, currentPosition]);
+  }, [trackingData, directionsRoute, currentPosition, getTrackingCoordinates]);
 
   // Loading state
   if (loading) {
@@ -488,32 +527,45 @@ export default function PublicOrderTracking() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div className="flex items-center space-x-3">
-              <span className="text-4xl">🚚</span>
+              <span className="text-3xl md:text-4xl">🚚</span>
               <div>
-                <h1 className="text-3xl font-bold">Live Tracking</h1>
+                <h1 className="text-2xl md:text-3xl font-bold">Live Tracking</h1>
                 <p className="text-blue-100 mt-1">Order #{trackingData.order_number}</p>
               </div>
             </div>
-            <span
-              className={`px-4 py-2 rounded-full text-white text-sm font-bold shadow-md ${getStatusColor(
+            <div className="mt-3 md:mt-0">
+              <span
+                className={`px-4 py-2 rounded-full text-white text-sm font-bold shadow-md ${getStatusColor(
                 trackingData.status
               )}`}
-            >
-              {trackingData.status.toUpperCase().replace("_", " ")}
-            </span>
+              >
+                {trackingData.status.toUpperCase().replace("_", " ")}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
         {/* Order Details */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Order Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Order Details</h2>
+            <button
+              onClick={() => {
+                setLastRefresh(new Date());
+                fetchTrackingData();
+              }}
+              className="mt-2 md:mt-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             <div>
               <div className="mb-4">
                 <label className="text-sm font-medium text-gray-500">Driver</label>
@@ -738,10 +790,10 @@ export default function PublicOrderTracking() {
         )}
 
         {/* Map Container */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex justify-between items-center mb-4">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900">Live Location & Route Progress</h2>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-500 mt-2 md:mt-0">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
           </div>
@@ -752,26 +804,37 @@ export default function PublicOrderTracking() {
               center={mapCenter}
               zoom={13}
               options={mapOptions}
-              onLoad={(map: google.maps.Map) => setMapRef(map)}
+              onLoad={(map: google.maps.Map) => {
+                setMapRef(map);
+                // Initialize Google Maps services
+                if (!directionsServiceRef.current) {
+                  directionsServiceRef.current = new google.maps.DirectionsService();
+                  console.log("DirectionsService initialized");
+                }
+                if (!distanceMatrixServiceRef.current) {
+                  distanceMatrixServiceRef.current = new google.maps.DistanceMatrixService();
+                  console.log("DistanceMatrixService initialized");
+                }
+              }}
             >
-              {/* Planned Route (light gray) */}
-              {directionsRoute.length > 1 && (
-                <PolylineTyped
-                  path={directionsRoute}
-                  options={{
-                    strokeColor: "#9CA3AF",
-                    strokeOpacity: 0.5,
-                    strokeWeight: 3,
-                    strokeLineCap: "round",
-                    strokeLineJoin: "round",
-                    zIndex: 0,
-                  }}
-                />
-              )}
-
               {/* Enhanced Route Visualization */}
               {enhancedRoute && (
                 <>
+                  {/* Planned Route (light gray) */}
+                  {directionsRoute.length > 1 && (
+                    <PolylineTyped
+                      path={directionsRoute}
+                      options={{
+                        strokeColor: "#9CA3AF",
+                        strokeOpacity: 0.7,
+                        strokeWeight: 4,
+                        strokeLineCap: "round",
+                        strokeLineJoin: "round",
+                        zIndex: 0,
+                      }}
+                    />
+                  )}
+
                   {/* Completed route (green) */}
                   {enhancedRoute.completedPath.length > 1 && (
                     <PolylineTyped
@@ -780,6 +843,8 @@ export default function PublicOrderTracking() {
                         strokeColor: "#10B981",
                         strokeOpacity: 1,
                         strokeWeight: 6,
+                        strokeLineCap: "round",
+                        strokeLineJoin: "round",
                         zIndex: 2,
                       }}
                     />
@@ -792,7 +857,7 @@ export default function PublicOrderTracking() {
                       options={{
                         strokeColor: "#EF4444",
                         strokeOpacity: 0.8,
-                        strokeWeight: 4,
+                        strokeWeight: 5,
                         strokeLineCap: "round",
                         strokeLineJoin: "round",
                         zIndex: 1,
@@ -818,42 +883,55 @@ export default function PublicOrderTracking() {
               )}
 
               {/* Loading and Unloading Points */}
-              {trackingData.loading_point_location && (
-                <MarkerTyped
-                  position={parsePostGISPoint(trackingData.loading_point_location)}
-                  icon={{
-                    path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                    scale: 10,
-                    fillColor: "#F59E0B",
-                    fillOpacity: 1,
-                    strokeColor: "#FFFFFF",
-                    strokeWeight: 2,
-                    zIndex: 2,
-                  }}
-                  title={`Loading Point: ${trackingData.loading_point_name}`}
-                />
-              )}
+              {trackingData && (() => {
+                try {
+                  const { loadingPoint, unloadingPoint } = getTrackingCoordinates(trackingData);
+                  
+                  return (
+                    <>
+                      {loadingPoint.lat !== 0 && (
+                        <MarkerTyped
+                          position={loadingPoint}
+                          icon={{
+                            path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
+                            scale: 10,
+                            fillColor: "#F59E0B",
+                            fillOpacity: 1,
+                            strokeColor: "#FFFFFF",
+                            strokeWeight: 2,
+                            zIndex: 2,
+                          }}
+                          title={`Loading Point: ${trackingData.loading_point_name}`}
+                        />
+                      )}
 
-              {trackingData.unloading_point_location && (
-                <MarkerTyped
-                  position={parsePostGISPoint(trackingData.unloading_point_location)}
-                  icon={{
-                    path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                    scale: 10,
-                    fillColor: "#8B5CF6",
-                    fillOpacity: 1,
-                    strokeColor: "#FFFFFF",
-                    strokeWeight: 2,
-                    zIndex: 2,
-                  }}
-                  title={`Unloading Point: ${trackingData.unloading_point_name}`}
-                />
-              )}
+                      {unloadingPoint.lat !== 0 && (
+                        <MarkerTyped
+                          position={unloadingPoint}
+                          icon={{
+                            path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
+                            scale: 10,
+                            fillColor: "#8B5CF6",
+                            fillOpacity: 1,
+                            strokeColor: "#FFFFFF",
+                            strokeWeight: 2,
+                            zIndex: 2,
+                          }}
+                          title={`Unloading Point: ${trackingData.unloading_point_name}`}
+                        />
+                      )}
+                    </>
+                  );
+                } catch (error) {
+                  console.error("Error rendering tracking points:", error);
+                  return null;
+                }
+              })()}
             </GoogleMapTyped>
           </LoadScriptTyped>
 
           {/* Map Legend */}
-          <div className="mt-4 flex flex-wrap items-center gap-6 text-sm">
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4 text-xs md:text-sm">
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
               <span>Current Location</span>

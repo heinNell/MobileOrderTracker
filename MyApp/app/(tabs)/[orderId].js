@@ -3,19 +3,21 @@ import Constants from "expo-constants";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { supabase } from "../lib/supabase";
+import
+  {
+    ActivityIndicator,
+    Dimensions,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+  } from "react-native";
+import GeocodingService from "../../services/GeocodingService";
 import { startBackgroundLocation, stopBackgroundLocation } from "../services/LocationService";
+import { supabase } from "../lib/supabase";
 
 // Conditionally import react-native-maps only on native platforms
 let MapView, Marker, Polyline, PROVIDER_GOOGLE;
@@ -354,21 +356,22 @@ export default function OrderDetailsScreen() {
         setMapLoading(true);
         setMapError(null);
         try {
-          const loadingResults = await Location.geocodeAsync(order.loading_point_name);
-          const unloadingResults = await Location.geocodeAsync(order.unloading_point_name);
-          if (loadingResults.length > 0) {
+          // Use the new GeocodingService with database fallback
+          const { loadingCoord, unloadingCoord } = await GeocodingService.getCoordinatesWithFallback(order);
+          
+          if (loadingCoord.length > 0) {
             setLoadingCoord({
-              latitude: loadingResults[0].latitude,
-              longitude: loadingResults[0].longitude,
+              latitude: loadingCoord[0].latitude,
+              longitude: loadingCoord[0].longitude,
             });
           }
-          if (unloadingResults.length > 0) {
+          if (unloadingCoord.length > 0) {
             setUnloadingCoord({
-              latitude: unloadingResults[0].latitude,
-              longitude: unloadingResults[0].longitude,
+              latitude: unloadingCoord[0].latitude,
+              longitude: unloadingCoord[0].longitude,
             });
           }
-          if (!loadingResults.length || !unloadingResults.length) {
+          if (!loadingCoord.length || !unloadingCoord.length) {
             setMapError("Unable to geocode one or more locations.");
           }
         } catch (err) {
@@ -1049,10 +1052,7 @@ const styles = StyleSheet.create({
     minWidth: 180,
     ...Platform.select({
       ios: {
-        shadowColor: colors.shadowDark,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
+        boxShadow: `0 4px 8px ${colors.shadowDark}`,
       },
       android: {
         elevation: 4,

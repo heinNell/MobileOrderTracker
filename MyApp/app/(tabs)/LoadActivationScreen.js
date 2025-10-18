@@ -14,6 +14,7 @@ import
     TouchableOpacity,
     View,
   } from "react-native";
+import GeocodingService from "../../services/GeocodingService";
 import { supabase } from "../lib/supabase";
 
 // Modern mobile-first color palette
@@ -214,7 +215,7 @@ export default function LoadActivationScreen() {
         updateData.loading_point_longitude = location.coords.longitude;
 
         try {
-          const addresses = await Location.reverseGeocodeAsync({
+          const addresses = await GeocodingService.reverseGeocodeAsync({
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           });
@@ -226,17 +227,14 @@ export default function LoadActivationScreen() {
               addr.city,
               addr.region,
               addr.country,
-            ]
-              .filter(Boolean)
-              .join(", ");
-            
+            ].filter(Boolean).join(", ");
+
             if (address) {
               updateData.loading_point_address = address;
             }
           }
         } catch (geoError) {
-          console.warn("Reverse geocoding failed:", geoError);
-        }
+          console.warn("Reverse geocoding failed:", geoError);        }
       }
 
       console.log("📝 Update data:", updateData);

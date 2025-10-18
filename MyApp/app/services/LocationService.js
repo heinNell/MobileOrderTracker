@@ -1,105 +1,120 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
+import { getDistance } from 'geolib';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { getDistance } from 'geolib';
-import * as Notifications from 'expo-notifications';
+import GeocodingService from '../../services/GeocodingService';
 
 // Task name for background location updates
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
-// Define background location task
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
-  if (error) {
-    console.error('Background location error:', error);
-    return;
-  }
-
-  const { locations } = data;
-  const { latitude, longitude, accuracy, speed, heading } = locations[0].coords;
-  const timestamp = new Date(locations[0].timestamp).toISOString();
-
-  console.log('Background location:', { latitude, longitude });
-
-  try {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('No authenticated user for background location update');
+// Define background location task (only on native platforms)
+if (Platform.OS !== 'web') {
+  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+    if (error) {
+      console.error('Background location error:', error);
       return;
     }
 
-    // Get tracking order ID from storage
-    const orderId = await storage.getItem('trackingOrderId');
-    if (!orderId) {
-      console.warn('No active order ID in background task');
-      return;
-    }
+    const { locations } = data;
+    const { latitude, longitude, accuracy, speed, heading } = locations[0].coords;
+    const timestamp = new Date(locations[0].timestamp).toISOString();
 
-    // Fetch order details for loading point
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select('loading_point_name')
-      .eq('id', orderId)
-      .single();
+    console.log('Background location:', { latitude, longitude });
 
-    if (orderError || !order) {
-      console.error('Error fetching order for proximity check:', orderError);
-      return;
-    }
-
-    // Calculate proximity to loading point
-    const loadingCoord = await Location.geocodeAsync(order.loading_point_name);
-    if (loadingCoord.length > 0) {
-      const distance = getDistance(
-        { latitude, longitude },
-        { latitude: loadingCoord[0].latitude, longitude: loadingCoord[0].longitude }
-      );
-      if (distance < 100) {
-        console.log('Driver is within 100m of loading point!');
-        // Trigger notification
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Near Loading Point',
-            body: 'You are within 100 meters of the loading point for your order!',
-            sound: 'default',
-          },
-          trigger: null,
-        });
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No authenticated user for background location update');
+        return;
       }
+
+      // Get tracking order ID from storage
+      const orderId = await AsyncStorage.getItem('trackingOrderId');
+      if (!orderId) {
+        console.warn('No active order ID in background task');
+        return;
+      }
+
+      // Fetch order details for loading point
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select('loading_point_name')
+        .eq('id', orderId)
+        .single();
+
+      if (orderError || !order) {
+        console.error('Error fetching order for proximity check:', orderError);
+        return;
+      }
+
+      // Calculate proximity to loading point using coordinates from database or geocoding fallback
+      let loadingCoord = [];
+      
+      // Try to get coordinates from database first (new numeric fields)
+      if (order.loading_point_latitude && order.loading_point_longitude) {
+        loadingCoord = [{
+          latitude: parseFloat(order.loading_point_latitude),
+          longitude: parseFloat(order.loading_point_longitude)
+        }];
+      } else if (order.loading_point_name) {
+        // Fallback to geocoding service
+        loadingCoord = await GeocodingService.geocodeAsync(order.loading_point_name);
+      }
+      
+      if (loadingCoord.length > 0) {
+        const distance = getDistance(
+          { latitude, longitude },
+          { latitude: loadingCoord[0].latitude, longitude: loadingCoord[0].longitude }
+        );
+        if (distance < 100) {
+          console.log('Driver is within 100m of loading point!');
+          // Trigger notification
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Near Loading Point',
+              body: 'You are within 100 meters of the loading point for your order!',
+              sound: 'default',
+            },
+            trigger: null,
+          });
+        }
+      }
+
+      // Update Supabase with driver's location
+      const locationData = {
+        driver_id: user.id,
+        order_id: orderId,
+        latitude,
+        longitude,
+        location: { lat: latitude, lng: longitude },
+        accuracy: accuracy || null,
+        accuracy_meters: accuracy || null,
+        speed: speed || null,
+        speed_kmh: speed ? speed * 3.6 : null,
+        heading: heading || null,
+        timestamp,
+        created_at: new Date().toISOString(),
+        is_manual_update: false,
+      };
+
+      const { error: updateError } = await supabase
+        .from('driver_locations')
+        .insert(locationData);
+
+      if (updateError) {
+        console.error('Supabase update error:', updateError);
+      } else {
+        console.log('📍 Background location updated:', { orderId, latitude, longitude });
+      }
+    } catch (err) {
+      console.error('Background task error:', err);
     }
-
-    // Update Supabase with driver's location
-    const locationData = {
-      driver_id: user.id,
-      order_id: orderId,
-      latitude,
-      longitude,
-      location: { lat: latitude, lng: longitude },
-      accuracy: accuracy || null,
-      accuracy_meters: accuracy || null,
-      speed: speed || null,
-      speed_kmh: speed ? speed * 3.6 : null,
-      heading: heading || null,
-      timestamp,
-      created_at: new Date().toISOString(),
-      is_manual_update: false,
-    };
-
-    const { error: updateError } = await supabase
-      .from('driver_locations')
-      .insert(locationData);
-
-    if (updateError) {
-      console.error('Supabase update error:', updateError);
-    } else {
-      console.log('📍 Background location updated:', { orderId, latitude, longitude });
-    }
-  } catch (err) {
-    console.error('Background task error:', err);
-  }
-});
+  });
+}
 
 // Web-compatible storage adapter
 const storage = Platform.OS === 'web'
@@ -145,6 +160,17 @@ class LocationService {
   async startTracking(orderId) {
     try {
       await this.ensureInitialized();
+
+      // Web platform doesn't support background location tracking
+      if (Platform.OS === 'web') {
+        console.warn('⚠️ Background location tracking is not supported on web platform');
+        // Still set the order ID for foreground tracking
+        this.currentOrderId = orderId;
+        await storage.setItem('activeOrderId', orderId);
+        // Get initial location
+        await this.updateLocation(orderId);
+        return true;
+      }
 
       if (this.isTracking && this.currentOrderId === orderId) {
         console.log('Already tracking this order');
@@ -206,9 +232,12 @@ class LocationService {
         console.log('✅ Cleared tracking interval');
       }
 
-      if (await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK)) {
-        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-        console.log('✅ Stopped background location updates');
+      // Only stop background location on native platforms
+      if (Platform.OS !== 'web') {
+        if (await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK)) {
+          await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+          console.log('✅ Stopped background location updates');
+        }
       }
 
       this.isTracking = false;

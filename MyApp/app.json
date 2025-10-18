@@ -13,7 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.logistics.ordertracker",
@@ -26,14 +28,20 @@
         "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show your position on the map.",
         "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background",
-        "UIBackgroundModes": ["location", "fetch", "background-processing"],
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "background-processing"
+        ],
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "DeliveryTracking": "Required for live ETA calculations"
         },
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "com.logistics.ordertracker",
-            "CFBundleURLSchemes": ["ordertracker"]
+            "CFBundleURLSchemes": [
+              "ordertracker"
+            ]
           }
         ]
       },
@@ -64,7 +72,10 @@
               "scheme": "ordertracker"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -86,7 +97,9 @@
       "output": "static",
       "build": {
         "babel": {
-          "include": ["@expo/vector-icons"]
+          "include": [
+            "@expo/vector-icons"
+          ]
         }
       },
       "lang": "en",
@@ -126,7 +139,8 @@
         }
       ],
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font"
     ],
     "description": "Logistics QR Code Mobile Application for Drivers",
     "updates": {

@@ -133,11 +133,15 @@ export interface Order {
   loading_point_name: string;
   loading_point_address: string;
   loading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
+  loading_point_latitude?: number; // New numeric latitude field
+  loading_point_longitude?: number; // New numeric longitude field
   loading_time_window_start?: string;
   loading_time_window_end?: string;
   unloading_point_name: string;
   unloading_point_address: string;
   unloading_point_location: string | Location; // PostGIS returns as WKT string, parse with parsePostGISPoint()
+  unloading_point_latitude?: number; // New numeric latitude field
+  unloading_point_longitude?: number; // New numeric longitude field
   unloading_time_window_start?: string;
   unloading_time_window_end?: string;
   // Legacy coordinate fields for backward compatibility

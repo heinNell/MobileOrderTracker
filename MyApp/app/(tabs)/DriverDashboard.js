@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import
@@ -15,9 +16,11 @@ import
     Text,
     View
   } from "react-native";
+import StatusUpdateButtons from "../../components/StatusUpdateButtons";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
+import StatusUpdateService from "../../services/StatusUpdateService";
 import { useResponsive } from "../utils/responsive";
 
 const locationService = new LocationService();
@@ -197,7 +200,7 @@ function DriverDashboard() {
     },
   }), [spacing, fontSizes, isSmallScreen, scale, touchTarget]);
 
-  // Define activateOrderWithTracking before loadDriverData to avoid initialization issues
+  // Define activateOrderWithTracking to properly activate orders through load activation
   const activateOrderWithTracking = useCallback(async (order) => {
     try {
       // Validate order has a valid ID
@@ -208,35 +211,193 @@ function DriverDashboard() {
       // Ensure order.id is a string
       const orderId = String(order.id);
       
-      // Set as active order (same as QR scan)
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(orderId)) {
+        throw new Error(`Invalid order ID format: ${orderId}`);
+      }
+      
+      // Validate user is authenticated
+      if (!user || !user.id) {
+        throw new Error("User not authenticated");
+      }
+      
+      // Check Supabase connection
+      const { data: testData, error: testError } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("id", orderId)
+        .limit(1);
+      
+      if (testError) {
+        console.error("❌ Supabase connection test failed:", {
+          error: testError,
+          message: testError.message,
+          details: testError.details,
+          hint: testError.hint,
+          code: testError.code
+        });
+        throw new Error(`Database connection failed: ${testError.message}`);
+      }
+      
+      if (!testData || testData.length === 0) {
+        throw new Error(`Order not found: ${orderId}`);
+      }
+      
+      console.log("🚀 Activating order through load activation:", {
+        orderNumber: order.order_number,
+        orderId: orderId,
+        currentStatus: order.status,
+        userId: user.id
+      });
+      
+      // Check if order is already activated
+      if (order.status === "activated" || order.load_activated_at) {
+        console.log("Order already activated, proceeding to in_progress");
+        
+        // Move activated order to in_progress
+        const { data: updatedOrder, error: updateError } = await supabase
+          .from("orders")
+          .update({
+            status: "in_progress",
+            actual_start_time: new Date().toISOString(),
+            tracking_active: true,
+            trip_start_time: new Date().toISOString()
+          })
+          .eq("id", orderId)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error("Error updating to in_progress:", {
+            error: updateError,
+            message: updateError.message,
+            details: updateError.details,
+            hint: updateError.hint,
+            code: updateError.code
+          });
+          throw updateError;
+        }
+
+        // Create status update record
+        await supabase.from("status_updates").insert({
+          order_id: orderId,
+          driver_id: user.id,
+          status: "in_progress",
+          notes: "Started trip from activated order",
+          created_at: new Date().toISOString()
+        });
+
+        setActiveOrder(updatedOrder);
+      } else {
+        // Order needs load activation first
+        console.log("Order needs load activation first");
+        
+        // Get current location
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        let currentLocation = null;
+        
+        if (status === 'granted') {
+          try {
+            currentLocation = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.High,
+            });
+          } catch (locError) {
+            console.warn("Could not get location:", locError);
+          }
+        }
+
+        // Perform load activation
+        const updateData = {
+          load_activated_at: new Date().toISOString(),
+          status: "activated",
+          updated_at: new Date().toISOString(),
+        };
+
+        // Store GPS coordinates in proper latitude/longitude columns
+        if (currentLocation) {
+          updateData.loading_point_latitude = currentLocation.coords.latitude;
+          updateData.loading_point_longitude = currentLocation.coords.longitude;
+        }
+
+        console.log("📝 Attempting load activation with data:", {
+          orderId,
+          updateData,
+          hasLocation: !!currentLocation
+        });
+
+        const { data: updatedOrder, error: updateError } = await supabase
+          .from("orders")
+          .update(updateData)
+          .eq("id", orderId)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error("Error in load activation:", {
+            error: updateError,
+            message: updateError.message,
+            details: updateError.details,
+            hint: updateError.hint,
+            code: updateError.code
+          });
+          throw updateError;
+        }
+
+        // Create status update record
+        await supabase.from("status_updates").insert({
+          order_id: orderId,
+          driver_id: user.id,
+          status: "activated",
+          notes: "Load activated manually by driver",
+          created_at: new Date().toISOString()
+        });
+
+        console.log("✅ Load activation successful:", {
+          orderId,
+          newStatus: updatedOrder.status,
+          loadActivatedAt: updatedOrder.load_activated_at
+        });
+
+        setActiveOrder(updatedOrder);
+      }
+      
+      // Set as active order
       await storage.setItem("activeOrderId", orderId);
       
       // Initialize and start location tracking
       await locationService.initialize();
       await locationService.setCurrentOrder(orderId);
-      await locationService.startTracking();
+      await locationService.startTracking(orderId);
       
       // Update UI state
-      setActiveOrder(order);
       setLocationTracking(true);
       
-      console.log("Order activated with tracking:", order.order_number);
+      console.log("🎉 Order activated with tracking:", order.order_number);
       
       // Show success message
       Alert.alert(
         "Order Activated",
-        `Order #${order.order_number} is now active and location tracking has started.`,
+        `Order #${order.order_number} has been activated successfully.`,
         [{ text: "OK" }]
       );
     } catch (error) {
-      console.error("Error activating order with tracking:", error);
+      console.error("Error activating order:", {
+        error: error,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        orderId: order?.id,
+        orderNumber: order?.order_number
+      });
       Alert.alert(
         "Activation Error",
-        "Failed to activate order. Please try again.",
+        `Failed to activate order: ${error.message || error.toString()}. Please try again.`,
         [{ text: "OK" }]
       );
     }
-  }, []);
+  }, [user]);
 
   const loadDriverData = useCallback(async () => {
     try {
@@ -281,7 +442,7 @@ function DriverDashboard() {
         console.log("Cleaned up invalid activeOrderId");
       }
 
-      // If no active order, look for newly assigned orders
+      // If no active order, look for newly assigned orders and auto-activate them through load activation
       if (!activeOrderData) {
         const { data: assignedOrders, error: assignedError } = await supabase
           .from("orders")
@@ -292,24 +453,99 @@ function DriverDashboard() {
           .limit(1);
 
         if (!assignedError && assignedOrders && assignedOrders.length > 0) {
-          // Auto-activate the most recent assigned order (WITHOUT automatic location tracking)
-          activeOrderData = assignedOrders[0];
-          console.log("Auto-activating newly assigned order:", activeOrderData.order_number);
+          // Auto-activate the most recent assigned order through PROPER load activation
+          const orderToActivate = assignedOrders[0];
+          console.log("Auto-activating newly assigned order:", orderToActivate.order_number);
           
-          // Set the active order, but tracking requires user gesture
           try {
-            // Ensure we have a valid order ID before storing
-            if (activeOrderData && activeOrderData.id) {
-              await storage.setItem("activeOrderId", String(activeOrderData.id));
-              await locationService.initialize();
-              await locationService.setCurrentOrder(activeOrderData.id);
-              // Note: Location tracking will be prompted in UI - user must start manually
-              console.log("Order activated. Location tracking available for user to start.");
-            } else {
-              console.error("Cannot activate order: missing ID");
+            // Get current location for activation
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            let currentLocation = null;
+            
+            if (status === 'granted') {
+              try {
+                currentLocation = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.High,
+                });
+              } catch (locError) {
+                console.warn("Could not get location for auto-activation:", locError);
+              }
             }
+
+            // Update order status through LOAD ACTIVATION (not directly to in_progress)
+            const updateData = {
+              load_activated_at: new Date().toISOString(),
+              status: "activated", // Proper load activation status
+              updated_at: new Date().toISOString(),
+            };
+
+            // Add GPS coordinates to proper latitude/longitude columns
+            if (currentLocation) {
+              updateData.loading_point_latitude = currentLocation.coords.latitude;
+              updateData.loading_point_longitude = currentLocation.coords.longitude;
+            }
+
+            const { data: updatedOrder, error: updateError } = await supabase
+              .from("orders")
+              .update(updateData)
+              .eq("id", orderToActivate.id)
+              .select()
+              .single();
+
+            if (updateError) {
+              console.error("Error updating order status:", {
+                error: updateError,
+                message: updateError.message,
+                details: updateError.details,
+                hint: updateError.hint,
+                code: updateError.code,
+                orderId: orderToActivate.id
+              });
+              throw updateError;
+            }
+
+            console.log("✅ Order load activated automatically:", updatedOrder);
+
+            // Create status update record for load activation
+            const { error: statusError } = await supabase
+              .from("status_updates")
+              .insert({
+                order_id: orderToActivate.id,
+                driver_id: user.id,
+                status: "activated",
+                notes: "Load auto-activated upon driver login",
+                created_at: new Date().toISOString()
+              });
+
+            if (statusError) {
+              console.warn("Status update insert failed:", statusError);
+            }
+
+            // Set as active order locally
+            await storage.setItem("activeOrderId", String(orderToActivate.id));
+            
+            // Initialize location service and start tracking (for activated status)
+            await locationService.initialize();
+            await locationService.setCurrentOrder(orderToActivate.id);
+            await locationService.startTracking(orderToActivate.id);
+            
+            // Use the updated order data
+            activeOrderData = updatedOrder;
+            
+            console.log("🚀 Order load activated with tracking:", orderToActivate.order_number);
+            
           } catch (activationError) {
-            console.error("Error in auto-activation:", activationError);
+            console.error("Error in auto-load-activation:", activationError);
+            // Fallback to basic activation without database update
+            try {
+              await storage.setItem("activeOrderId", String(orderToActivate.id));
+              await locationService.initialize();
+              await locationService.setCurrentOrder(orderToActivate.id);
+              activeOrderData = orderToActivate;
+              console.log("Fallback: Order set as active without status update");
+            } catch (fallbackError) {
+              console.error("Fallback activation also failed:", fallbackError);
+            }
           }
         }
       }
@@ -366,11 +602,13 @@ function DriverDashboard() {
 
   useEffect(() => {
     if (user?.id && isAuthenticated) {
+      // Initialize StatusUpdateService with current user
+      StatusUpdateService.initialize(user);
       loadDriverData();
     } else {
       setLoading(false);
     }
-  }, [user?.id, isAuthenticated, loadDriverData]);
+  }, [user, isAuthenticated, loadDriverData]);
 
   // Auto-refresh to catch completed orders - but much less aggressive and optional
   useEffect(() => {
@@ -625,6 +863,26 @@ function DriverDashboard() {
               </Pressable>
             </View>
 
+            {/* Load Activation Section - Show if order needs activation */}
+            {activeOrder.status === "assigned" && !activeOrder.load_activated_at && (
+              <View style={styles.loadActivationSection}>
+                <View style={styles.activationPromptCard}>
+                  <MaterialIcons name="warning" size={24} color={colors.warning} />
+                  <Text style={styles.activationPromptTitle}>Load Activation Required</Text>
+                  <Text style={styles.activationPromptText}>
+                    This order needs to be activated before you can start delivery operations.
+                  </Text>
+                </View>
+                <Pressable 
+                  style={styles.activateLoadButton} 
+                  onPress={() => activateOrderWithTracking(activeOrder)}
+                >
+                  <MaterialIcons name="play-circle-filled" size={20} color={colors.white} />
+                  <Text style={styles.activateLoadButtonText}>Activate Load</Text>
+                </Pressable>
+              </View>
+            )}
+
             {/* Primary Action Buttons */}
             <View style={styles.actionButtons}>
               <Pressable
@@ -635,13 +893,24 @@ function DriverDashboard() {
                 <Text style={styles.buttonText}>Order Details</Text>
               </Pressable>
 
-              <Pressable
-                style={styles.scanButton}
-                onPress={() => router.push(`/(tabs)/scanner?orderId=${activeOrder.id}`)}
-              >
-                <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
-                <Text style={styles.buttonText}>Scan QR</Text>
-              </Pressable>
+              {/* Show different button based on status */}
+              {activeOrder.status === "activated" && activeOrder.load_activated_at ? (
+                <Pressable
+                  style={[styles.scanButton, { backgroundColor: colors.success }]}
+                  onPress={() => activateOrderWithTracking(activeOrder)}
+                >
+                  <MaterialIcons name="play-arrow" size={20} color={colors.white} />
+                  <Text style={styles.buttonText}>Start Trip</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={styles.scanButton}
+                  onPress={() => router.push(`/(tabs)/scanner?orderId=${activeOrder.id}`)}
+                >
+                  <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
+                  <Text style={styles.buttonText}>Scan QR</Text>
+                </Pressable>
+              )}
             </View>
 
             {/* Tracking Control - Enhanced for Auto-Assigned Orders */}
@@ -700,6 +969,16 @@ function DriverDashboard() {
                 </View>
               )}
             </View>
+
+            {/* Status Update Section */}
+            <StatusUpdateButtons 
+              order={activeOrder}
+              onStatusUpdate={(updatedOrder) => {
+                setActiveOrder(updatedOrder);
+                loadDriverData(); // Refresh data after status update
+              }}
+              disabled={loading}
+            />
           </View>
         ) : (
           <View style={styles.noActiveOrderCard}>
@@ -820,16 +1099,38 @@ function DriverDashboard() {
 
             <Pressable 
               style={[styles.quickActionButton, { backgroundColor: colors.info }]} 
-              onPress={() => {
-                // For now, we'll use an alert with diagnostic info
-                const LocationDiagnostics = require('../services/LocationDiagnostics').LocationDiagnostics;
-                LocationDiagnostics.checkStoredData().then(data => {
+              onPress={async () => {
+                try {
+                  // Test Supabase connection
+                  const { data: testOrders, error: testError } = await supabase
+                    .from("orders")
+                    .select("id, order_number, status, assigned_driver_id")
+                    .limit(3);
+                  
+                  if (testError) {
+                    Alert.alert(
+                      'Database Error',
+                      `Connection failed: ${testError.message}`,
+                      [{ text: 'OK' }]
+                    );
+                    return;
+                  }
+                  
+                  // Test user authentication
+                  const { data: { user: currentUser } } = await supabase.auth.getUser();
+                  
                   Alert.alert(
-                    'Location Diagnostics',
-                    `Active Order: ${data.activeOrderId || 'NULL'}\nTracking Order: ${data.trackingOrderId || 'NULL'}\n\nTip: Scan a QR code to set an active order.`,
+                    'Connection Test',
+                    `✅ Database: Connected\n✅ Orders found: ${testOrders?.length || 0}\n✅ User: ${currentUser?.email || 'Not authenticated'}\n✅ User ID: ${currentUser?.id || 'None'}`,
                     [{ text: 'OK' }]
                   );
-                });
+                } catch (err) {
+                  Alert.alert(
+                    'Test Failed',
+                    `Error: ${err.message}`,
+                    [{ text: 'OK' }]
+                  );
+                }
               }}
             >
               <MaterialIcons name="bug-report" size={24} color={colors.white} />
@@ -1466,6 +1767,56 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
+  },
+  
+  // Load Activation Section Styles
+  loadActivationSection: {
+    marginTop: 16,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: colors.warningBackground,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.warning,
+  },
+  activationPromptCard: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  activationPromptTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.gray900,
+    marginTop: 8,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  activationPromptText: {
+    fontSize: 14,
+    color: colors.gray600,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  activateLoadButton: {
+    backgroundColor: colors.warning,
+    paddingVertical: 14,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.warning,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  activateLoadButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
   },
 });
 

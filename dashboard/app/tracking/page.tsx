@@ -159,6 +159,37 @@ export default function TrackingPage() {
     };
   }, [user]);
 
+  // Parse coordinates from either lat/lng columns or PostGIS location
+  const getOrderCoordinates = useCallback((order: Order) => {
+    // First try to use the new latitude/longitude columns
+    if (order.loading_point_latitude && order.loading_point_longitude && 
+        order.unloading_point_latitude && order.unloading_point_longitude) {
+      return {
+        loadingPoint: {
+          lat: Number(order.loading_point_latitude),
+          lng: Number(order.loading_point_longitude)
+        },
+        unloadingPoint: {
+          lat: Number(order.unloading_point_latitude),
+          lng: Number(order.unloading_point_longitude)
+        }
+      };
+    }
+    
+    // Fallback to PostGIS location parsing
+    try {
+      const loadingPoint = parsePostGISPoint(order.loading_point_location);
+      const unloadingPoint = parsePostGISPoint(order.unloading_point_location);
+      return { loadingPoint, unloadingPoint };
+    } catch (error) {
+      console.error(`Error parsing coordinates for order ${order.id}:`, error);
+      return {
+        loadingPoint: { lat: 0, lng: 0 },
+        unloadingPoint: { lat: 0, lng: 0 }
+      };
+    }
+  }, []);
+
   // Fetch planned route from Google Directions API
   const fetchPlannedRoute = useCallback(
     async (origin: LatLngLiteral, destination: LatLngLiteral): Promise<LatLngLiteral[]> => {
@@ -213,15 +244,12 @@ export default function TrackingPage() {
 
     for (const order of orders) {
       try {
-        if (order.loading_point_location && order.unloading_point_location) {
-          const loadingPoint = parsePostGISPoint(order.loading_point_location);
-          const unloadingPoint = parsePostGISPoint(order.unloading_point_location);
+        const { loadingPoint, unloadingPoint } = getOrderCoordinates(order);
 
-          if (loadingPoint.lat !== 0 && unloadingPoint.lat !== 0) {
-            const plannedRoute = await fetchPlannedRoute(loadingPoint, unloadingPoint);
-            if (plannedRoute.length > 0) {
-              newPlannedRoutes[order.id] = plannedRoute;
-            }
+        if (isValidCoordinate(loadingPoint) && isValidCoordinate(unloadingPoint)) {
+          const plannedRoute = await fetchPlannedRoute(loadingPoint, unloadingPoint);
+          if (plannedRoute.length > 0) {
+            newPlannedRoutes[order.id] = plannedRoute;
           }
         }
       } catch (error) {
@@ -232,7 +260,7 @@ export default function TrackingPage() {
     if (isMountedRef.current) {
       setPlannedRoutes(newPlannedRoutes);
     }
-  }, [orders, fetchPlannedRoute]);
+  }, [orders, fetchPlannedRoute, getOrderCoordinates]);
 
   // Get latest location for each order
   const getOrderLocations = useCallback(() => {
@@ -269,8 +297,7 @@ export default function TrackingPage() {
   const getFallbackRoute = useCallback(
     (order: Order): LatLngLiteral[] => {
       try {
-        const loadingPoint = parsePostGISPoint(order.loading_point_location as any);
-        const unloadingPoint = parsePostGISPoint(order.unloading_point_location as any);
+        const { loadingPoint, unloadingPoint } = getOrderCoordinates(order);
 
         if (isValidCoordinate(loadingPoint) && isValidCoordinate(unloadingPoint)) {
           return [loadingPoint, unloadingPoint];
@@ -281,7 +308,7 @@ export default function TrackingPage() {
 
       return [];
     },
-    []
+    [getOrderCoordinates]
   );
 
   // Calculate enhanced routes for all orders
@@ -412,12 +439,12 @@ export default function TrackingPage() {
       if (isMountedRef.current) {
         setOrders(data || []);
 
-        // Set initial map center
+        // Set initial map center using new coordinate fields or fallback to PostGIS
         if (data && data.length > 0) {
           try {
             const firstOrder = data[0];
-            const loadingPoint = parsePostGISPoint(firstOrder.loading_point_location);
-            if (loadingPoint.lat !== 0) {
+            const { loadingPoint } = getOrderCoordinates(firstOrder);
+            if (isValidCoordinate(loadingPoint)) {
               setMapCenter(loadingPoint);
               setMapZoom(10);
             }
@@ -434,7 +461,7 @@ export default function TrackingPage() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [getOrderCoordinates]);
 
   // Fetch driver locations
   const fetchDriverLocations = useCallback(async () => {
@@ -522,6 +549,7 @@ export default function TrackingPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-xl text-gray-600">Loading tracking data...</p>
+          <p className="text-sm text-gray-500 mt-2">Fetching active orders and location updates...</p>
         </div>
       </div>
     );
@@ -672,24 +700,37 @@ export default function TrackingPage() {
             <h2 className="text-xl font-bold text-gray-900">
               {selectedOrder ? `Tracking: Order ${selectedOrder.order_number}` : "Live Map View"}
             </h2>
-            {selectedOrder && (
+            <div className="flex items-center gap-2 mt-2 md:mt-0">
+              {selectedOrder && (
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
+                >
+                  Clear Selection
+                </button>
+              )}
               <button
-                onClick={() => setSelectedOrder(null)}
-                className="mt-2 md:mt-0 px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
+                onClick={() => {
+                  fetchOrders();
+                  fetchDriverLocations();
+                }}
+                className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 flex items-center gap-1"
               >
-                Clear Selection
+                <span className="text-xs">🔄</span>
+                Refresh
               </button>
-            )}
+            </div>
           </div>
 
           <LoadScriptTyped googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-            <GoogleMapTyped
-              mapContainerStyle={mapContainerStyle}
-              center={mapCenter}
-              zoom={mapZoom}
-              options={mapOptions}
-              onLoad={(map: google.maps.Map) => setMapRef(map)}
-            >
+            {orders.length > 0 && (
+              <GoogleMapTyped
+                mapContainerStyle={mapContainerStyle}
+                center={mapCenter}
+                zoom={mapZoom}
+                options={mapOptions}
+                onLoad={(map: google.maps.Map) => setMapRef(map)}
+              >
               {/* Render routes for selected or all orders */}
               {(selectedOrder ? [selectedOrder] : orders).map((order) => {
                 try {
@@ -771,10 +812,11 @@ export default function TrackingPage() {
               {/* Loading and Unloading Points */}
               {orders.map((order) => {
                 try {
-                  const loadingPoint = parsePostGISPoint(order.loading_point_location);
-                  const unloadingPoint = parsePostGISPoint(order.unloading_point_location);
+                  const { loadingPoint, unloadingPoint } = getOrderCoordinates(order);
 
-                  if (loadingPoint.lat === 0 || unloadingPoint.lat === 0) return null;
+                  if (!isValidCoordinate(loadingPoint) || !isValidCoordinate(unloadingPoint)) {
+                    return null;
+                  }
 
                   return (
                     <React.Fragment key={`points-${order.id}`}>
@@ -813,6 +855,7 @@ export default function TrackingPage() {
                 }
               })}
             </GoogleMapTyped>
+            )}
           </LoadScriptTyped>
 
           {selectedOrder && (
@@ -821,20 +864,13 @@ export default function TrackingPage() {
                 const enhanced = enhancedRoutes[selectedOrder.id];
                 const latestLocation = orderLocations[selectedOrder.id];
                 const eta = etaByOrder[selectedOrder.id];
-                const fallbackRoute = getFallbackRoute(selectedOrder);
+                const { loadingPoint, unloadingPoint } = getOrderCoordinates(selectedOrder);
 
                 const currentLocationDisplay = enhanced?.currentPosition && isValidCoordinate(enhanced.currentPosition)
                   ? `${enhanced.currentPosition.lat.toFixed(4)}, ${enhanced.currentPosition.lng.toFixed(4)}`
-                  : fallbackRoute.length > 0
-                    ? `${fallbackRoute[0].lat.toFixed(4)}, ${fallbackRoute[0].lng.toFixed(4)}`
+                  : isValidCoordinate(loadingPoint)
+                    ? `${loadingPoint.lat.toFixed(4)}, ${loadingPoint.lng.toFixed(4)}`
                     : "Not available";
-
-                const loadingPoint = fallbackRoute.length > 0
-                  ? fallbackRoute[0]
-                  : parsePostGISPoint(selectedOrder.loading_point_location as any);
-                const unloadingPoint = fallbackRoute.length > 1
-                  ? fallbackRoute[1]
-                  : parsePostGISPoint(selectedOrder.unloading_point_location as any);
 
                 return (
                   <>
@@ -851,7 +887,7 @@ export default function TrackingPage() {
                     <div>
                       <p className="text-gray-500 uppercase tracking-wide text-xs font-semibold mb-1">Planned Route</p>
                       <p className="text-gray-900 font-medium">
-                        {fallbackRoute.length > 1
+                        {isValidCoordinate(loadingPoint) && isValidCoordinate(unloadingPoint)
                           ? `${selectedOrder.loading_point_name || "Loading"} → ${selectedOrder.unloading_point_name || "Unloading"}`
                           : "Not available"}
                       </p>
