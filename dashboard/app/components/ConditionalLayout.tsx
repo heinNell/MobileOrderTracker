@@ -76,6 +76,24 @@ export default function ConditionalLayout({ children }: { children: ReactNode })
                 <span className="ml-3">Geofences</span>
               </a>
               <a
+                href="/transporters"
+                className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+              >
+                <span className="ml-3">🚚 Transporters</span>
+              </a>
+              <a
+                href="/templates"
+                className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+              >
+                <span className="ml-3">📄 Templates</span>
+              </a>
+              <a
+                href="/users"
+                className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+              >
+                <span className="ml-3">👥 User Sync</span>
+              </a>
+              <a
                 href="/diagnostics"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
