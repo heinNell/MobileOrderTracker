@@ -86,9 +86,17 @@ const getStatusStyle = (status) => {
     pending: { backgroundColor: colors.gray[400] },
     assigned: { backgroundColor: colors.blue[500] },
     activated: { backgroundColor: colors.emerald[500] },
+    in_progress: { backgroundColor: colors.blue[500] },
     in_transit: { backgroundColor: colors.purple[500] },
+    arrived: { backgroundColor: colors.green[600] },
+    arrived_at_loading_point: { backgroundColor: colors.green[600] },
+    loading: { backgroundColor: colors.purple[500] },
+    loaded: { backgroundColor: colors.emerald[500] },
+    arrived_at_unloading_point: { backgroundColor: colors.green[600] },
+    unloading: { backgroundColor: colors.purple[500] },
     delivered: { backgroundColor: colors.green[600] },
     completed: { backgroundColor: colors.emerald[500] },
+    cancelled: { backgroundColor: colors.red[500] },
   };
   return statusStyles[status] || { backgroundColor: colors.gray[500] };
 };

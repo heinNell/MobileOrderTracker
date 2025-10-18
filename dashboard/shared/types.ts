@@ -9,9 +9,12 @@ export type OrderStatus =
   | "in_progress"
   | "in_transit"
   | "arrived"
+  | "arrived_at_loading_point"
   | "loading"
   | "loaded"
+  | "arrived_at_unloading_point"
   | "unloading"
+  | "delivered"
   | "completed"
   | "cancelled";
 

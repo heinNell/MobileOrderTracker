@@ -178,6 +178,6 @@
         "projectId": "48aa7af2-042e-484a-a1bf-947ef35eaba4"
       }
     },
-    "runtimeVersion": "exposdk:54.0.6"
+    "runtimeVersion": "exposdk:50.0.0"
   }
 }
