@@ -3,8 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import
-  {
+import {
     ActivityIndicator,
     Alert,
     Linking,
@@ -15,12 +14,12 @@ import
     StyleSheet,
     Text,
     View
-  } from "react-native";
+} from "react-native";
 import StatusUpdateButtons from "../../components/StatusUpdateButtons";
+import StatusUpdateService from "../../services/StatusUpdateService";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import LocationService from "../services/LocationService";
-import StatusUpdateService from "../../services/StatusUpdateService";
 import { useResponsive } from "../utils/responsive";
 
 const locationService = new LocationService();
@@ -89,8 +88,10 @@ const getStatusColor = (status) => {
     in_progress: colors.info,
     in_transit: colors.purple,
     arrived: colors.successLight,
+    arrived_at_loading_point: colors.successLight,
     loading: colors.warning,
     loaded: colors.success,
+    arrived_at_unloading_point: colors.successLight,
     unloading: colors.warningLight,
     delivered: colors.success,
     completed: colors.success,

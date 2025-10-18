@@ -225,7 +225,7 @@ export default function DashboardPage() {
 
   const subscribeToOrders = () => {
     // Subscribe to orders changes - but with debouncing to prevent excessive refreshes
-    let refreshTimeout: NodeJS.Timeout;
+    let refreshTimeout: ReturnType<typeof setTimeout>;
     
     const debouncedRefresh = () => {
       clearTimeout(refreshTimeout);
@@ -285,9 +285,12 @@ export default function DashboardPage() {
       in_progress: "bg-indigo-500",
       in_transit: "bg-purple-500",
       arrived: "bg-green-500",
+      arrived_at_loading_point: "bg-teal-500",
       loading: "bg-yellow-500",
       loaded: "bg-green-500",
+      arrived_at_unloading_point: "bg-teal-500",
       unloading: "bg-yellow-500",
+      delivered: "bg-emerald-500",
       completed: "bg-emerald-600",
       cancelled: "bg-red-500",
     };

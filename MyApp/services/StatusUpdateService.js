@@ -12,8 +12,10 @@ export const ORDER_STATUSES = {
   IN_PROGRESS: 'in_progress',
   IN_TRANSIT: 'in_transit',
   ARRIVED: 'arrived',
+  ARRIVED_AT_LOADING_POINT: 'arrived_at_loading_point',
   LOADING: 'loading',
   LOADED: 'loaded',
+  ARRIVED_AT_UNLOADING_POINT: 'arrived_at_unloading_point',
   UNLOADING: 'unloading',
   DELIVERED: 'delivered',
   COMPLETED: 'completed',
@@ -24,12 +26,14 @@ export const ORDER_STATUSES = {
 export const STATUS_TRANSITIONS = {
   [ORDER_STATUSES.PENDING]: [ORDER_STATUSES.ASSIGNED, ORDER_STATUSES.CANCELLED],
   [ORDER_STATUSES.ASSIGNED]: [ORDER_STATUSES.ACTIVATED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ACTIVATED]: [ORDER_STATUSES.IN_PROGRESS, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.IN_PROGRESS]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.IN_TRANSIT]: [ORDER_STATUSES.ARRIVED, ORDER_STATUSES.LOADING, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ARRIVED]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ACTIVATED]: [ORDER_STATUSES.IN_PROGRESS, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.IN_PROGRESS]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.IN_TRANSIT]: [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, ORDER_STATUSES.ARRIVED, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ARRIVED]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.CANCELLED],
   [ORDER_STATUSES.LOADING]: [ORDER_STATUSES.LOADED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.LOADED]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.LOADED]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT]: [ORDER_STATUSES.UNLOADING, ORDER_STATUSES.CANCELLED],
   [ORDER_STATUSES.UNLOADING]: [ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
   [ORDER_STATUSES.DELIVERED]: [ORDER_STATUSES.COMPLETED],
   [ORDER_STATUSES.COMPLETED]: [], // Final state
@@ -52,7 +56,7 @@ export const STATUS_INFO = {
   },
   [ORDER_STATUSES.ACTIVATED]: {
     label: 'Load Activated',
-    color: '#8B5CF6',
+    color: '#10B981',
     icon: 'check-circle',
     description: 'QR code scanned, ready to start'
   },
@@ -74,6 +78,12 @@ export const STATUS_INFO = {
     icon: 'location-on',
     description: 'Driver has arrived at pickup/delivery point'
   },
+  [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT]: {
+    label: 'Arrived at Loading Point',
+    color: '#10B981',
+    icon: 'location-on',
+    description: 'Driver has arrived at the loading location'
+  },
   [ORDER_STATUSES.LOADING]: {
     label: 'Loading Cargo',
     color: '#059669',
@@ -85,6 +95,12 @@ export const STATUS_INFO = {
     color: '#059669',
     icon: 'done-all',
     description: 'All goods loaded successfully'
+  },
+  [ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT]: {
+    label: 'Arrived at Unloading Point',
+    color: '#10B981',
+    icon: 'location-on',
+    description: 'Driver has arrived at the unloading location'
   },
   [ORDER_STATUSES.UNLOADING]: {
     label: 'Unloading Cargo',
@@ -240,12 +256,20 @@ class StatusUpdateService {
     return this.updateOrderStatus(orderId, ORDER_STATUSES.ARRIVED, arrivalNote);
   }
 
+  async markAsArrivedAtLoadingPoint(orderId, note = null) {
+    return this.updateOrderStatus(orderId, ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, note || 'Arrived at loading point');
+  }
+
   async markAsLoading(orderId, note = null) {
     return this.updateOrderStatus(orderId, ORDER_STATUSES.LOADING, note || 'Started loading cargo');
   }
 
   async markAsLoaded(orderId, note = null) {
     return this.updateOrderStatus(orderId, ORDER_STATUSES.LOADED, note || 'Cargo loading completed');
+  }
+
+  async markAsArrivedAtUnloadingPoint(orderId, note = null) {
+    return this.updateOrderStatus(orderId, ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, note || 'Arrived at unloading point');
   }
 
   async markAsUnloading(orderId, note = null) {

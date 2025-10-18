@@ -12,7 +12,9 @@
   "dependencies": {
     "@babel/runtime": "^7.28.4",
     "@googlemaps/js-api-loader": "^1.16.2",
+    "@heroicons/react": "^2.2.0",
     "@netlify/plugin-nextjs": "^5.13.4",
+    "@nextui-org/react": "^2.6.11",
     "@react-google-maps/api": "^2.20.7",
     "@react-pdf/renderer": "^4.3.1",
     "@supabase/supabase-js": "^2.74.0",
@@ -21,6 +23,7 @@
     "date-fns": "^3.0.6",
     "dotenv": "^17.2.3",
     "esbuild": "^0.25.11",
+    "framer-motion": "^12.23.24",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
     "next": "^15.5.4",
@@ -34,7 +37,7 @@
     "recharts": "^2.10.3",
     "semver": "^7.7.3",
     "undici": "^7.16.0",
-    "vercel": "^48.4.0",
+    "vercel": "^32.0.1",
     "zustand": "^4.4.7"
   },
   "devDependencies": {

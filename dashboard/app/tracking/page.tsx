@@ -55,7 +55,7 @@ export default function TrackingPage() {
   const previousLocationsRef = useRef<Record<string, LocationUpdate>>({});
   const isMountedRef = useRef(true);
   const locationChannelRef = useRef<any>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Map container style
   const mapContainerStyle: React.CSSProperties = {

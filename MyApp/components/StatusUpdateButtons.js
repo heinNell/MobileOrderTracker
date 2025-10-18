@@ -4,16 +4,16 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useState } from 'react';
 import
-    {
-        ActivityIndicator,
-        Alert,
-        Modal,
-        Pressable,
-        StyleSheet,
-        Text,
-        TextInput,
-        View
-    } from 'react-native';
+  {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
+  } from 'react-native';
 import StatusUpdateService, { ORDER_STATUSES, STATUS_INFO } from '../services/StatusUpdateService';
 
 // Color constants to avoid ESLint warnings
@@ -48,6 +48,9 @@ const colors = {
   },
   green: {
     500: '#10B981'
+  },
+  emerald: {
+    600: '#059669'
   }
 };
 
@@ -68,11 +71,21 @@ const StatusUpdateButtons = ({
     ? Object.keys(ORDER_STATUSES).map(key => ORDER_STATUSES[key])
     : StatusUpdateService.getAvailableTransitions(order?.status);
 
-  // Filter out current status and completed/cancelled if not admin
-  const filteredTransitions = availableTransitions.filter(status => 
-    status !== order?.status &&
-    (showAllTransitions || (status !== ORDER_STATUSES.COMPLETED && status !== ORDER_STATUSES.CANCELLED))
-  );
+  // Filter out current status and restrict admin-only operations
+  const filteredTransitions = availableTransitions.filter(status => {
+    // Always exclude current status
+    if (status === order?.status) return false;
+    
+    // If not showing all transitions (normal user mode), filter appropriately
+    if (!showAllTransitions) {
+      // Allow completed only if current status is delivered
+      if (status === ORDER_STATUSES.COMPLETED && order?.status !== ORDER_STATUSES.DELIVERED) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
 
   // Handle status update
   const handleStatusUpdate = async (newStatus, note = null) => {
@@ -119,7 +132,9 @@ const StatusUpdateButtons = ({
     // For certain status updates, show note input
     if (newStatus === ORDER_STATUSES.CANCELLED || 
         newStatus === ORDER_STATUSES.DELIVERED ||
-        newStatus === ORDER_STATUSES.ARRIVED) {
+        newStatus === ORDER_STATUSES.ARRIVED ||
+        newStatus === ORDER_STATUSES.ARRIVED_AT_LOADING_POINT ||
+        newStatus === ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT) {
       setPendingStatus(newStatus);
       setNoteText('');
       setShowNoteModal(true);
@@ -240,11 +255,43 @@ const StatusUpdateButtons = ({
             <View style={styles.quickActionsRow}>
               <Pressable
                 style={[styles.quickActionButton, styles.greenButton]}
-                onPress={() => handleStatusPress(ORDER_STATUSES.OUT_FOR_DELIVERY)}
+                onPress={() => handleStatusPress(ORDER_STATUSES.ARRIVED_AT_LOADING_POINT)}
                 disabled={disabled || isUpdating}
               >
                 <MaterialIcons name="location-on" size={16} color="white" />
-                <Text style={styles.quickActionText}>Mark Arrived</Text>
+                <Text style={styles.quickActionText}>At Loading Point</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {order.status === ORDER_STATUSES.LOADED && (
+          <View style={styles.quickActions}>
+            <Text style={styles.quickActionsTitle}>Delivery Updates</Text>
+            <View style={styles.quickActionsRow}>
+              <Pressable
+                style={[styles.quickActionButton, styles.greenButton]}
+                onPress={() => handleStatusPress(ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT)}
+                disabled={disabled || isUpdating}
+              >
+                <MaterialIcons name="location-on" size={16} color="white" />
+                <Text style={styles.quickActionText}>At Unloading Point</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {order.status === ORDER_STATUSES.UNLOADING && (
+          <View style={styles.quickActions}>
+            <Text style={styles.quickActionsTitle}>Final Step</Text>
+            <View style={styles.quickActionsRow}>
+              <Pressable
+                style={[styles.quickActionButton, styles.successButton]}
+                onPress={() => handleStatusPress(ORDER_STATUSES.DELIVERED)}
+                disabled={disabled || isUpdating}
+              >
+                <MaterialIcons name="check-circle" size={16} color="white" />
+                <Text style={styles.quickActionText}>Mark Delivered</Text>
               </Pressable>
             </View>
           </View>
@@ -268,8 +315,10 @@ const StatusUpdateButtons = ({
               style={styles.noteInput}
               placeholder={
                 pendingStatus === ORDER_STATUSES.CANCELLED ? "Reason for cancellation" :
-                pendingStatus === ORDER_STATUSES.DELIVERED ? "Delivery notes" :
+                pendingStatus === ORDER_STATUSES.DELIVERED ? "Delivery notes (customer signature, etc.)" :
                 pendingStatus === ORDER_STATUSES.ARRIVED ? "Arrival location/notes" :
+                pendingStatus === ORDER_STATUSES.ARRIVED_AT_LOADING_POINT ? "Loading point arrival notes" :
+                pendingStatus === ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT ? "Unloading point arrival notes" :
                 "Additional notes (optional)"
               }
               value={noteText}
@@ -393,6 +442,9 @@ const styles = StyleSheet.create({
   },
   greenButton: {
     backgroundColor: colors.green[500],
+  },
+  successButton: {
+    backgroundColor: colors.emerald[600],
   },
   
   // Modal styles

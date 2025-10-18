@@ -751,21 +751,24 @@ export default function EnhancedOrdersPage() {
     }
   };
 
-  const getStatusColor = (status: OrderStatus): string => {
-    const colors: Record<OrderStatus, string> = {
+  const getStatusColor = (status: string): string => {
+    const colors: Record<string, string> = {
       pending: "bg-gray-500",
       assigned: "bg-blue-500",
       activated: "bg-green-500",
       in_progress: "bg-indigo-500",
       in_transit: "bg-purple-500",
       arrived: "bg-green-500",
+      arrived_at_loading_point: "bg-green-500",
       loading: "bg-yellow-500",
       loaded: "bg-green-500",
+      arrived_at_unloading_point: "bg-green-500",
       unloading: "bg-yellow-500",
+      delivered: "bg-emerald-600",
       completed: "bg-emerald-600",
       cancelled: "bg-red-500",
     };
-    return colors[status];
+    return colors[status] || "bg-gray-500";
   };
 
   const handleSort = (field: "created_at" | "order_number" | "status") => {
