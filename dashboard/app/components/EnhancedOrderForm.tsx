@@ -1,6 +1,19 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import toast from "react-hot-toast";
+import
+  {
+    ContactSelectionModal,
+    TemplateSelectionModal,
+    TransporterSelectionModal,
+  } from "../../components/modals/SelectionModals";
+import
+  {
+    EnhancedContact,
+    EnhancedTransporter,
+    OrderTemplate,
+  } from "../../hooks/useEnhancedData";
 import { supabase } from "../../lib/supabase";
 import type { Order, TransporterSupplier } from "../../shared/types";
 
@@ -73,6 +86,14 @@ export default function EnhancedOrderForm({
     "basic" | "driver" | "locations" | "transporter" | "additional"
   >("basic");
   const [loading, setLoading] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<OrderTemplate | null>(null);
+  
+  // Selection modal states
+  const [showTransporterModal, setShowTransporterModal] = useState(false);
+  const [showCustomerContactModal, setShowCustomerContactModal] = useState(false);
+  const [selectedTransporter, setSelectedTransporter] = useState<EnhancedTransporter | null>(null);
+  const [selectedCustomerContact, setSelectedCustomerContact] = useState<EnhancedContact | null>(null);
 
   // Fetch available drivers and geofences on component mount
   useEffect(() => {
@@ -169,10 +190,10 @@ export default function EnhancedOrderForm({
       // Fetch geofences - use enhanced_geofences table
       const { data: geofences, error } = await supabase
         .from("enhanced_geofences")
-        .select("id, geofence_name, center_latitude, center_longitude, radius_meters, geofence_type")
+        .select("id, name, center_latitude, center_longitude, radius_meters, geofence_type, address, city")
         .eq("tenant_id", userData.tenant_id)
         .eq("is_active", true)
-        .order("geofence_name");
+        .order("name");
 
       if (error) {
         console.error("Error fetching from enhanced_geofences, trying old geofences table:", error);
@@ -215,13 +236,14 @@ export default function EnhancedOrderForm({
 
       // Parse geofences from enhanced_geofences table
       const parsedGeofences = (geofences || []).map(g => {
+        const locationText = [g.address, g.city].filter(Boolean).join(', ');
         return {
           id: g.id,
-          name: g.geofence_name,
+          name: g.name,
           latitude: g.center_latitude || 0,
           longitude: g.center_longitude || 0,
           radius_meters: g.radius_meters,
-          geofence_type: g.geofence_type
+          location_text: locationText || undefined
         };
       });
 
@@ -325,6 +347,147 @@ export default function EnhancedOrderForm({
     }
   };
 
+  const handleTemplateSelect = async (template: OrderTemplate) => {
+    try {
+      console.log("Loading template:", template);
+      setSelectedTemplate(template);
+
+      // Build the updated form data from template
+      const updatedFormData: any = { ...formData };
+
+      // Load transporter data if available
+      if (template.default_transporter_id) {
+        try {
+          const { data: transporterData } = await supabase
+            .from('transporters')
+            .select('name, primary_contact_phone, primary_contact_email')
+            .eq('id', template.default_transporter_id)
+            .maybeSingle();
+
+          if (transporterData) {
+            updatedFormData.transporter_name = transporterData.name;
+            updatedFormData.transporter_phone = transporterData.primary_contact_phone || '';
+            updatedFormData.transporter_email = transporterData.primary_contact_email || '';
+          }
+        } catch (error) {
+          console.warn('Could not load transporter data:', error);
+        }
+      }
+
+      // Load customer contact data if available
+      if (template.default_customer_contact_id) {
+        try {
+          const { data: contactData } = await supabase
+            .from('contacts')
+            .select('full_name, primary_phone, primary_email')
+            .eq('id', template.default_customer_contact_id)
+            .maybeSingle();
+
+          if (contactData) {
+            updatedFormData.contact_name = contactData.full_name;
+            updatedFormData.contact_phone = contactData.primary_phone || '';
+          }
+        } catch (error) {
+          console.warn('Could not load contact data:', error);
+        }
+      }
+
+      // Load loading geofence data if available
+      if (template.default_loading_geofence_id) {
+        try {
+          const { data: geofenceData } = await supabase
+            .from('enhanced_geofences')
+            .select('name, center_latitude, center_longitude, address')
+            .eq('id', template.default_loading_geofence_id)
+            .maybeSingle();
+
+          if (geofenceData) {
+            updatedFormData.loading_point_name = geofenceData.name;
+            updatedFormData.loading_point_address = geofenceData.address || geofenceData.name;
+            updatedFormData.loading_lat = geofenceData.center_latitude.toString();
+            updatedFormData.loading_lng = geofenceData.center_longitude.toString();
+          }
+        } catch (error) {
+          console.warn('Could not load loading geofence data:', error);
+        }
+      }
+
+      // Load unloading geofence data if available
+      if (template.default_unloading_geofence_id) {
+        try {
+          const { data: geofenceData } = await supabase
+            .from('enhanced_geofences')
+            .select('name, center_latitude, center_longitude, address')
+            .eq('id', template.default_unloading_geofence_id)
+            .maybeSingle();
+
+          if (geofenceData) {
+            updatedFormData.unloading_point_name = geofenceData.name;
+            updatedFormData.unloading_point_address = geofenceData.address || geofenceData.name;
+            updatedFormData.unloading_lat = geofenceData.center_latitude.toString();
+            updatedFormData.unloading_lng = geofenceData.center_longitude.toString();
+          }
+        } catch (error) {
+          console.warn('Could not load unloading geofence data:', error);
+        }
+      }
+
+      // Apply template default values
+      if (template.default_loading_instructions) {
+        updatedFormData.delivery_instructions = template.default_loading_instructions;
+      }
+      if (template.default_special_instructions) {
+        updatedFormData.special_handling_instructions = template.default_special_instructions;
+      }
+      if (template.default_delivery_instructions) {
+        updatedFormData.delivery_instructions = template.default_delivery_instructions;
+      }
+
+      // Update form data
+      setFormData(updatedFormData);
+
+      // Close modal and show success message
+      setShowTemplateModal(false);
+      toast.success(`Template "${template.template_name}" loaded successfully!`);
+
+      console.log("Template loaded, updated form data:", updatedFormData);
+    } catch (error: any) {
+      console.error('Error loading template:', error);
+      toast.error('Failed to load template: ' + error.message);
+    }
+  };
+
+  const handleTransporterSelect = (transporter: EnhancedTransporter) => {
+    console.log("Transporter selected:", transporter);
+    setSelectedTransporter(transporter);
+    
+    // Auto-populate transporter fields
+    setFormData((prev) => ({
+      ...prev,
+      transporter_name: transporter.name,
+      transporter_phone: transporter.primary_contact_phone || "",
+      transporter_email: transporter.primary_contact_email || "",
+    }));
+    
+    setShowTransporterModal(false);
+    toast.success(`Transporter "${transporter.name}" selected!`);
+  };
+
+  const handleCustomerContactSelect = (contact: EnhancedContact) => {
+    console.log("Customer contact selected:", contact);
+    setSelectedCustomerContact(contact);
+    
+    // Auto-populate customer contact fields
+    setFormData((prev) => ({
+      ...prev,
+      contact_name: contact.full_name,
+      contact_phone: contact.primary_phone || contact.mobile_phone || "",
+    }));
+    
+    setShowCustomerContactModal(false);
+    toast.success(`Contact "${contact.full_name}" selected!`);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -404,7 +567,7 @@ export default function EnhancedOrderForm({
 
       await onSubmit(orderData);
     } catch (error: any) {
-      alert(error.message || "Failed to save order");
+      toast.error(error.message || "Failed to save order");
     } finally {
       setLoading(false);
     }
@@ -423,9 +586,29 @@ export default function EnhancedOrderForm({
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-900">
-              {isEditing ? "Edit Order" : "Create New Order"}
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {isEditing ? "Edit Order" : "Create New Order"}
+              </h2>
+              {!isEditing && (
+                <button
+                  onClick={() => setShowTemplateModal(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                  disabled={loading}
+                  title="Load a pre-configured template to auto-fill order details"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Load Template
+                </button>
+              )}
+              {selectedTemplate && (
+                <span className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded-md">
+                  Using: {selectedTemplate.template_name}
+                </span>
+              )}
+            </div>
             <button
               onClick={onCancel}
               className="text-gray-400 hover:text-gray-600"
@@ -489,40 +672,108 @@ export default function EnhancedOrderForm({
                       type="text"
                       value={formData.sku}
                       onChange={(e) => handleInputChange("sku", e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                       placeholder="e.g., SKU-12345"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Unique identifier for this order</p>
                   </div>
 
-                  <div>
+                  {/* Customer Contact Selection */}
+                  <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Name
+                      Customer Contact
                     </label>
-                    <input
-                      type="text"
-                      value={formData.contact_name}
-                      onChange={(e) =>
-                        handleInputChange("contact_name", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Customer contact name"
-                    />
+                    {selectedCustomerContact ? (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold">
+                              {selectedCustomerContact.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">{selectedCustomerContact.full_name}</p>
+                              {selectedCustomerContact.company_name && (
+                                <p className="text-sm text-gray-600">{selectedCustomerContact.company_name}</p>
+                              )}
+                              {selectedCustomerContact.job_title && (
+                                <p className="text-xs text-gray-500">{selectedCustomerContact.job_title}</p>
+                              )}
+                              <div className="flex gap-4 mt-1">
+                                {selectedCustomerContact.primary_phone && (
+                                  <p className="text-sm text-gray-600">📞 {selectedCustomerContact.primary_phone}</p>
+                                )}
+                                {selectedCustomerContact.primary_email && (
+                                  <p className="text-sm text-gray-600">✉️ {selectedCustomerContact.primary_email}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomerContact(null);
+                              setFormData(prev => ({ ...prev, contact_name: "", contact_phone: "" }));
+                            }}
+                            className="text-gray-400 hover:text-red-600"
+                            title="Remove contact"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomerContactModal(true)}
+                        className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Select Customer Contact
+                      </button>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Choose from existing contacts or enter manually below
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.contact_phone}
-                      onChange={(e) =>
-                        handleInputChange("contact_phone", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="+1 234 567 8900"
-                    />
-                  </div>
+                  {/* Manual entry fallback */}
+                  {!selectedCustomerContact && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Contact Name (Manual Entry)
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.contact_name}
+                          onChange={(e) =>
+                            handleInputChange("contact_name", e.target.value)
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                          placeholder="Enter contact name manually"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Contact Phone (Manual Entry)
+                        </label>
+                        <input
+                          type="tel"
+                          value={formData.contact_phone}
+                          onChange={(e) =>
+                            handleInputChange("contact_phone", e.target.value)
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                          placeholder="+1 234 567 8900"
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -535,9 +786,10 @@ export default function EnhancedOrderForm({
                       onChange={(e) =>
                         handleInputChange("estimated_distance", e.target.value)
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                       placeholder="50"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Approximate distance in kilometers</p>
                   </div>
 
                   <div className="md:col-span-2">
@@ -550,9 +802,10 @@ export default function EnhancedOrderForm({
                       onChange={(e) =>
                         handleInputChange("estimated_duration", e.target.value)
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                       placeholder="60"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Expected delivery time in minutes</p>
                   </div>
                 </div>
               </div>
@@ -597,7 +850,7 @@ export default function EnhancedOrderForm({
                             e.target.value
                           )
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base bg-white"
                       >
                         <option value="">
                           Unassigned (will be pending status)
@@ -736,7 +989,7 @@ export default function EnhancedOrderForm({
                       </label>
                       <select
                         onChange={(e) => handleLoadingGeofenceSelect(e.target.value)}
-                        className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full px-4 py-3 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-base"
                       >
                         <option value="">-- Select a saved location or enter manually below --</option>
                         {availableGeofences.map((geofence) => (
@@ -766,7 +1019,7 @@ export default function EnhancedOrderForm({
                           )
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., Warehouse A"
                       />
                     </div>
@@ -785,7 +1038,7 @@ export default function EnhancedOrderForm({
                           )
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., 123 Main St, City, Country"
                       />
                     </div>
@@ -802,9 +1055,10 @@ export default function EnhancedOrderForm({
                           handleInputChange("loading_lat", e.target.value)
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., -26.2041"
                       />
+                      <p className="mt-1 text-xs text-gray-500">Decimal degrees (e.g., -33.9249)</p>
                     </div>
 
                     <div>
@@ -819,9 +1073,10 @@ export default function EnhancedOrderForm({
                           handleInputChange("loading_lng", e.target.value)
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., 28.0473"
                       />
+                      <p className="mt-1 text-xs text-gray-500">Decimal degrees (e.g., 18.4241)</p>
                     </div>
                   </div>
                 </div>
@@ -845,7 +1100,7 @@ export default function EnhancedOrderForm({
                       </label>
                       <select
                         onChange={(e) => handleUnloadingGeofenceSelect(e.target.value)}
-                        className="w-full px-3 py-2 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                        className="w-full px-4 py-3 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white text-base"
                       >
                         <option value="">-- Select a saved location or enter manually below --</option>
                         {availableGeofences.map((geofence) => (
@@ -875,7 +1130,7 @@ export default function EnhancedOrderForm({
                           )
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., Customer Location"
                       />
                     </div>
@@ -894,7 +1149,7 @@ export default function EnhancedOrderForm({
                           )
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., 456 Oak Ave, City, Country"
                       />
                     </div>
@@ -911,9 +1166,10 @@ export default function EnhancedOrderForm({
                           handleInputChange("unloading_lat", e.target.value)
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., -25.7479"
                       />
+                      <p className="mt-1 text-xs text-gray-500">Decimal degrees (e.g., -33.9249)</p>
                     </div>
 
                     <div>
@@ -928,9 +1184,10 @@ export default function EnhancedOrderForm({
                           handleInputChange("unloading_lng", e.target.value)
                         }
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                         placeholder="e.g., 28.2293"
                       />
+                      <p className="mt-1 text-xs text-gray-500">Decimal degrees (e.g., 18.4241)</p>
                     </div>
                   </div>
                 </div>
@@ -944,108 +1201,202 @@ export default function EnhancedOrderForm({
                   Transporter Supplier Information
                 </h3>
                 <p className="text-sm text-gray-600">
-                  Add details about the transporter responsible for this
-                  delivery.
+                  Select from available transporters or enter details manually.
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Company Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.transporter_name}
-                      onChange={(e) =>
-                        handleInputChange("transporter_name", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Express Logistics Inc."
-                    />
-                  </div>
-
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Transporter Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Phone
+                      Select Transporter
                     </label>
-                    <input
-                      type="tel"
-                      value={formData.transporter_phone}
-                      onChange={(e) =>
-                        handleInputChange("transporter_phone", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="+1 234 567 8900"
-                    />
+                    {selectedTransporter ? (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                              {selectedTransporter.name.charAt(0)}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-gray-900 text-lg">{selectedTransporter.name}</p>
+                              {selectedTransporter.company_name && (
+                                <p className="text-sm text-gray-600">{selectedTransporter.company_name}</p>
+                              )}
+                              <div className="flex flex-wrap gap-4 mt-2">
+                                {selectedTransporter.primary_contact_phone && (
+                                  <p className="text-sm text-gray-600">📞 {selectedTransporter.primary_contact_phone}</p>
+                                )}
+                                {selectedTransporter.primary_contact_email && (
+                                  <p className="text-sm text-gray-600">✉️ {selectedTransporter.primary_contact_email}</p>
+                                )}
+                              </div>
+                              {selectedTransporter.service_types && selectedTransporter.service_types.length > 0 && (
+                                <div className="flex gap-2 mt-2 flex-wrap">
+                                  {selectedTransporter.service_types.slice(0, 3).map((service: string) => (
+                                    <span key={service} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                      {service}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {selectedTransporter.performance_rating && (
+                                <div className="flex items-center gap-1 mt-2">
+                                  <span className="text-yellow-500">⭐</span>
+                                  <span className="text-sm font-medium">{selectedTransporter.performance_rating}/5</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTransporter(null);
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                transporter_name: "", 
+                                transporter_phone: "", 
+                                transporter_email: "" 
+                              }));
+                            }}
+                            className="text-gray-400 hover:text-red-600"
+                            title="Remove transporter"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowTransporterModal(true)}
+                        className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Select Transporter from Database
+                      </button>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Choose from available transporters with AI suggestions, or enter manually below
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.transporter_email}
-                      onChange={(e) =>
-                        handleInputChange("transporter_email", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="contact@expresslogistics.com"
-                    />
-                  </div>
+                  {/* Manual entry fields - only show if no transporter selected */}
+                  {!selectedTransporter && (
+                    <>
+                      <div className="border-t pt-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-4">Manual Entry (Optional)</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Company Name
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.transporter_name}
+                              onChange={(e) =>
+                                handleInputChange("transporter_name", e.target.value)
+                              }
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                              placeholder="e.g., Express Logistics Inc."
+                            />
+                          </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Cost Amount
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.transporter_cost}
-                      onChange={(e) =>
-                        handleInputChange("transporter_cost", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="1500.00"
-                    />
-                  </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Contact Phone
+                            </label>
+                            <input
+                              type="tel"
+                              value={formData.transporter_phone}
+                              onChange={(e) =>
+                                handleInputChange("transporter_phone", e.target.value)
+                              }
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                              placeholder="+1 234 567 8900"
+                            />
+                          </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Currency
-                    </label>
-                    <select
-                      value={formData.transporter_currency}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "transporter_currency",
-                          e.target.value
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="GBP">GBP</option>
-                      <option value="ZAR">ZAR</option>
-                      <option value="NGN">NGN</option>
-                      <option value="KES">KES</option>
-                    </select>
-                  </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Contact Email
+                            </label>
+                            <input
+                              type="email"
+                              value={formData.transporter_email}
+                              onChange={(e) =>
+                                handleInputChange("transporter_email", e.target.value)
+                              }
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                              placeholder="contact@expresslogistics.com"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Additional Notes
-                    </label>
-                    <textarea
-                      value={formData.transporter_notes}
-                      onChange={(e) =>
-                        handleInputChange("transporter_notes", e.target.value)
-                      }
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Any additional information about the transporter or specific requirements..."
-                    />
+                  {/* Cost Information - Always visible */}
+                  <div className="border-t pt-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-4">Cost & Payment Information</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cost Amount
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.transporter_cost}
+                          onChange={(e) =>
+                            handleInputChange("transporter_cost", e.target.value)
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                          placeholder="1500.00"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Currency
+                        </label>
+                        <select
+                          value={formData.transporter_currency}
+                          onChange={(e) =>
+                            handleInputChange(
+                              "transporter_currency",
+                              e.target.value
+                            )
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base bg-white"
+                        >
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                          <option value="GBP">GBP</option>
+                          <option value="ZAR">ZAR</option>
+                          <option value="NGN">NGN</option>
+                          <option value="KES">KES</option>
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Additional Notes
+                        </label>
+                        <textarea
+                          value={formData.transporter_notes}
+                          onChange={(e) =>
+                            handleInputChange("transporter_notes", e.target.value)
+                          }
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                          placeholder="Any additional information about the transporter or specific requirements..."
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1072,9 +1423,10 @@ export default function EnhancedOrderForm({
                         )
                       }
                       rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                       placeholder="Special delivery instructions, access codes, contact requirements, etc."
                     />
+                    <p className="mt-1 text-xs text-gray-500">Include any specific delivery requirements or instructions</p>
                   </div>
 
                   <div>
@@ -1090,9 +1442,10 @@ export default function EnhancedOrderForm({
                         )
                       }
                       rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                       placeholder="Fragile items, temperature requirements, equipment needed, etc."
                     />
+                    <p className="mt-1 text-xs text-gray-500">Note any special handling needs for this delivery</p>
                   </div>
                 </div>
               </div>
@@ -1141,6 +1494,33 @@ export default function EnhancedOrderForm({
           </div>
         </form>
       </div>
+
+      {/* Template Selection Modal */}
+      {showTemplateModal && (
+        <TemplateSelectionModal
+          isOpen={showTemplateModal}
+          onClose={() => setShowTemplateModal(false)}
+          onSelect={handleTemplateSelect}
+        />
+      )}
+
+      {/* Transporter Selection Modal */}
+      {showTransporterModal && (
+        <TransporterSelectionModal
+          isOpen={showTransporterModal}
+          onClose={() => setShowTransporterModal(false)}
+          onSelect={handleTransporterSelect}
+        />
+      )}
+
+      {/* Customer Contact Selection Modal */}
+      {showCustomerContactModal && (
+        <ContactSelectionModal
+          isOpen={showCustomerContactModal}
+          onClose={() => setShowCustomerContactModal(false)}
+          onSelect={handleCustomerContactSelect}
+        />
+      )}
     </div>
   );
 }

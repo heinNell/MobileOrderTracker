@@ -2,7 +2,20 @@
 
 import
   {
+    BellIcon,
+    BuildingOfficeIcon,
+    DocumentTextIcon,
+    GlobeAltIcon,
+    MapPinIcon,
+    PhoneIcon,
+    TagIcon,
+    UserIcon
+  } from '@heroicons/react/24/outline';
+import
+  {
     Button,
+    Card,
+    CardBody,
     Chip,
     Input,
     Modal,
@@ -16,6 +29,7 @@ import
     Textarea
   } from '@nextui-org/react';
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import
   {
     EnhancedGeofence,
@@ -118,13 +132,14 @@ export function CreateGeofenceModal({
       const result = await createGeofence(geofenceData);
       
       if (result.success && result.data) {
+        toast.success('Geofence location created successfully!');
         if (onSuccess) onSuccess(result.data);
         onClose();
       } else {
-        alert(`Failed to create geofence: ${result.error}`);
+        toast.error(`Failed to create geofence: ${result.error}`);
       }
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -186,325 +201,779 @@ export function CreateGeofenceModal({
             <h2 className="text-2xl font-bold">Create New Geofence Location</h2>
             <p className="text-sm text-gray-600 font-normal">Define a geographic boundary for tracking</p>
           </ModalHeader>
-          <ModalBody className="bg-white">
+          <ModalBody className="bg-gray-50">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Information */}
+              
+              {/* Basic Information Section */}
               <div className="md:col-span-2">
-                <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
+                <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <MapPinIcon className="w-6 h-6 text-blue-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Basic Information</h3>
+                        <p className="text-xs text-gray-600">Location name and type</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
               </div>
-              
-              <Input
-                label="Location Name"
-                placeholder="Enter location name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                isRequired
-              />
-              
-              <Select
-                label="Geofence Type"
-                selectedKeys={[formData.geofence_type]}
-                onChange={(e) => setFormData({ ...formData, geofence_type: e.target.value })}
-                isRequired
-              >
-                <SelectItem key="loading" value="loading">Loading Point</SelectItem>
-                <SelectItem key="unloading" value="unloading">Unloading Point</SelectItem>
-                <SelectItem key="warehouse" value="warehouse">Warehouse</SelectItem>
-                <SelectItem key="distribution" value="distribution">Distribution Center</SelectItem>
-                <SelectItem key="customer" value="customer">Customer Location</SelectItem>
-                <SelectItem key="checkpoint" value="checkpoint">Checkpoint</SelectItem>
-              </Select>
-              
-              <Input
-                label="Facility Type"
-                placeholder="e.g., Warehouse, Retail Store"
-                value={formData.facility_type}
-                onChange={(e) => setFormData({ ...formData, facility_type: e.target.value })}
-              />
-              
-              <Select
-                label="Shape Type"
-                selectedKeys={[formData.shape_type]}
-                onChange={(e) => setFormData({ ...formData, shape_type: e.target.value })}
-              >
-                <SelectItem key="circle" value="circle">Circle</SelectItem>
-                <SelectItem key="polygon" value="polygon">Polygon</SelectItem>
-              </Select>
-              
-              <Textarea
-                label="Description"
-                placeholder="Enter location description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="md:col-span-2"
-                rows={2}
-              />
 
-              {/* Geographic Data */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Geographic Coordinates</h3>
-              </div>
-              
-              <Input
-                label="Latitude"
-                placeholder="e.g., 40.7128"
-                type="number"
-                step="any"
-                value={formData.center_latitude}
-                onChange={(e) => setFormData({ ...formData, center_latitude: e.target.value })}
-                isRequired
-              />
-              
-              <Input
-                label="Longitude"
-                placeholder="e.g., -74.0060"
-                type="number"
-                step="any"
-                value={formData.center_longitude}
-                onChange={(e) => setFormData({ ...formData, center_longitude: e.target.value })}
-                isRequired
-              />
-              
-              <Input
-                label="Radius (meters)"
-                placeholder="100"
-                type="number"
-                value={formData.radius_meters}
-                onChange={(e) => setFormData({ ...formData, radius_meters: e.target.value })}
-                isRequired
-              />
-              
-              <Input
-                label="Priority Level (1-10)"
-                placeholder="5"
-                type="number"
-                min="1"
-                max="10"
-                value={formData.priority_level.toString()}
-                onChange={(e) => setFormData({ ...formData, priority_level: parseInt(e.target.value) || 5 })}
-              />
-
-              {/* Address Information */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Address Details</h3>
-              </div>
-              
-              <Input
-                label="Street Address"
-                placeholder="Enter street address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="md:col-span-2"
-              />
-              
-              <Input
-                label="City"
-                placeholder="Enter city"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              />
-              
-              <Input
-                label="State/Province"
-                placeholder="Enter state"
-                value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              />
-              
-              <Input
-                label="Postal Code"
-                placeholder="Enter postal code"
-                value={formData.postal_code}
-                onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
-              />
-              
-              <Input
-                label="Country"
-                placeholder="Enter country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-              />
-              
-              <Input
-                label="Landmark"
-                placeholder="Nearby landmark"
-                value={formData.landmark}
-                onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
-              />
-              
-              <Textarea
-                label="Access Instructions"
-                placeholder="How to access this location..."
-                value={formData.access_instructions}
-                onChange={(e) => setFormData({ ...formData, access_instructions: e.target.value })}
-                className="md:col-span-2"
-                rows={2}
-              />
-
-              {/* Contact Information */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">On-Site Contact</h3>
-              </div>
-              
-              <Input
-                label="Contact Person"
-                placeholder="Enter contact name"
-                value={formData.contact_person}
-                onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-              />
-              
-              <Input
-                label="Contact Phone"
-                placeholder="Enter phone number"
-                type="tel"
-                value={formData.contact_phone}
-                onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-              />
-
-              {/* Business Organization */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Organization</h3>
-              </div>
-              
-              <Input
-                label="Business Unit"
-                placeholder="e.g., Logistics, Retail"
-                value={formData.business_unit}
-                onChange={(e) => setFormData({ ...formData, business_unit: e.target.value })}
-              />
-              
-              <Input
-                label="Region"
-                placeholder="e.g., North, South, East, West"
-                value={formData.region}
-                onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-              />
-              
-              <Input
-                label="Zone"
-                placeholder="e.g., Zone A, Zone B"
-                value={formData.zone}
-                onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
-              />
-
-              {/* Categories and Tags */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Categories & Tags</h3>
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium mb-2 block">Categories</label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Add category (e.g., High Priority, 24/7 Access)"
-                    value={categoryInput}
-                    onChange={(e) => setCategoryInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
-                  />
-                  <Button color="primary" onPress={addCategory}>Add</Button>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {formData.categories.map((cat) => (
-                    <Chip
-                      key={cat}
-                      onClose={() => setFormData({ ...formData, categories: formData.categories.filter(c => c !== cat) })}
-                      variant="flat"
-                      color="secondary"
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Location Name"
+                      labelPlacement="outside"
+                      placeholder="e.g., Main Warehouse"
+                      description="Display name for this geofence location"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      isRequired
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Select
+                      label="Geofence Type"
+                      labelPlacement="outside"
+                      description="Purpose of this location"
+                      selectedKeys={[formData.geofence_type]}
+                      onChange={(e) => setFormData({ ...formData, geofence_type: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      isRequired
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        value: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
                     >
-                      {cat}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium mb-2 block">Tags</label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Add tag"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                  />
-                  <Button color="primary" onPress={addTag}>Add</Button>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {formData.tags.map((tag) => (
-                    <Chip
-                      key={tag}
-                      onClose={() => setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) })}
-                      variant="flat"
+                      <SelectItem key="loading" value="loading">Loading Point</SelectItem>
+                      <SelectItem key="unloading" value="unloading">Unloading Point</SelectItem>
+                      <SelectItem key="warehouse" value="warehouse">Warehouse</SelectItem>
+                      <SelectItem key="distribution" value="distribution">Distribution Center</SelectItem>
+                      <SelectItem key="customer" value="customer">Customer Location</SelectItem>
+                      <SelectItem key="checkpoint" value="checkpoint">Checkpoint</SelectItem>
+                    </Select>
+                    
+                    <Input
+                      label="Facility Type"
+                      labelPlacement="outside"
+                      placeholder="e.g., Warehouse, Retail Store"
+                      description="Type of facility at this location"
+                      value={formData.facility_type}
+                      onChange={(e) => setFormData({ ...formData, facility_type: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Select
+                      label="Shape Type"
+                      labelPlacement="outside"
+                      description="Geographic shape for boundary"
+                      selectedKeys={[formData.shape_type]}
+                      onChange={(e) => setFormData({ ...formData, shape_type: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        value: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
                     >
-                      {tag}
-                    </Chip>
-                  ))}
-                </div>
+                      <SelectItem key="circle" value="circle">Circle (Radius-based)</SelectItem>
+                      <SelectItem key="polygon" value="polygon">Polygon (Custom shape)</SelectItem>
+                    </Select>
+                    
+                    <Textarea
+                      label="Description"
+                      labelPlacement="outside"
+                      placeholder="e.g., Primary distribution center for northern region"
+                      description="Detailed description of this location"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      minRows={3}
+                      maxRows={5}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      className="md:col-span-2"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Geographic Coordinates Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-l-4 border-purple-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <GlobeAltIcon className="w-6 h-6 text-purple-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Geographic Coordinates</h3>
+                        <p className="text-xs text-gray-600">Precise location and boundary size</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
               </div>
 
-              {/* Trigger Settings */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Trigger Settings</h3>
-              </div>
-              
-              <Select
-                label="Trigger Event"
-                selectedKeys={[formData.trigger_event]}
-                onChange={(e) => setFormData({ ...formData, trigger_event: e.target.value })}
-                className="md:col-span-2"
-              >
-                <SelectItem key="entry" value="entry">On Entry</SelectItem>
-                <SelectItem key="exit" value="exit">On Exit</SelectItem>
-                <SelectItem key="both" value="both">Both Entry & Exit</SelectItem>
-                <SelectItem key="dwell" value="dwell">Dwell Time</SelectItem>
-              </Select>
-              
-              <div className="flex flex-col gap-4 md:col-span-2">
-                <Switch
-                  isSelected={formData.notification_enabled}
-                  onValueChange={(value) => setFormData({ ...formData, notification_enabled: value })}
-                >
-                  Enable Notifications
-                </Switch>
-                
-                <Switch
-                  isSelected={formData.alert_enabled}
-                  onValueChange={(value) => setFormData({ ...formData, alert_enabled: value })}
-                >
-                  Enable Alerts
-                </Switch>
-                
-                <Switch
-                  isSelected={formData.is_active}
-                  onValueChange={(value) => setFormData({ ...formData, is_active: value })}
-                >
-                  Active Status
-                </Switch>
-                
-                <Switch
-                  isSelected={formData.is_template}
-                  onValueChange={(value) => setFormData({ ...formData, is_template: value })}
-                >
-                  Save as Template
-                </Switch>
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Latitude"
+                      labelPlacement="outside"
+                      placeholder="e.g., 40.7128"
+                      description="Geographic latitude (decimal format)"
+                      type="number"
+                      step="any"
+                      value={formData.center_latitude}
+                      onChange={(e) => setFormData({ ...formData, center_latitude: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      isRequired
+                      startContent={<span className="text-sm text-gray-500">°N/S</span>}
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Longitude"
+                      labelPlacement="outside"
+                      placeholder="e.g., -74.0060"
+                      description="Geographic longitude (decimal format)"
+                      type="number"
+                      step="any"
+                      value={formData.center_longitude}
+                      onChange={(e) => setFormData({ ...formData, center_longitude: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      isRequired
+                      startContent={<span className="text-sm text-gray-500">°E/W</span>}
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Radius (meters)"
+                      labelPlacement="outside"
+                      placeholder="e.g., 100"
+                      description="Detection radius from center point"
+                      type="number"
+                      value={formData.radius_meters}
+                      onChange={(e) => setFormData({ ...formData, radius_meters: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      isRequired
+                      endContent={<span className="text-sm text-gray-500">m</span>}
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Priority Level (1-10)"
+                      labelPlacement="outside"
+                      placeholder="5"
+                      description="Higher priority for notifications"
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={formData.priority_level.toString()}
+                      onChange={(e) => setFormData({ ...formData, priority_level: parseInt(e.target.value) || 5 })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Address Details Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-l-4 border-indigo-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <MapPinIcon className="w-6 h-6 text-indigo-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Address Details</h3>
+                        <p className="text-xs text-gray-600">Physical address and landmarks</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
               </div>
 
-              {/* Notes */}
-              <div className="md:col-span-2 mt-4">
-                <Textarea
-                  label="Notes"
-                  placeholder="Add any additional notes..."
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                />
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Street Address"
+                      labelPlacement="outside"
+                      placeholder="e.g., 123 Industrial Park Dr"
+                      description="Complete street address"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      className="md:col-span-2"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="City"
+                      labelPlacement="outside"
+                      placeholder="e.g., Los Angeles"
+                      description="City name"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="State/Province"
+                      labelPlacement="outside"
+                      placeholder="e.g., California"
+                      description="State, province, or region"
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Postal Code"
+                      labelPlacement="outside"
+                      placeholder="e.g., 90001"
+                      description="ZIP or postal code"
+                      value={formData.postal_code}
+                      onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Country"
+                      labelPlacement="outside"
+                      placeholder="e.g., United States"
+                      description="Country name"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Landmark"
+                      labelPlacement="outside"
+                      placeholder="e.g., Next to City Mall"
+                      description="Nearby landmark for easy identification"
+                      value={formData.landmark}
+                      onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Textarea
+                      label="Access Instructions"
+                      labelPlacement="outside"
+                      placeholder="e.g., Use gate B, security code required"
+                      description="Directions for accessing this location"
+                      value={formData.access_instructions}
+                      onChange={(e) => setFormData({ ...formData, access_instructions: e.target.value })}
+                      minRows={3}
+                      maxRows={5}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      className="md:col-span-2"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* On-Site Contact Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <UserIcon className="w-6 h-6 text-green-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">On-Site Contact</h3>
+                        <p className="text-xs text-gray-600">Point of contact at this location</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
               </div>
+
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Contact Person"
+                      labelPlacement="outside"
+                      placeholder="e.g., John Smith"
+                      description="Name of on-site contact"
+                      value={formData.contact_person}
+                      onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      startContent={<UserIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Contact Phone"
+                      labelPlacement="outside"
+                      placeholder="e.g., +1 (555) 123-4567"
+                      description="Phone number for on-site contact"
+                      type="tel"
+                      value={formData.contact_phone}
+                      onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      startContent={<PhoneIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Organization Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-l-4 border-orange-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <BuildingOfficeIcon className="w-6 h-6 text-orange-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Organization</h3>
+                        <p className="text-xs text-gray-600">Business structure and classification</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              </div>
+
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Input
+                      label="Business Unit"
+                      labelPlacement="outside"
+                      placeholder="e.g., Logistics, Retail"
+                      description="Department or business unit"
+                      value={formData.business_unit}
+                      onChange={(e) => setFormData({ ...formData, business_unit: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Region"
+                      labelPlacement="outside"
+                      placeholder="e.g., North, South, East, West"
+                      description="Geographic region assignment"
+                      value={formData.region}
+                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Zone"
+                      labelPlacement="outside"
+                      placeholder="e.g., Zone A, Zone B"
+                      description="Operational zone classification"
+                      value={formData.zone}
+                      onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Categories & Tags Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-pink-50 to-pink-100 border-l-4 border-pink-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <TagIcon className="w-6 h-6 text-pink-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Categories & Tags</h3>
+                        <p className="text-xs text-gray-600">Organize and classify this location</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              </div>
+
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-6 p-6">
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-2 block">Categories</label>
+                    <p className="text-xs text-gray-500 mb-3">Add category labels for filtering (e.g., High Priority, 24/7 Access)</p>
+                    <div className="flex gap-2 mb-3">
+                      <Input
+                        placeholder="e.g., High Priority, 24/7 Access, Refrigerated"
+                        value={categoryInput}
+                        onChange={(e) => setCategoryInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+                        size="lg"
+                        variant="bordered"
+                        radius="md"
+                        classNames={{
+                          input: "text-base"
+                        }}
+                      />
+                      <Button 
+                        color="primary" 
+                        onPress={addCategory}
+                        size="lg"
+                        className="min-w-[100px]"
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 flex-wrap p-3 bg-gray-50 rounded-lg min-h-[60px]">
+                      {formData.categories.length === 0 ? (
+                        <p className="text-sm text-gray-400 italic">No categories added yet</p>
+                      ) : (
+                        formData.categories.map((cat) => (
+                          <Chip
+                            key={cat}
+                            onClose={() => setFormData({ ...formData, categories: formData.categories.filter(c => c !== cat) })}
+                            variant="flat"
+                            color="secondary"
+                            size="lg"
+                          >
+                            {cat}
+                          </Chip>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-2 block">Tags</label>
+                    <p className="text-xs text-gray-500 mb-3">Add custom tags for easier searching and organization</p>
+                    <div className="flex gap-2 mb-3">
+                      <Input
+                        placeholder="e.g., urgent, preferred, downtown"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                        size="lg"
+                        variant="bordered"
+                        radius="md"
+                        classNames={{
+                          input: "text-base"
+                        }}
+                      />
+                      <Button 
+                        color="primary" 
+                        onPress={addTag}
+                        size="lg"
+                        className="min-w-[100px]"
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 flex-wrap p-3 bg-gray-50 rounded-lg min-h-[60px]">
+                      {formData.tags.length === 0 ? (
+                        <p className="text-sm text-gray-400 italic">No tags added yet</p>
+                      ) : (
+                        formData.tags.map((tag) => (
+                          <Chip
+                            key={tag}
+                            onClose={() => setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) })}
+                            variant="flat"
+                            size="lg"
+                          >
+                            {tag}
+                          </Chip>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Trigger Settings Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-yellow-50 to-yellow-100 border-l-4 border-yellow-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <BellIcon className="w-6 h-6 text-yellow-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Trigger Settings</h3>
+                        <p className="text-xs text-gray-600">Configure notifications and alerts</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              </div>
+
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <Select
+                    label="Trigger Event"
+                    labelPlacement="outside"
+                    description="When should notifications be triggered?"
+                    selectedKeys={[formData.trigger_event]}
+                    onChange={(e) => setFormData({ ...formData, trigger_event: e.target.value })}
+                    size="lg"
+                    variant="bordered"
+                    radius="md"
+                    classNames={{
+                      label: "text-sm font-medium text-gray-600 mb-1",
+                      value: "text-base",
+                      description: "text-xs text-gray-500 mt-1"
+                    }}
+                  >
+                    <SelectItem key="entry" value="entry">On Entry (when vehicle enters geofence)</SelectItem>
+                    <SelectItem key="exit" value="exit">On Exit (when vehicle leaves geofence)</SelectItem>
+                    <SelectItem key="both" value="both">Both Entry & Exit</SelectItem>
+                    <SelectItem key="dwell" value="dwell">Dwell Time (after staying for duration)</SelectItem>
+                  </Select>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <Card className="bg-blue-50 border border-blue-200">
+                      <CardBody className="p-4">
+                        <Switch
+                          isSelected={formData.notification_enabled}
+                          onValueChange={(value) => setFormData({ ...formData, notification_enabled: value })}
+                          size="lg"
+                          classNames={{
+                            wrapper: "mr-3"
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-gray-800">Enable Notifications</span>
+                            <span className="text-xs text-gray-600">Send push notifications on trigger</span>
+                          </div>
+                        </Switch>
+                      </CardBody>
+                    </Card>
+                    
+                    <Card className="bg-red-50 border border-red-200">
+                      <CardBody className="p-4">
+                        <Switch
+                          isSelected={formData.alert_enabled}
+                          onValueChange={(value) => setFormData({ ...formData, alert_enabled: value })}
+                          size="lg"
+                          classNames={{
+                            wrapper: "mr-3"
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-gray-800">Enable Alerts</span>
+                            <span className="text-xs text-gray-600">Send urgent alerts to dashboard</span>
+                          </div>
+                        </Switch>
+                      </CardBody>
+                    </Card>
+                    
+                    <Card className="bg-green-50 border border-green-200">
+                      <CardBody className="p-4">
+                        <Switch
+                          isSelected={formData.is_active}
+                          onValueChange={(value) => setFormData({ ...formData, is_active: value })}
+                          size="lg"
+                          classNames={{
+                            wrapper: "mr-3"
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-gray-800">Active Status</span>
+                            <span className="text-xs text-gray-600">Currently monitoring this location</span>
+                          </div>
+                        </Switch>
+                      </CardBody>
+                    </Card>
+                    
+                    <Card className="bg-purple-50 border border-purple-200">
+                      <CardBody className="p-4">
+                        <Switch
+                          isSelected={formData.is_template}
+                          onValueChange={(value) => setFormData({ ...formData, is_template: value })}
+                          size="lg"
+                          classNames={{
+                            wrapper: "mr-3"
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-gray-800">Save as Template</span>
+                            <span className="text-xs text-gray-600">Reuse for similar locations</span>
+                          </div>
+                        </Switch>
+                      </CardBody>
+                    </Card>
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Notes Section */}
+              <div className="md:col-span-2 mt-2">
+                <Card className="bg-gradient-to-r from-gray-50 to-gray-100 border-l-4 border-gray-500 shadow-sm">
+                  <CardBody className="p-4">
+                    <div className="flex items-center gap-3">
+                      <DocumentTextIcon className="w-6 h-6 text-gray-600" />
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800">Additional Notes</h3>
+                        <p className="text-xs text-gray-600">Any other relevant information</p>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              </div>
+
+              <Card className="md:col-span-2 shadow-sm">
+                <CardBody className="gap-4 p-6">
+                  <Textarea
+                    label="Notes"
+                    labelPlacement="outside"
+                    placeholder="Add any additional notes, special instructions, or important information about this location..."
+                    description="Internal notes visible only to your team"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    minRows={4}
+                    maxRows={8}
+                    size="lg"
+                    variant="bordered"
+                    radius="md"
+                    classNames={{
+                      label: "text-sm font-medium text-gray-600 mb-1",
+                      input: "text-base",
+                      description: "text-xs text-gray-500 mt-1"
+                    }}
+                  />
+                </CardBody>
+              </Card>
             </div>
           </ModalBody>
           <ModalFooter className="bg-white">
-            <Button variant="light" onPress={onClose} isDisabled={loading}>
+            <Button 
+              variant="light" 
+              onPress={onClose} 
+              isDisabled={loading}
+              size="lg"
+            >
               Cancel
             </Button>
-            <Button color="primary" type="submit" isLoading={loading}>
+            <Button 
+              color="primary" 
+              type="submit" 
+              isLoading={loading}
+              size="lg"
+            >
               Create Geofence
             </Button>
           </ModalFooter>

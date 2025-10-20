@@ -2,7 +2,19 @@
 
 import
   {
+    BuildingOfficeIcon,
+    Cog6ToothIcon,
+    DocumentTextIcon,
+    EnvelopeIcon,
+    MapPinIcon,
+    PhoneIcon,
+    UserIcon
+  } from '@heroicons/react/24/outline';
+import
+  {
     Button,
+    Card,
+    CardBody,
     Chip,
     Input,
     Modal,
@@ -16,6 +28,7 @@ import
     Textarea
   } from '@nextui-org/react';
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import { EnhancedContact, useContacts } from '../../hooks/useEnhancedData';
 
 interface CreateContactModalProps {
@@ -135,6 +148,7 @@ export function CreateContactModal({
       const result = await createContact(contactData);
       
       if (result.success && result.data) {
+        toast.success('Contact created successfully!');
         if (onSuccess) onSuccess(result.data);
         onClose();
         // Reset form
@@ -148,10 +162,10 @@ export function CreateContactModal({
           is_active: true, is_primary: false, tags: [], notes: ''
         });
       } else {
-        alert(`Failed to create contact: ${result.error}`);
+        toast.error(`Failed to create contact: ${result.error}`);
       }
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -182,7 +196,7 @@ export function CreateContactModal({
       classNames={{
         wrapper: "overflow-y-auto p-4 md:p-8",
         base: "max-w-3xl max-h-[90vh] mt-8 mb-8",
-        body: "py-6 px-6 overflow-y-auto",
+        body: "py-6 px-6 overflow-y-auto bg-gray-50", // Light background for body
         header: "border-b border-gray-200 flex-shrink-0 bg-white",
         footer: "border-t border-gray-200 flex-shrink-0 bg-white"
       }}
@@ -210,339 +224,762 @@ export function CreateContactModal({
       <ModalContent className="bg-white">
         <form onSubmit={handleSubmit}>
           <ModalHeader className="flex flex-col gap-1 bg-white">
-            <h2 className="text-2xl font-bold">Create New Contact</h2>
+            <h2 className="text-2xl font-bold text-gray-800">Create New Contact</h2>
             <p className="text-sm text-gray-600 font-normal">Add a customer or site contact</p>
           </ModalHeader>
-          <ModalBody className="bg-white">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Information */}
-              <div className="md:col-span-2">
-                <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
-              </div>
-              
-              <Input
-                label="First Name"
-                placeholder="Enter first name"
-                value={formData.first_name}
-                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                isRequired
-              />
-              
-              <Input
-                label="Last Name"
-                placeholder="Enter last name"
-                value={formData.last_name}
-                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                isRequired
-              />
-              
-              <Input
-                label="Company Name"
-                placeholder="Enter company name"
-                value={formData.company_name}
-                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-              />
-              
-              <Input
-                label="Job Title"
-                placeholder="Enter job title"
-                value={formData.job_title}
-                onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
-              />
-              
-              <Input
-                label="Department"
-                placeholder="Enter department"
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              />
-              
-              <Select
-                label="Contact Type"
-                selectedKeys={[formData.contact_type]}
-                onChange={(e) => setFormData({ ...formData, contact_type: e.target.value })}
-                isRequired
-              >
-                <SelectItem key="customer" value="customer">Customer</SelectItem>
-                <SelectItem key="supplier" value="supplier">Supplier</SelectItem>
-                <SelectItem key="driver" value="driver">Driver</SelectItem>
-                <SelectItem key="warehouse" value="warehouse">Warehouse Contact</SelectItem>
-                <SelectItem key="emergency" value="emergency">Emergency Contact</SelectItem>
-                <SelectItem key="other" value="other">Other</SelectItem>
-              </Select>
-
-              {/* Contact Methods */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Contact Methods</h3>
-              </div>
-              
-              <Input
-                label="Primary Phone"
-                placeholder="Enter primary phone"
-                type="tel"
-                value={formData.primary_phone}
-                onChange={(e) => setFormData({ ...formData, primary_phone: e.target.value })}
-              />
-              
-              <Input
-                label="Mobile Phone"
-                placeholder="Enter mobile phone"
-                type="tel"
-                value={formData.mobile_phone}
-                onChange={(e) => setFormData({ ...formData, mobile_phone: e.target.value })}
-              />
-              
-              <Input
-                label="Secondary Phone"
-                placeholder="Enter secondary phone"
-                type="tel"
-                value={formData.secondary_phone}
-                onChange={(e) => setFormData({ ...formData, secondary_phone: e.target.value })}
-              />
-              
-              <Input
-                label="Fax"
-                placeholder="Enter fax number"
-                type="tel"
-                value={formData.fax}
-                onChange={(e) => setFormData({ ...formData, fax: e.target.value })}
-              />
-              
-              <Input
-                label="Primary Email"
-                placeholder="Enter primary email"
-                type="email"
-                value={formData.primary_email}
-                onChange={(e) => setFormData({ ...formData, primary_email: e.target.value })}
-              />
-              
-              <Input
-                label="Secondary Email"
-                placeholder="Enter secondary email"
-                type="email"
-                value={formData.secondary_email}
-                onChange={(e) => setFormData({ ...formData, secondary_email: e.target.value })}
-              />
-
-              {/* Address */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Address</h3>
-              </div>
-              
-              <Input
-                label="Address Line 1"
-                placeholder="Enter street address"
-                value={formData.address_line1}
-                onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
-                className="md:col-span-2"
-              />
-              
-              <Input
-                label="Address Line 2"
-                placeholder="Apt, suite, etc. (optional)"
-                value={formData.address_line2}
-                onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
-                className="md:col-span-2"
-              />
-              
-              <Input
-                label="City"
-                placeholder="Enter city"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              />
-              
-              <Input
-                label="State/Province"
-                placeholder="Enter state"
-                value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              />
-              
-              <Input
-                label="Postal Code"
-                placeholder="Enter postal code"
-                value={formData.postal_code}
-                onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
-              />
-              
-              <Input
-                label="Country"
-                placeholder="Enter country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-              />
-
-              {/* Contact Preferences */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Contact Preferences</h3>
-              </div>
-              
-              <Select
-                label="Preferred Contact Method"
-                selectedKeys={[formData.preferred_contact_method]}
-                onChange={(e) => setFormData({ ...formData, preferred_contact_method: e.target.value })}
-              >
-                <SelectItem key="phone" value="phone">Phone</SelectItem>
-                <SelectItem key="email" value="email">Email</SelectItem>
-                <SelectItem key="sms" value="sms">SMS</SelectItem>
-                <SelectItem key="mobile" value="mobile">Mobile App</SelectItem>
-              </Select>
-              
-              <Select
-                label="Language Preference"
-                selectedKeys={[formData.language_preference]}
-                onChange={(e) => setFormData({ ...formData, language_preference: e.target.value })}
-              >
-                <SelectItem key="en" value="en">English</SelectItem>
-                <SelectItem key="es" value="es">Spanish</SelectItem>
-                <SelectItem key="fr" value="fr">French</SelectItem>
-                <SelectItem key="de" value="de">German</SelectItem>
-                <SelectItem key="zh" value="zh">Chinese</SelectItem>
-              </Select>
-              
-              <Input
-                label="Timezone"
-                placeholder="e.g., America/New_York"
-                value={formData.timezone}
-                onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                className="md:col-span-2"
-              />
-
-              {/* Business Relationship */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Business Relationship</h3>
-              </div>
-              
-              <Input
-                label="Relationship Type"
-                placeholder="e.g., Regular Customer, VIP, Partner"
-                value={formData.relationship_type}
-                onChange={(e) => setFormData({ ...formData, relationship_type: e.target.value })}
-              />
-              
-              <Input
-                label="Account Number"
-                placeholder="Enter account number"
-                value={formData.account_number}
-                onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-              />
-              
-              <Input
-                label="Customer ID"
-                placeholder="Enter customer ID"
-                value={formData.customer_id}
-                onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
-              />
-              
-              <Input
-                label="Supplier ID"
-                placeholder="Enter supplier ID"
-                value={formData.supplier_id}
-                onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
-              />
-              
-              <Input
-                label="Credit Limit"
-                placeholder="e.g., 10000"
-                type="number"
-                step="0.01"
-                value={formData.credit_limit}
-                onChange={(e) => setFormData({ ...formData, credit_limit: e.target.value })}
-              />
-              
-              <Input
-                label="Payment Terms"
-                placeholder="e.g., Net 30, Net 60"
-                value={formData.payment_terms}
-                onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
-              />
-
-              {/* Categories */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Categories & Tags</h3>
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium mb-2 block">Categories</label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="e.g., VIP, Regular, Wholesale"
-                    value={categoryInput}
-                    onChange={(e) => setCategoryInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
-                  />
-                  <Button color="primary" onPress={addCategory}>Add</Button>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {formData.categories.map((cat) => (
-                    <Chip
-                      key={cat}
-                      onClose={() => setFormData({ ...formData, categories: formData.categories.filter(c => c !== cat) })}
-                      variant="flat"
-                      color="secondary"
+          <ModalBody className="bg-gray-50">
+            <div className="space-y-6">
+              {/* Basic Information Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <UserIcon className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Basic Information</h3>
+                      <p className="text-xs text-gray-600">Contact's personal details</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="First Name"
+                      labelPlacement="outside"
+                      placeholder="e.g., John"
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                      isRequired
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Contact's given name"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Last Name"
+                      labelPlacement="outside"
+                      placeholder="e.g., Doe"
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                      isRequired
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Contact's family name"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Company Name"
+                      labelPlacement="outside"
+                      placeholder="e.g., ABC Corp"
+                      value={formData.company_name}
+                      onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Optional: Company they represent"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Job Title"
+                      labelPlacement="outside"
+                      placeholder="e.g., Operations Manager"
+                      value={formData.job_title}
+                      onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Optional: Their position"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Department"
+                      labelPlacement="outside"
+                      placeholder="e.g., Logistics"
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Optional: Their department"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Select
+                      label="Contact Type"
+                      labelPlacement="outside"
+                      selectedKeys={[formData.contact_type]}
+                      onChange={(e) => setFormData({ ...formData, contact_type: e.target.value })}
+                      isRequired
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="What type of contact is this?"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        trigger: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
                     >
-                      {cat}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
+                      <SelectItem key="customer" value="customer">Customer</SelectItem>
+                      <SelectItem key="supplier" value="supplier">Supplier</SelectItem>
+                      <SelectItem key="driver" value="driver">Driver</SelectItem>
+                      <SelectItem key="warehouse" value="warehouse">Warehouse Contact</SelectItem>
+                      <SelectItem key="emergency" value="emergency">Emergency Contact</SelectItem>
+                      <SelectItem key="other" value="other">Other</SelectItem>
+                    </Select>
+                  </div>
+                </CardBody>
+              </Card>
 
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium mb-2 block">Tags</label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Add tag"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                  />
-                  <Button color="primary" onPress={addTag}>Add</Button>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {formData.tags.map((tag) => (
-                    <Chip
-                      key={tag}
-                      onClose={() => setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) })}
-                      variant="flat"
+              {/* Contact Methods Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <PhoneIcon className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Contact Methods</h3>
+                      <p className="text-xs text-gray-600">Phone numbers and email addresses</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Primary Phone"
+                      labelPlacement="outside"
+                      placeholder="+1 (555) 123-4567"
+                      type="tel"
+                      value={formData.primary_phone}
+                      onChange={(e) => setFormData({ ...formData, primary_phone: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Main contact number"
+                      startContent={<PhoneIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Mobile Phone"
+                      labelPlacement="outside"
+                      placeholder="+1 (555) 987-6543"
+                      type="tel"
+                      value={formData.mobile_phone}
+                      onChange={(e) => setFormData({ ...formData, mobile_phone: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Mobile/cell number"
+                      startContent={<PhoneIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Secondary Phone (Optional)"
+                      labelPlacement="outside"
+                      placeholder="+1 (555) 111-2222"
+                      type="tel"
+                      value={formData.secondary_phone}
+                      onChange={(e) => setFormData({ ...formData, secondary_phone: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Alternative phone number"
+                      startContent={<PhoneIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Fax (Optional)"
+                      labelPlacement="outside"
+                      placeholder="+1 (555) 333-4444"
+                      type="tel"
+                      value={formData.fax}
+                      onChange={(e) => setFormData({ ...formData, fax: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Fax number if applicable"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Primary Email"
+                      labelPlacement="outside"
+                      placeholder="john.doe@company.com"
+                      type="email"
+                      value={formData.primary_email}
+                      onChange={(e) => setFormData({ ...formData, primary_email: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Main email address"
+                      startContent={<EnvelopeIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Secondary Email (Optional)"
+                      labelPlacement="outside"
+                      placeholder="john@example.com"
+                      type="email"
+                      value={formData.secondary_email}
+                      onChange={(e) => setFormData({ ...formData, secondary_email: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Alternative email"
+                      startContent={<EnvelopeIcon className="w-4 h-4 text-gray-400" />}
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Address Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <MapPinIcon className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Physical Address</h3>
+                      <p className="text-xs text-gray-600">Where is this contact located?</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Address Line 1"
+                      labelPlacement="outside"
+                      placeholder="123 Main Street"
+                      value={formData.address_line1}
+                      onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Street address"
+                      className="md:col-span-2"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Address Line 2 (Optional)"
+                      labelPlacement="outside"
+                      placeholder="Apt, suite, unit, building, floor"
+                      value={formData.address_line2}
+                      onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Additional address information"
+                      className="md:col-span-2"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="City"
+                      labelPlacement="outside"
+                      placeholder="e.g., New York"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="City or town"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="State/Province"
+                      labelPlacement="outside"
+                      placeholder="e.g., NY"
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="State or province"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Postal Code"
+                      labelPlacement="outside"
+                      placeholder="e.g., 10001"
+                      value={formData.postal_code}
+                      onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="ZIP or postal code"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Country"
+                      labelPlacement="outside"
+                      placeholder="e.g., United States"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Country name"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Contact Preferences Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Cog6ToothIcon className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Contact Preferences</h3>
+                      <p className="text-xs text-gray-600">How they prefer to be contacted</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select
+                      label="Preferred Contact Method"
+                      labelPlacement="outside"
+                      selectedKeys={[formData.preferred_contact_method]}
+                      onChange={(e) => setFormData({ ...formData, preferred_contact_method: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="How to reach them best"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        trigger: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
                     >
-                      {tag}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
+                      <SelectItem key="phone" value="phone">Phone Call</SelectItem>
+                      <SelectItem key="email" value="email">Email</SelectItem>
+                      <SelectItem key="sms" value="sms">SMS/Text</SelectItem>
+                      <SelectItem key="mobile" value="mobile">Mobile App</SelectItem>
+                    </Select>
+                    
+                    <Select
+                      label="Language Preference"
+                      labelPlacement="outside"
+                      selectedKeys={[formData.language_preference]}
+                      onChange={(e) => setFormData({ ...formData, language_preference: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Preferred language"
+                      classNames={{
+                        label: "text-sm font-semibold text-gray-700 mb-1",
+                        trigger: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    >
+                      <SelectItem key="en" value="en">English</SelectItem>
+                      <SelectItem key="es" value="es">Spanish</SelectItem>
+                      <SelectItem key="fr" value="fr">French</SelectItem>
+                      <SelectItem key="de" value="de">German</SelectItem>
+                      <SelectItem key="zh" value="zh">Chinese</SelectItem>
+                    </Select>
+                    
+                    <Input
+                      label="Timezone (Optional)"
+                      labelPlacement="outside"
+                      placeholder="e.g., America/New_York"
+                      value={formData.timezone}
+                      onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="IANA timezone identifier"
+                      className="md:col-span-2"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
 
-              {/* Status Settings */}
-              <div className="md:col-span-2 mt-4">
-                <h3 className="text-lg font-semibold mb-4">Status</h3>
-              </div>
-              
-              <div className="flex flex-col gap-4 md:col-span-2">
-                <Switch
-                  isSelected={formData.is_active}
-                  onValueChange={(value) => setFormData({ ...formData, is_active: value })}
-                >
-                  Active Contact
-                </Switch>
-                
-                <Switch
-                  isSelected={formData.is_primary}
-                  onValueChange={(value) => setFormData({ ...formData, is_primary: value })}
-                >
-                  Primary Contact for Company/Account
-                </Switch>
-              </div>
+              {/* Business Relationship Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-indigo-100 rounded-lg">
+                      <BuildingOfficeIcon className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Business Relationship</h3>
+                      <p className="text-xs text-gray-600">Account and payment information</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Relationship Type (Optional)"
+                      labelPlacement="outside"
+                      placeholder="e.g., Regular Customer, VIP, Partner"
+                      value={formData.relationship_type}
+                      onChange={(e) => setFormData({ ...formData, relationship_type: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Type of business relationship"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Account Number (Optional)"
+                      labelPlacement="outside"
+                      placeholder="e.g., ACC-12345"
+                      value={formData.account_number}
+                      onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Internal account number"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Customer ID (Optional)"
+                      labelPlacement="outside"
+                      placeholder="External customer ID"
+                      value={formData.customer_id}
+                      onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="External CRM/system ID"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Supplier ID (Optional)"
+                      labelPlacement="outside"
+                      placeholder="External supplier ID"
+                      value={formData.supplier_id}
+                      onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="For supplier contacts"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Credit Limit (Optional)"
+                      labelPlacement="outside"
+                      placeholder="10000.00"
+                      type="number"
+                      step="0.01"
+                      value={formData.credit_limit}
+                      onChange={(e) => setFormData({ ...formData, credit_limit: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Maximum credit amount"
+                      startContent={<span className="text-gray-500">$</span>}
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                    
+                    <Input
+                      label="Payment Terms (Optional)"
+                      labelPlacement="outside"
+                      placeholder="e.g., Net 30, Net 60, COD"
+                      value={formData.payment_terms}
+                      onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
+                      size="lg"
+                      variant="bordered"
+                      radius="md"
+                      description="Payment terms agreed"
+                      classNames={{
+                        label: "text-sm font-medium text-gray-600 mb-1",
+                        input: "text-base",
+                        description: "text-xs text-gray-500 mt-1"
+                      }}
+                    />
+                  </div>
+                </CardBody>
+              </Card>
 
-              {/* Notes */}
-              <div className="md:col-span-2 mt-4">
-                <Textarea
-                  label="Notes"
-                  placeholder="Add any additional notes..."
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                />
-              </div>
+              {/* Categories & Tags Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-pink-100 rounded-lg">
+                      <DocumentTextIcon className="w-5 h-5 text-pink-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Categories & Tags</h3>
+                      <p className="text-xs text-gray-600">Organize and label this contact</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700 mb-2 block">Categories</label>
+                      <p className="text-xs text-gray-500 mb-3">Add categories like VIP, Regular, Wholesale</p>
+                      <div className="flex gap-2 mb-3">
+                        <Input
+                          placeholder="Type category name and press Enter or click Add"
+                          value={categoryInput}
+                          onChange={(e) => setCategoryInput(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+                          size="lg"
+                          variant="bordered"
+                          classNames={{
+                            input: "text-base"
+                          }}
+                        />
+                        <Button 
+                          color="primary" 
+                          onPress={addCategory}
+                          size="lg"
+                          className="px-6"
+                        >
+                          Add
+                        </Button>
+                      </div>
+                      {formData.categories.length > 0 && (
+                        <div className="flex gap-2 flex-wrap p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          {formData.categories.map((cat) => (
+                            <Chip
+                              key={cat}
+                              onClose={() => setFormData({ ...formData, categories: formData.categories.filter(c => c !== cat) })}
+                              variant="flat"
+                              color="secondary"
+                              size="lg"
+                            >
+                              {cat}
+                            </Chip>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700 mb-2 block">Tags</label>
+                      <p className="text-xs text-gray-500 mb-3">Add custom tags for easy searching</p>
+                      <div className="flex gap-2 mb-3">
+                        <Input
+                          placeholder="Type tag name and press Enter or click Add"
+                          value={tagInput}
+                          onChange={(e) => setTagInput(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                          size="lg"
+                          variant="bordered"
+                          classNames={{
+                            input: "text-base"
+                          }}
+                        />
+                        <Button 
+                          color="primary" 
+                          onPress={addTag}
+                          size="lg"
+                          className="px-6"
+                        >
+                          Add
+                        </Button>
+                      </div>
+                      {formData.tags.length > 0 && (
+                        <div className="flex gap-2 flex-wrap p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          {formData.tags.map((tag) => (
+                            <Chip
+                              key={tag}
+                              onClose={() => setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) })}
+                              variant="flat"
+                              size="lg"
+                            >
+                              {tag}
+                            </Chip>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Status Settings Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-gray-100 rounded-lg">
+                      <Cog6ToothIcon className="w-5 h-5 text-gray-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Status Settings</h3>
+                      <p className="text-xs text-gray-600">Configure contact status</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                      <Switch
+                        isSelected={formData.is_active}
+                        onValueChange={(value) => setFormData({ ...formData, is_active: value })}
+                        size="lg"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Active Contact</p>
+                        <p className="text-xs text-gray-600">Enable if this contact should be available for selection</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                      <Switch
+                        isSelected={formData.is_primary}
+                        onValueChange={(value) => setFormData({ ...formData, is_primary: value })}
+                        size="lg"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Primary Contact</p>
+                        <p className="text-xs text-gray-600">Mark as the main contact for this company/account</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+
+              {/* Notes Section */}
+              <Card className="shadow-sm border border-gray-200">
+                <CardBody className="gap-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
+                    <div className="p-2 bg-yellow-100 rounded-lg">
+                      <DocumentTextIcon className="w-5 h-5 text-yellow-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Additional Notes</h3>
+                      <p className="text-xs text-gray-600">Any other important information</p>
+                    </div>
+                  </div>
+                  
+                  <Textarea
+                    label="Notes"
+                    labelPlacement="outside"
+                    placeholder="Add any additional notes, special instructions, or important information about this contact..."
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    minRows={4}
+                    maxRows={8}
+                    size="lg"
+                    variant="bordered"
+                    radius="md"
+                    description="Optional: Any relevant details"
+                    classNames={{
+                      label: "text-sm font-semibold text-gray-700 mb-1",
+                      input: "text-base",
+                      description: "text-xs text-gray-500 mt-1"
+                    }}
+                  />
+                </CardBody>
+              </Card>
             </div>
           </ModalBody>
           <ModalFooter className="bg-white">
