@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 
@@ -27,48 +28,48 @@ export default function ConditionalLayout({ children }: { children: ReactNode })
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 pb-4 space-y-1">
-              <a
+              <Link
                 href="/"
                 className="bg-blue-50 text-blue-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Dashboard</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/orders"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Orders</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/tracking"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Live Tracking</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/incidents"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Incidents</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/messages"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Messages</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/drivers"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Drivers</span>
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/analytics"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
                 <span className="ml-3">Analytics</span>
-              </a>
+              </Link>
               <a
                 href="/geofences"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"

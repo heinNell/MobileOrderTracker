@@ -117,7 +117,7 @@ SELECT
     company_name,
     created_at
 FROM contacts
-WHERE tenant_id = 'YOUR_TENANT_ID'
+WHERE tenant_id = '17ed751d-9c45-4cbb-9ccc-50607c151d43'
 ORDER BY created_at DESC
 LIMIT 10;
 
@@ -130,11 +130,23 @@ SELECT
     primary_contact_name,
     created_at
 FROM transporters
-WHERE tenant_id = 'YOUR_TENANT_ID'
+WHERE tenant_id = '17ed751d-9c45-4cbb-9ccc-50607c151d43'
 ORDER BY created_at DESC
 LIMIT 10;
 ```
+#### RESULTS #####
 
+
+[
+  {
+    "source": "CONTACTS",
+    "id": "3676af17-24ce-4378-913a-2ecb8eed5355",
+    "name": "Ruan Dicks",
+    "contact_type": "supplier",
+    "company_name": "HFR",
+    "created_at": "2025-10-20 13:26:23.550049+00"
+  }
+]
 ### Fix 4: Add Table Source Label to Cards
 
 In both pages, add a small badge showing which table the data comes from:
