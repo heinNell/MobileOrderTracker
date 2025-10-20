@@ -134,18 +134,18 @@ Replace `YOUR_TENANT_ID_HERE` with your actual tenant_id from Step 2:
 INSERT INTO enhanced_geofences (
     tenant_id, name, description, geofence_type,
     address, city, state, postal_code, country,
-    latitude, longitude, radius_meters,
-    is_active, color, icon, created_by
+    center_latitude, center_longitude, radius_meters,
+    shape_type, facility_type, is_active, created_by
 ) VALUES
--- Sample 1: Warehouse
+-- Sample 1: Main Warehouse
 (
     'YOUR_TENANT_ID_HERE',
     'Main Warehouse',
     'Primary distribution center',
-    'warehouse',
+    'loading_point',
     '123 Warehouse St', 'Portland', 'OR', '97201', 'USA',
     45.5152, -122.6784, 500,
-    true, '#3B82F6', 'warehouse', auth.uid()
+    'circle', 'warehouse', true, auth.uid()
 ),
 -- Sample 2: Loading Dock
 (
@@ -155,17 +155,17 @@ INSERT INTO enhanced_geofences (
     'loading_point',
     '456 Loading Dock Rd', 'Seattle', 'WA', '98101', 'USA',
     47.6062, -122.3321, 300,
-    true, '#10B981', 'truck-loading', auth.uid()
+    'circle', 'depot', true, auth.uid()
 ),
 -- Sample 3: Delivery Zone
 (
     'YOUR_TENANT_ID_HERE',
     'Downtown Delivery Zone',
     'High-traffic delivery area',
-    'delivery_zone',
+    'waypoint',
     'Downtown District', 'Portland', 'OR', '97204', 'USA',
     45.5155, -122.6789, 1000,
-    true, '#F59E0B', 'map-pin', auth.uid()
+    'circle', 'distribution_center', true, auth.uid()
 ),
 -- Sample 4: Customer Receiving
 (
@@ -175,7 +175,7 @@ INSERT INTO enhanced_geofences (
     'unloading_point',
     '789 Customer Way', 'Vancouver', 'WA', '98660', 'USA',
     45.6387, -122.6615, 200,
-    true, '#EF4444', 'flag', auth.uid()
+    'circle', 'customer_site', true, auth.uid()
 );
 ```
 
