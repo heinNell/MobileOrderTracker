@@ -439,6 +439,7 @@ export function CreateTransporterModal({
                 <Switch
                   isSelected={formData.is_active}
                   onValueChange={(value) => setFormData({ ...formData, is_active: value })}
+                  aria-label="Toggle active status"
                 >
                   Active Status
                 </Switch>
@@ -446,6 +447,7 @@ export function CreateTransporterModal({
                 <Switch
                   isSelected={formData.is_preferred}
                   onValueChange={(value) => setFormData({ ...formData, is_preferred: value })}
+                  aria-label="Toggle preferred transporter status"
                 >
                   Preferred Transporter
                 </Switch>
@@ -453,6 +455,7 @@ export function CreateTransporterModal({
                 <Switch
                   isSelected={formData.auto_assign_eligible}
                   onValueChange={(value) => setFormData({ ...formData, auto_assign_eligible: value })}
+                  aria-label="Toggle auto-assignment eligibility"
                 >
                   Auto-Assignment Eligible
                 </Switch>

@@ -851,6 +851,7 @@ export function CreateGeofenceModal({
                           isSelected={formData.notification_enabled}
                           onValueChange={(value) => setFormData({ ...formData, notification_enabled: value })}
                           size="lg"
+                          aria-label="Toggle notifications"
                           classNames={{
                             wrapper: "mr-3"
                           }}
@@ -869,6 +870,7 @@ export function CreateGeofenceModal({
                           isSelected={formData.alert_enabled}
                           onValueChange={(value) => setFormData({ ...formData, alert_enabled: value })}
                           size="lg"
+                          aria-label="Toggle alerts"
                           classNames={{
                             wrapper: "mr-3"
                           }}
@@ -887,6 +889,7 @@ export function CreateGeofenceModal({
                           isSelected={formData.is_active}
                           onValueChange={(value) => setFormData({ ...formData, is_active: value })}
                           size="lg"
+                          aria-label="Toggle active status"
                           classNames={{
                             wrapper: "mr-3"
                           }}
@@ -905,6 +908,7 @@ export function CreateGeofenceModal({
                           isSelected={formData.is_template}
                           onValueChange={(value) => setFormData({ ...formData, is_template: value })}
                           size="lg"
+                          aria-label="Toggle template status"
                           classNames={{
                             wrapper: "mr-3"
                           }}
@@ -1344,6 +1348,7 @@ export function CreateTemplateModal({
                 <Switch
                   isSelected={formData.is_active}
                   onValueChange={(value) => setFormData({ ...formData, is_active: value })}
+                  aria-label="Toggle template active status"
                 >
                   <span className="text-sm">Active Template</span>
                 </Switch>
@@ -1351,6 +1356,7 @@ export function CreateTemplateModal({
                 <Switch
                   isSelected={formData.is_public}
                   onValueChange={(value) => setFormData({ ...formData, is_public: value })}
+                  aria-label="Toggle template public access"
                 >
                   <span className="text-sm">Public Template - accessible to all users</span>
                 </Switch>

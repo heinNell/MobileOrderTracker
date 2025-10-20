@@ -925,6 +925,7 @@ export function CreateContactModal({
                         isSelected={formData.is_active}
                         onValueChange={(value) => setFormData({ ...formData, is_active: value })}
                         size="lg"
+                        aria-label="Toggle active contact status"
                       />
                       <div>
                         <p className="text-sm font-semibold text-gray-800">Active Contact</p>
@@ -937,6 +938,7 @@ export function CreateContactModal({
                         isSelected={formData.is_primary}
                         onValueChange={(value) => setFormData({ ...formData, is_primary: value })}
                         size="lg"
+                        aria-label="Toggle primary contact status"
                       />
                       <div>
                         <p className="text-sm font-semibold text-gray-800">Primary Contact</p>

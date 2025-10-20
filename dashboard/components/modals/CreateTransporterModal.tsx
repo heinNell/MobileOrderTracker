@@ -939,6 +939,7 @@ export function CreateTransporterModal({
                           isSelected={formData.is_active}
                           onValueChange={(value) => setFormData({ ...formData, is_active: value })}
                           size="lg"
+                          aria-label="Toggle active status"
                           classNames={{
                             wrapper: "mr-3"
                           }}
@@ -957,6 +958,7 @@ export function CreateTransporterModal({
                           isSelected={formData.is_preferred}
                           onValueChange={(value) => setFormData({ ...formData, is_preferred: value })}
                           size="lg"
+                          aria-label="Toggle preferred transporter status"
                           classNames={{
                             wrapper: "mr-3"
                           }}
@@ -975,6 +977,7 @@ export function CreateTransporterModal({
                           isSelected={formData.auto_assign_eligible}
                           onValueChange={(value) => setFormData({ ...formData, auto_assign_eligible: value })}
                           size="lg"
+                          aria-label="Toggle auto-assignment eligibility"
                           classNames={{
                             wrapper: "mr-3"
                           }}
