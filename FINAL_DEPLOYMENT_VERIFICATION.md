@@ -148,7 +148,44 @@ Route (app)                                 Size  First Load JS
 
 ---
 
-## 🚀 What to Test in Production
+## � Known Issues & Fixes
+
+### Contact Creation Failure (FIXED)
+
+**Issue:** Contact creation fails with error about `full_name` column requiring a default value.
+
+**Error:**
+
+```
+Failed to load resource: the server responded with a status of 400 ()
+Column 'full_name' requires a value
+```
+
+**Root Cause:** The `contacts` table has `full_name` column with NOT NULL constraint but no default value or auto-generation.
+
+**Solution:** Execute `FIX_CONTACTS_TABLE.sql` in Supabase SQL Editor:
+
+```bash
+# File location: /workspaces/MobileOrderTracker/FIX_CONTACTS_TABLE.sql
+```
+
+**What the fix does:**
+
+1. Makes `full_name` nullable with empty string default
+2. Creates trigger to auto-generate `full_name` from `first_name` + `last_name`
+3. Falls back to `company_name` if names are empty
+4. Makes `first_name` and `last_name` nullable for company-only contacts
+5. Adds check constraint to ensure at least one name field is provided
+
+**After applying the fix:**
+
+- Contacts can be created without explicitly providing `full_name`
+- The trigger automatically generates it: "FirstName LastName"
+- Falls back to company name if no person names provided
+
+---
+
+## ✅ What to Test in Production
 
 ### Critical Items:
 

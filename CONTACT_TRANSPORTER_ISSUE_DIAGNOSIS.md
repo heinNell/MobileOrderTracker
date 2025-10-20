@@ -7,14 +7,17 @@
 ### ✅ Code Structure is Correct
 
 1. **Separate Database Tables:**
+
    - `contacts` table - for customer/supplier contacts
    - `transporters` table - for carriers/logistics providers
 
 2. **Separate Hooks:**
+
    - `useContacts()` - queries/modifies `contacts` table
    - `useTransporters()` - queries/modifies `transporters` table
 
 3. **Separate Pages:**
+
    - `/contacts` - uses `useContacts()` hook ✅
    - `/transporters` - uses `useTransporters()` hook ✅
 
@@ -25,20 +28,25 @@
 ## Possible Root Causes
 
 ### 1. **UI Confusion (Most Likely)**
+
 The contacts page and transporters page might look very similar, causing confusion about which page you're on:
 
 **Solution:** Add clear visual indicators to differentiate the pages
 
 ### 2. **Navigation Issue**
+
 You might be clicking "Create Contact" but actually being on the Transporters page.
 
-**Check:** 
+**Check:**
+
 - Look at the URL when creating a contact
 - `/contacts` = Contacts page
 - `/transporters` = Transporters page
 
 ### 3. **Contact Type Display**
+
 Contacts have a `contact_type` field that could be:
+
 - `customer`
 - `supplier`
 - `driver`
@@ -50,6 +58,7 @@ If a contact is created with `contact_type: 'driver'` or `contact_type: 'supplie
 **Solution:** Make contact_type more visible in the UI
 
 ### 4. **Missing Filters**
+
 The transporters page might be accidentally displaying contacts if there's a bug in the query.
 
 ## Recommended Fixes
@@ -59,16 +68,16 @@ The transporters page might be accidentally displaying contacts if there's a bug
 Add distinctive headers and colors to each page:
 
 **Contacts Page:**
+
 ```tsx
 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-  <h1 className="text-2xl font-bold text-blue-900">
-    📋 Contacts Management
-  </h1>
+  <h1 className="text-2xl font-bold text-blue-900">📋 Contacts Management</h1>
   <p className="text-blue-700">Manage customer, supplier, and site contacts</p>
 </div>
 ```
 
 **Transporters Page:**
+
 ```tsx
 <div className="bg-orange-50 border-l-4 border-orange-500 p-4 mb-4">
   <h1 className="text-2xl font-bold text-orange-900">
@@ -100,7 +109,7 @@ Run this in Supabase SQL Editor to check data:
 
 ```sql
 -- Check contacts table
-SELECT 
+SELECT
     'CONTACTS' as source,
     id,
     first_name || ' ' || last_name as name,
@@ -113,7 +122,7 @@ ORDER BY created_at DESC
 LIMIT 10;
 
 -- Check transporters table
-SELECT 
+SELECT
     'TRANSPORTERS' as source,
     id,
     name,
@@ -139,12 +148,14 @@ In both pages, add a small badge showing which table the data comes from:
 ## Testing Steps
 
 1. **Create a test contact:**
+
    - Go to `/contacts`
    - Click "Create Contact"
    - Fill in: First Name: "Test", Last Name: "Contact"
    - Submit
 
 2. **Create a test transporter:**
+
    - Go to `/transporters`
    - Click "Create Transporter"
    - Fill in: Name: "Test Transporter"
@@ -158,6 +169,7 @@ In both pages, add a small badge showing which table the data comes from:
 ## Need More Info?
 
 Please provide:
+
 1. **Screenshot** of what you see when you create a contact
 2. **URL** showing in browser when issue occurs
 3. **Data** from SQL query above showing which table has the records

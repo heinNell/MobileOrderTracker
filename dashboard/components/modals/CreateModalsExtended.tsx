@@ -1,7 +1,6 @@
 "use client";
 
-import
-  {
+import {
     BellIcon,
     BuildingOfficeIcon,
     DocumentTextIcon,
@@ -10,9 +9,8 @@ import
     PhoneIcon,
     TagIcon,
     UserIcon
-  } from '@heroicons/react/24/outline';
-import
-  {
+} from '@heroicons/react/24/outline';
+import {
     Button,
     Card,
     CardBody,
@@ -27,18 +25,17 @@ import
     SelectItem,
     Switch,
     Textarea
-  } from '@nextui-org/react';
+} from '@nextui-org/react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import
-  {
+import {
     EnhancedGeofence,
     OrderTemplate,
     useContacts,
     useEnhancedGeofences,
     useOrderTemplates,
     useTransporters
-  } from '../../hooks/useEnhancedData';
+} from '../../hooks/useEnhancedData';
 
 // Create Geofence Modal
 interface CreateGeofenceModalProps {

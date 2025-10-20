@@ -1,25 +1,23 @@
 "use client";
 
 import {
-  Button,
-  Chip,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Select,
-  SelectItem,
-  Switch,
-  Textarea
+    Button,
+    Chip,
+    Input,
+    Modal,
+    ModalBody,
+    ModalContent,
+    ModalFooter,
+    ModalHeader,
+    Select,
+    SelectItem,
+    Switch,
+    Textarea
 } from '@nextui-org/react';
 import { useState } from 'react';
 import {
-  EnhancedContact,
-  EnhancedTransporter,
-  useContacts,
-  useTransporters
+    EnhancedTransporter,
+    useTransporters
 } from '../../hooks/useEnhancedData';
 
 // Create Transporter Modal
