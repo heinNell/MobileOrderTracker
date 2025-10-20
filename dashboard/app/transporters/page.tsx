@@ -1,80 +1,84 @@
 "use client";
 
-import {
-  EnvelopeIcon,
-  FunnelIcon,
-  MagnifyingGlassIcon,
-  MapPinIcon,
-  PencilIcon,
-  PhoneIcon,
-  PlusIcon,
-  TrashIcon,
-  TruckIcon,
-  UserGroupIcon,
-} from "@heroicons/react/24/outline";
-import {
-  Button,
-  Card,
-  CardBody,
-  CardHeader,
-  Chip,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Select,
-  SelectItem,
-  Spinner,
-  Tooltip,
-  useDisclosure,
-} from "@nextui-org/react";
+import
+  {
+    CheckCircleIcon,
+    EnvelopeIcon,
+    FunnelIcon,
+    MagnifyingGlassIcon,
+    MapPinIcon,
+    PencilIcon,
+    PhoneIcon,
+    PlusIcon,
+    TrashIcon,
+    TruckIcon,
+    UserGroupIcon
+  } from "@heroicons/react/24/outline";
+import
+  {
+    Button,
+    Card,
+    CardBody,
+    CardHeader,
+    Chip,
+    Input,
+    Modal,
+    ModalBody,
+    ModalContent,
+    ModalFooter,
+    ModalHeader,
+    Select,
+    SelectItem,
+    Spinner,
+    Tooltip,
+    useDisclosure,
+  } from "@nextui-org/react";
 import { useMemo, useState } from "react";
-import { CreateContactModal } from "../../components/modals/CreateContactModal";
-import { EnhancedContact, useContacts } from "../../hooks/useEnhancedData";
+import { EnhancedTransporter, useTransporters } from "../../hooks/useEnhancedData";
 
-export default function ContactsPage() {
-  const { contacts, loading, updateContact, refetch } = useContacts();
+export default function TransportersPage() {
+  const { transporters, loading, updateTransporter, refetch } = useTransporters();
 
-  const deleteContact = async (id: string) => {
-    console.warn("Delete contact not yet implemented in hook");
+  const deleteTransporter = async (id: string) => {
+    console.warn("Delete transporter not yet implemented in hook");
     return { success: false, error: "Not implemented" };
   };
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterContactType, setFilterContactType] = useState("");
+  const [filterServiceType, setFilterServiceType] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [selectedContact, setSelectedContact] = useState<EnhancedContact | null>(null);
+  const [selectedTransporter, setSelectedTransporter] = useState<EnhancedTransporter | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const createModal = useDisclosure();
   const editModal = useDisclosure();
   const deleteModal = useDisclosure();
 
-  const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
+  const filteredTransporters = useMemo(() => {
+    return transporters.filter((transporter) => {
       const matchesSearch =
         !searchTerm ||
-        contact.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.primary_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.primary_phone?.toLowerCase().includes(searchTerm.toLowerCase());
+        transporter.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transporter.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transporter.primary_contact_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transporter.primary_contact_phone?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesType = !filterContactType || contact.contact_type === filterContactType;
+      const matchesServiceType = 
+        !filterServiceType || 
+        transporter.service_types?.includes(filterServiceType);
 
       const matchesStatus =
         filterStatus === "all" ||
-        (filterStatus === "active" && contact.is_active) ||
-        (filterStatus === "inactive" && !contact.is_active) ||
-        (filterStatus === "primary" && contact.is_primary);
+        (filterStatus === "active" && transporter.is_active) ||
+        (filterStatus === "inactive" && !transporter.is_active) ||
+        (filterStatus === "preferred" && transporter.is_preferred);
 
-      return matchesSearch && matchesType && matchesStatus;
+      return matchesSearch && matchesServiceType && matchesStatus;
     });
-  }, [contacts, searchTerm, filterContactType, filterStatus]);
+  }, [transporters, searchTerm, filterServiceType, filterStatus]);
 
-  const handleEdit = (contact: EnhancedContact) => {
-    setSelectedContact(contact);
+  const handleEdit = (transporter: EnhancedTransporter) => {
+    setSelectedTransporter(transporter);
     editModal.onOpen();
   };
 
@@ -85,7 +89,7 @@ export default function ContactsPage() {
 
   const handleDeleteConfirm = async () => {
     if (deleteConfirmId) {
-      const result = await deleteContact(deleteConfirmId);
+      const result = await deleteTransporter(deleteConfirmId);
       if (result.success) {
         refetch();
       } else {
@@ -96,49 +100,38 @@ export default function ContactsPage() {
     }
   };
 
-  const handleTogglePrimary = async (contact: EnhancedContact) => {
-    await updateContact(contact.id, { is_primary: !contact.is_primary });
+  const handleTogglePreferred = async (transporter: EnhancedTransporter) => {
+    await updateTransporter(transporter.id, { is_preferred: !transporter.is_preferred });
     refetch();
   };
 
-  const handleToggleActive = async (contact: EnhancedContact) => {
-    await updateContact(contact.id, { is_active: !contact.is_active });
+  const handleToggleActive = async (transporter: EnhancedTransporter) => {
+    await updateTransporter(transporter.id, { is_active: !transporter.is_active });
     refetch();
   };
 
-  const contactTypes = useMemo(() => {
+  const serviceTypes = useMemo(() => {
     const types = new Set<string>();
-    contacts.forEach((c) => types.add(c.contact_type));
+    transporters.forEach((t) => t.service_types?.forEach(st => types.add(st)));
     return Array.from(types);
-  }, [contacts]);
-
-  const getContactTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      customer: "from-purple-500 to-purple-600",
-      supplier: "from-orange-500 to-orange-600",
-      driver: "from-blue-500 to-blue-600",
-      warehouse: "from-green-500 to-green-600",
-      other: "from-gray-500 to-gray-600"
-    };
-    return colors[type] || "from-gray-500 to-gray-600";
-  };
+  }, [transporters]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-pink-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/20">
       <div className="p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                  <UserGroupIcon className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                  <TruckIcon className="w-6 h-6 text-white" />
                 </div>
                 <div>
                   <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                    Contacts
+                    Transporters
                   </h1>
-                  <p className="text-gray-500 mt-1">Manage customer, supplier, and operational contacts</p>
+                  <p className="text-gray-500 mt-1">Manage carriers and logistics providers</p>
                 </div>
               </div>
             </div>
@@ -146,9 +139,9 @@ export default function ContactsPage() {
               size="lg"
               startContent={<PlusIcon className="w-5 h-5" />}
               onPress={createModal.onOpen}
-              className="bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 transition-all"
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all"
             >
-              Add Contact
+              Add Transporter
             </Button>
           </div>
         </div>
@@ -159,13 +152,13 @@ export default function ContactsPage() {
             <CardBody className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total Contacts</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Transporters</p>
                   <p className="text-3xl font-bold bg-gradient-to-br from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                    {contacts.length}
+                    {transporters.length}
                   </p>
                 </div>
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                  <UserGroupIcon className="w-7 h-7 text-white" />
+                  <TruckIcon className="w-7 h-7 text-white" />
                 </div>
               </div>
             </CardBody>
@@ -177,12 +170,12 @@ export default function ContactsPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Active</p>
                   <p className="text-3xl font-bold bg-gradient-to-br from-green-600 to-green-700 bg-clip-text text-transparent">
-                    {contacts.filter((c) => c.is_active).length}
+                    {transporters.filter((t) => t.is_active).length}
                   </p>
                 </div>
                 <div className="relative">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/30">
-                    <div className="w-4 h-4 rounded-full bg-white"></div>
+                    <CheckCircleIcon className="w-7 h-7 text-white" />
                   </div>
                   <div className="absolute top-0 right-0 w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
                 </div>
@@ -190,17 +183,17 @@ export default function ContactsPage() {
             </CardBody>
           </Card>
 
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-purple-50/50 hover:shadow-xl transition-all">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-yellow-50/50 hover:shadow-xl transition-all">
             <CardBody className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Customers</p>
-                  <p className="text-3xl font-bold bg-gradient-to-br from-purple-600 to-purple-700 bg-clip-text text-transparent">
-                    {contacts.filter((c) => c.contact_type === "customer").length}
+                  <p className="text-sm font-medium text-gray-600 mb-1">Preferred</p>
+                  <p className="text-3xl font-bold bg-gradient-to-br from-yellow-600 to-yellow-700 bg-clip-text text-transparent">
+                    {transporters.filter((t) => t.is_preferred).length}
                   </p>
                 </div>
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                  <UserGroupIcon className="w-7 h-7 text-white" />
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-yellow-500 to-yellow-600 flex items-center justify-center shadow-lg shadow-yellow-500/30">
+                  <TruckIcon className="w-7 h-7 text-white" />
                 </div>
               </div>
             </CardBody>
@@ -210,9 +203,9 @@ export default function ContactsPage() {
             <CardBody className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Suppliers</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Auto-Assign Eligible</p>
                   <p className="text-3xl font-bold bg-gradient-to-br from-orange-600 to-orange-700 bg-clip-text text-transparent">
-                    {contacts.filter((c) => c.contact_type === "supplier").length}
+                    {transporters.filter((t) => t.auto_assign_eligible).length}
                   </p>
                 </div>
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
