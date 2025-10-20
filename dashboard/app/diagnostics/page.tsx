@@ -152,7 +152,8 @@ export default function DiagnosticPage() {
       
     } catch (error) {
       console.error("Error fixing tenant issues:", error);
-      alert("Error fixing tenant issues: " + error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      alert("Error fixing tenant issues: " + message);
     } finally {
       setLoading(false);
     }

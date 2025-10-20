@@ -135,7 +135,7 @@ export default function IncidentsPage() {
       result = result.filter(
         (incident) =>
           incident.title.toLowerCase().includes(term) ||
-          incident.description.toLowerCase().includes(term) ||
+          (incident.description && incident.description.toLowerCase().includes(term)) ||
           (incident.order?.order_number && incident.order.order_number.toLowerCase().includes(term)) ||
           (incident.driver?.full_name && incident.driver.full_name.toLowerCase().includes(term))
       );

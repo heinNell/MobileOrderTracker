@@ -581,7 +581,7 @@ export default function OrderDetailPage({
                       "phone" in order.assigned_driver &&
                       order.assigned_driver.phone && (
                         <span className="text-gray-500 text-sm block">
-                          {String(order.assigned_driver.phone)}
+                          {String(order.assigned_driver.phone as string | number)}
                         </span>
                       )}
                   </p>
