@@ -16,8 +16,8 @@ import
     View,
   } from "react-native";
 import GeocodingService from "../../services/GeocodingService";
-import { startBackgroundLocation, stopBackgroundLocation } from "../services/LocationService";
 import { supabase } from "../lib/supabase";
+import { startBackgroundLocation, stopBackgroundLocation } from "../services/LocationService";
 
 // Conditionally import react-native-maps only on native platforms
 let MapView, Marker, Polyline, PROVIDER_GOOGLE;
@@ -938,12 +938,15 @@ const getStatusStyle = (status) => {
     activated: { backgroundColor: colors.success },
     in_progress: { backgroundColor: colors.indigo500 },
     in_transit: { backgroundColor: colors.primary },
-    delivered: { backgroundColor: colors.successDark },
-    completed: { backgroundColor: colors.success },
     arrived: { backgroundColor: colors.warning },
+    arrived_at_loading_point: { backgroundColor: colors.success },
     loading: { backgroundColor: colors.warning },
     loaded: { backgroundColor: colors.success },
+    arrived_at_unloading_point: { backgroundColor: colors.success },
     unloading: { backgroundColor: colors.warningDark },
+    delivered: { backgroundColor: colors.successDark },
+    completed: { backgroundColor: colors.success },
+    cancelled: { backgroundColor: colors.danger },
   };
   return statusStyles[status] || { backgroundColor: colors.gray500 };
 };
@@ -955,12 +958,15 @@ const getStatusIcon = (status) => {
     activated: "check-circle",
     in_progress: "local-shipping",
     in_transit: "directions",
-    delivered: "done-all",
-    completed: "task-alt",
     arrived: "location-on",
+    arrived_at_loading_point: "location-on",
     loading: "upload",
     loaded: "inventory",
+    arrived_at_unloading_point: "location-on",
     unloading: "download",
+    delivered: "done-all",
+    completed: "task-alt",
+    cancelled: "cancel",
   };
   return iconMap[status] || "info";
 };

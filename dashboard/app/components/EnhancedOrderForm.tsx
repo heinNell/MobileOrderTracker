@@ -166,18 +166,18 @@ export default function EnhancedOrderForm({
 
       console.log(`Fetching geofences for tenant ${userData.tenant_id}`);
 
-      // Fetch geofences - use geofences_api view if available, otherwise geofences table
+      // Fetch geofences - use enhanced_geofences table
       const { data: geofences, error } = await supabase
-        .from("geofences_api")
-        .select("id, name, latitude, longitude, radius_meters, location_text")
+        .from("enhanced_geofences")
+        .select("id, geofence_name, center_latitude, center_longitude, radius_meters, geofence_type")
         .eq("tenant_id", userData.tenant_id)
         .eq("is_active", true)
-        .order("name");
+        .order("geofence_name");
 
       if (error) {
-        console.error("Error fetching from geofences_api, trying geofences table:", error);
+        console.error("Error fetching from enhanced_geofences, trying old geofences table:", error);
         
-        // Fallback to geofences table
+        // Fallback to old geofences table
         const { data: fallbackGeofences, error: fallbackError } = await supabase
           .from("geofences")
           .select("id, name, location, radius_meters")
@@ -209,35 +209,24 @@ export default function EnhancedOrderForm({
         });
 
         setAvailableGeofences(parsedGeofences);
-        console.log(`Loaded ${parsedGeofences.length} geofences (fallback)`);
+        console.log(`Loaded ${parsedGeofences.length} geofences (fallback from old table)`);
         return;
       }
 
-      // Parse geofences from API view
+      // Parse geofences from enhanced_geofences table
       const parsedGeofences = (geofences || []).map(g => {
-        let lat = g.latitude || 0;
-        let lng = g.longitude || 0;
-        
-        // If lat/lng not in columns, try parsing from location_text
-        if ((!lat || !lng) && g.location_text) {
-          const match = g.location_text.match(/POINT\(([^)]+)\)/);
-          if (match) {
-            [lng, lat] = match[1].split(" ").map(Number);
-          }
-        }
-
         return {
           id: g.id,
-          name: g.name,
-          latitude: lat,
-          longitude: lng,
+          name: g.geofence_name,
+          latitude: g.center_latitude || 0,
+          longitude: g.center_longitude || 0,
           radius_meters: g.radius_meters,
-          location_text: g.location_text
+          geofence_type: g.geofence_type
         };
       });
 
       setAvailableGeofences(parsedGeofences);
-      console.log(`Loaded ${parsedGeofences.length} geofences`);
+      console.log(`Loaded ${parsedGeofences.length} geofences from enhanced_geofences table`);
     } catch (error) {
       console.error("Error in fetchGeofences:", error);
     } finally {

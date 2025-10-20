@@ -75,11 +75,43 @@ export default function ConditionalLayout({ children }: { children: ReactNode })
               >
                 <span className="ml-3">Geofences</span>
               </a>
+              
+              {/* Pre-Configuration Section */}
+              <div className="pt-4 pb-2">
+                <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Pre-Configuration
+                </p>
+              </div>
+              <a
+                href="/templates"
+                className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+              >
+                <span className="ml-3">Templates</span>
+              </a>
+              <a
+                href="/transporters"
+                className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+              >
+                <span className="ml-3">Transporters</span>
+              </a>
+              <a
+                href="/contacts"
+                className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+              >
+                <span className="ml-3">Contacts</span>
+              </a>
+              
+              {/* System Section */}
+              <div className="pt-4 pb-2">
+                <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  System
+                </p>
+              </div>
               <a
                 href="/diagnostics"
                 className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
               >
-                <span className="ml-3">🔍 Diagnostics</span>
+                <span className="ml-3">Diagnostics</span>
               </a>
             </nav>
           </div>

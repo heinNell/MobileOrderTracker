@@ -339,11 +339,14 @@ export default function OrdersScreen() {
       in_progress: colors.info,
       in_transit: colors.primary,
       arrived: colors.success,
+      arrived_at_loading_point: colors.success,
       loading: colors.warning,
       loaded: colors.success,
+      arrived_at_unloading_point: colors.success,
       unloading: colors.warning,
       delivered: colors.successDark,
       completed: colors.success,
+      cancelled: colors.danger,
     };
     return statusColors[status] || colors.gray500;
   };

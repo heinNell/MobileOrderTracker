@@ -296,7 +296,7 @@ export default function OrderDetailPage({
       .subscribe();
       
     // Also subscribe to driver location updates if driver is assigned
-    let driverLocationChannel;
+    let driverLocationChannel: any = null;
     if (order?.assigned_driver_id) {
       driverLocationChannel = supabase
         .channel(`driver_locations_driver:${order.assigned_driver_id}`)

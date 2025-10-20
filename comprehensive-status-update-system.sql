@@ -10,8 +10,10 @@ CREATE TYPE order_status AS ENUM (
   'in_progress',
   'in_transit', 
   'arrived', 
+  'arrived_at_loading_point',
   'loading', 
   'loaded', 
+  'arrived_at_unloading_point',
   'unloading', 
   'delivered',
   'completed', 
@@ -58,6 +60,10 @@ BEGIN
     WHEN 'in_transit' THEN
       NEW.trip_start_time = COALESCE(NEW.trip_start_time, NOW());
       NEW.actual_start_time = COALESCE(NEW.actual_start_time, NOW());
+      NEW.tracking_active = true;
+    WHEN 'arrived_at_loading_point' THEN
+      NEW.tracking_active = true;
+    WHEN 'arrived_at_unloading_point' THEN
       NEW.tracking_active = true;
     WHEN 'delivered' THEN
       NEW.trip_end_time = NOW();
