@@ -198,10 +198,10 @@ export default function EnhancedOrderForm({
       if (error) {
         console.error("Error fetching from enhanced_geofences, trying old geofences table:", error);
         
-        // Fallback to old geofences table
+        // Fallback to old geofences table - use latitude/longitude columns directly
         const { data: fallbackGeofences, error: fallbackError } = await supabase
           .from("geofences")
-          .select("id, name, location, radius_meters")
+          .select("id, name, latitude, longitude, radius_meters")
           .eq("tenant_id", userData.tenant_id)
           .eq("is_active", true)
           .order("name");
@@ -211,26 +211,19 @@ export default function EnhancedOrderForm({
           return;
         }
 
-        // Parse location from PostGIS format
+        // Convert TEXT latitude/longitude to numbers
         const parsedGeofences = (fallbackGeofences || []).map(g => {
-          let lat = 0, lng = 0;
-          if (g.location && typeof g.location === 'string') {
-            const match = g.location.match(/POINT\(([^)]+)\)/);
-            if (match) {
-              [lng, lat] = match[1].split(" ").map(Number);
-            }
-          }
           return {
             id: g.id,
             name: g.name,
-            latitude: lat,
-            longitude: lng,
+            latitude: parseFloat(g.latitude) || 0,
+            longitude: parseFloat(g.longitude) || 0,
             radius_meters: g.radius_meters
           };
         });
 
         setAvailableGeofences(parsedGeofences);
-        console.log(`Loaded ${parsedGeofences.length} geofences (fallback from old table)`);
+        console.log(`Loaded ${parsedGeofences.length} geofences from geofences table`);
         return;
       }
 

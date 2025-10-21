@@ -302,9 +302,32 @@ export function useTransporters() {
 
   const createTransporter = useCallback(async (transporterData: Partial<EnhancedTransporter>) => {
     try {
+      // Get authenticated user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get user's tenant_id
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', session.user.id)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('User not found or unauthorized');
+      }
+
+      // Add tenant_id to the transporter data
+      const dataWithTenant = {
+        ...transporterData,
+        tenant_id: userData.tenant_id
+      };
+
       const { data, error } = await supabase
         .from('transporters')
-        .insert([transporterData])
+        .insert([dataWithTenant])
         .select()
         .single();
 
@@ -419,9 +442,32 @@ export function useContacts() {
 
   const createContact = useCallback(async (contactData: Partial<EnhancedContact>) => {
     try {
+      // Get authenticated user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get user's tenant_id
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', session.user.id)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('User not found or unauthorized');
+      }
+
+      // Add tenant_id to the contact data
+      const dataWithTenant = {
+        ...contactData,
+        tenant_id: userData.tenant_id
+      };
+
       const { data, error } = await supabase
         .from('contacts')
-        .insert([contactData])
+        .insert([dataWithTenant])
         .select()
         .single();
 
@@ -503,6 +549,8 @@ export function useEnhancedGeofences() {
   const fetchGeofences = useCallback(async (geofenceType?: string) => {
     try {
       setLoading(true);
+      
+      // Try enhanced_geofences first
       let query = supabase
         .from('enhanced_geofences')
         .select('*')
@@ -512,12 +560,61 @@ export function useEnhancedGeofences() {
         query = query.eq('geofence_type', geofenceType);
       }
 
-      const { data, error } = await query
+      const { data: enhancedData, error: enhancedError } = await query
         .order('usage_count', { ascending: false })
         .order('name');
 
-      if (error) throw error;
-      setGeofences(data || []);
+      // If enhanced_geofences has data, use it
+      if (!enhancedError && enhancedData && enhancedData.length > 0) {
+        setGeofences(enhancedData);
+      } else {
+        // Fallback to regular geofences table
+        console.log('No enhanced_geofences found, using regular geofences table');
+        const { data: regularData, error: regularError } = await supabase
+          .from('geofences')
+          .select('*')
+          .eq('is_active', true)
+          .order('name');
+
+        if (regularError) throw regularError;
+        
+        // Map regular geofences to enhanced format
+        const mappedGeofences = (regularData || []).map((g: any) => {
+          // Parse PostGIS POINT if needed
+          let latitude = g.latitude || 0;
+          let longitude = g.longitude || 0;
+          
+          if (g.location && typeof g.location === 'string') {
+            const match = g.location.match(/POINT\(([^)]+)\)/);
+            if (match) {
+              [longitude, latitude] = match[1].split(" ").map(Number);
+            }
+          }
+          
+          return {
+            id: g.id,
+            tenant_id: g.tenant_id,
+            name: g.name,
+            description: g.description,
+            geofence_type: g.geofence_type || 'custom',
+            center_latitude: latitude,
+            center_longitude: longitude,
+            radius_meters: g.radius_meters || 100,
+            shape_type: 'circle',
+            is_active: g.is_active,
+            usage_count: 0,
+            created_at: g.created_at,
+            updated_at: g.updated_at,
+            is_template: false,
+            priority_level: 1,
+            trigger_event: 'entry',
+            notification_enabled: false,
+            alert_enabled: false
+          } as EnhancedGeofence;
+        });
+        
+        setGeofences(mappedGeofences);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -527,16 +624,86 @@ export function useEnhancedGeofences() {
 
   const createGeofence = useCallback(async (geofenceData: Partial<EnhancedGeofence>) => {
     try {
-      const { data, error } = await supabase
+      // Get authenticated user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get user's tenant_id
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', session.user.id)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('User not found or unauthorized');
+      }
+
+      // Try to insert into enhanced_geofences first
+      const enhancedData = {
+        ...geofenceData,
+        tenant_id: userData.tenant_id
+      };
+
+      const { data: enhancedResult, error: enhancedError } = await supabase
         .from('enhanced_geofences')
-        .insert([geofenceData])
+        .insert([enhancedData])
+        .select()
+        .single();
+
+      if (!enhancedError && enhancedResult) {
+        setGeofences(prev => [...prev, enhancedResult]);
+        return { success: true, data: enhancedResult };
+      }
+
+      // Fallback to regular geofences table
+      console.log('Enhanced geofences insert failed, using regular geofences table:', enhancedError);
+      
+      const regularData = {
+        tenant_id: userData.tenant_id,
+        name: geofenceData.name,
+        description: geofenceData.description,
+        latitude: geofenceData.center_latitude,
+        longitude: geofenceData.center_longitude,
+        radius_meters: geofenceData.radius_meters || 100,
+        is_active: geofenceData.is_active !== false,
+        geofence_type: geofenceData.geofence_type
+      };
+
+      const { data, error } = await supabase
+        .from('geofences')
+        .insert([regularData])
         .select()
         .single();
 
       if (error) throw error;
       
-      setGeofences(prev => [...prev, data]);
-      return { success: true, data };
+      // Map back to enhanced format
+      const mappedData: EnhancedGeofence = {
+        id: data.id,
+        tenant_id: data.tenant_id,
+        name: data.name,
+        description: data.description,
+        geofence_type: data.geofence_type || 'custom',
+        center_latitude: data.latitude || 0,
+        center_longitude: data.longitude || 0,
+        radius_meters: data.radius_meters || 100,
+        shape_type: 'circle',
+        is_active: data.is_active,
+        usage_count: 0,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        is_template: false,
+        priority_level: 1,
+        trigger_event: 'entry',
+        notification_enabled: false,
+        alert_enabled: false
+      };
+      
+      setGeofences(prev => [...prev, mappedData]);
+      return { success: true, data: mappedData };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -544,17 +711,65 @@ export function useEnhancedGeofences() {
 
   const updateGeofence = useCallback(async (id: string, updates: Partial<EnhancedGeofence>) => {
     try {
-      const { data, error } = await supabase
+      // Try enhanced_geofences first
+      const { data: enhancedData, error: enhancedError } = await supabase
         .from('enhanced_geofences')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();
 
+      if (!enhancedError && enhancedData) {
+        setGeofences(prev => prev.map(g => g.id === id ? enhancedData : g));
+        return { success: true, data: enhancedData };
+      }
+
+      // Fallback to regular geofences table
+      const regularUpdates: any = {
+        updated_at: new Date().toISOString()
+      };
+      
+      if (updates.name) regularUpdates.name = updates.name;
+      if (updates.description) regularUpdates.description = updates.description;
+      if (updates.center_latitude) regularUpdates.latitude = updates.center_latitude;
+      if (updates.center_longitude) regularUpdates.longitude = updates.center_longitude;
+      if (updates.radius_meters) regularUpdates.radius_meters = updates.radius_meters;
+      if (updates.is_active !== undefined) regularUpdates.is_active = updates.is_active;
+      if (updates.geofence_type) regularUpdates.geofence_type = updates.geofence_type;
+
+      const { data, error } = await supabase
+        .from('geofences')
+        .update(regularUpdates)
+        .eq('id', id)
+        .select()
+        .single();
+
       if (error) throw error;
       
-      setGeofences(prev => prev.map(g => g.id === id ? data : g));
-      return { success: true, data };
+      // Map back to enhanced format
+      const mappedData: EnhancedGeofence = {
+        id: data.id,
+        tenant_id: data.tenant_id,
+        name: data.name,
+        description: data.description,
+        geofence_type: data.geofence_type || 'custom',
+        center_latitude: data.latitude || 0,
+        center_longitude: data.longitude || 0,
+        radius_meters: data.radius_meters || 100,
+        shape_type: 'circle',
+        is_active: data.is_active,
+        usage_count: 0,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        is_template: false,
+        priority_level: 1,
+        trigger_event: 'entry',
+        notification_enabled: false,
+        alert_enabled: false
+      };
+      
+      setGeofences(prev => prev.map(g => g.id === id ? mappedData : g));
+      return { success: true, data: mappedData };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -566,6 +781,7 @@ export function useEnhancedGeofences() {
     region?: string;
   }) => {
     try {
+      // Try enhanced_geofences first
       let query = supabase
         .from('enhanced_geofences')
         .select('*')
@@ -587,13 +803,70 @@ export function useEnhancedGeofences() {
         query = query.eq('region', filters.region);
       }
 
-      const { data, error } = await query
+      const { data: enhancedData, error: enhancedError } = await query
         .order('usage_count', { ascending: false })
         .order('name')
         .limit(100);
 
-      if (error) throw error;
-      return { success: true, data: data || [] };
+      if (!enhancedError && enhancedData && enhancedData.length > 0) {
+        return { success: true, data: enhancedData };
+      }
+
+      // Fallback to regular geofences table
+      let regularQuery = supabase
+        .from('geofences')
+        .select('*')
+        .eq('is_active', true);
+
+      if (searchTerm) {
+        regularQuery = regularQuery.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+      }
+
+      if (filters?.type) {
+        regularQuery = regularQuery.eq('geofence_type', filters.type);
+      }
+
+      const { data: regularData, error: regularError } = await regularQuery
+        .order('name')
+        .limit(100);
+
+      if (regularError) throw regularError;
+
+      // Map regular geofences to enhanced format
+      const mappedGeofences = (regularData || []).map((g: any) => {
+        let latitude = g.latitude || 0;
+        let longitude = g.longitude || 0;
+        
+        if (g.location && typeof g.location === 'string') {
+          const match = g.location.match(/POINT\(([^)]+)\)/);
+          if (match) {
+            [longitude, latitude] = match[1].split(" ").map(Number);
+          }
+        }
+        
+        return {
+          id: g.id,
+          tenant_id: g.tenant_id,
+          name: g.name,
+          description: g.description,
+          geofence_type: g.geofence_type || 'custom',
+          center_latitude: latitude,
+          center_longitude: longitude,
+          radius_meters: g.radius_meters || 100,
+          shape_type: 'circle',
+          is_active: g.is_active,
+          usage_count: 0,
+          created_at: g.created_at,
+          updated_at: g.updated_at,
+          is_template: false,
+          priority_level: 1,
+          trigger_event: 'entry',
+          notification_enabled: false,
+          alert_enabled: false
+        } as EnhancedGeofence;
+      });
+
+      return { success: true, data: mappedGeofences };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -646,9 +919,32 @@ export function useOrderTemplates() {
 
   const createTemplate = useCallback(async (templateData: Partial<OrderTemplate>) => {
     try {
+      // Get authenticated user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get user's tenant_id
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', session.user.id)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('User not found or unauthorized');
+      }
+
+      // Add tenant_id to the template data
+      const dataWithTenant = {
+        ...templateData,
+        tenant_id: userData.tenant_id
+      };
+
       const { data, error } = await supabase
         .from('order_templates')
-        .insert([templateData])
+        .insert([dataWithTenant])
         .select()
         .single();
 
