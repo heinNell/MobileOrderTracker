@@ -76,15 +76,21 @@ export default function TrackingPage() {
 
   // Cleanup on unmount
   useEffect(() => {
+    // Capture ref values at effect time for cleanup
+    const routeCalculator = routeCalculatorRef.current;
+    const etaCalculators = etaCalculatorsRef.current;
+    const refreshInterval = refreshIntervalRef.current;
+    const locationChannel = locationChannelRef.current;
+
     return () => {
       isMountedRef.current = false;
-      routeCalculatorRef.current.clearCache();
-      Object.values(etaCalculatorsRef.current).forEach((calc) => calc.clearHistory());
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
+      routeCalculator.clearCache();
+      Object.values(etaCalculators).forEach((calc) => calc.clearHistory());
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
       }
-      if (locationChannelRef.current) {
-        supabase.removeChannel(locationChannelRef.current);
+      if (locationChannel) {
+        supabase.removeChannel(locationChannel);
       }
     };
   }, []);
@@ -108,11 +114,13 @@ export default function TrackingPage() {
     if (directionsServiceRef.current && orders.length > 0) {
       fetchPlannedRoutesForOrders();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders]);
 
   // Calculate enhanced routes whenever orders, locations, or planned routes change
   useEffect(() => {
     calculateEnhancedRoutes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, locationUpdates, plannedRoutes]);
 
   // Check authentication
@@ -157,6 +165,7 @@ export default function TrackingPage() {
         clearInterval(refreshIntervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Parse coordinates from either lat/lng columns or PostGIS location

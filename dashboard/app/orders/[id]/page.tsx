@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { exportOrderToPDF } from "../../../lib/pdf-export";
 import { supabase } from "../../../lib/supabase";
 import { handleApiError, handleSuccess } from "../../../lib/utils";
@@ -73,39 +73,30 @@ export default function OrderDetailPage({
   const router = useRouter();
 
   useEffect(() => {
+    const checkAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      setUser(session.user);
+    };
+
     const initializePage = async () => {
       const resolvedParams = await params;
       setOrderId(resolvedParams.id);
       await checkAuth();
     };
-    initializePage();
-  }, [params]);
-
-  const checkAuth = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-
-    setUser(session.user);
-  };
-
-  // Fetch data when orderId is available
-  useEffect(() => {
-    if (orderId && user) {
-      fetchOrderData();
-      subscribeToUpdates();
-    }
-  }, [orderId, user]);
-
-  const fetchOrderData = async () => {
-    if (!orderId) return;
     
-    try {
+    initializePage();
+  }, [params, router]);
+
+  const fetchOrderData = useCallback(async () => {
+    if (!orderId) return;    try {
       // Fetch order details
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
@@ -223,9 +214,9 @@ export default function OrderDetailPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderId]);
 
-  const subscribeToUpdates = () => {
+  const subscribeToUpdates = useCallback(() => {
     // Subscribe to order changes
     const orderChannel = supabase
       .channel(`order:${orderId}`)
@@ -332,7 +323,16 @@ export default function OrderDetailPage({
         supabase.removeChannel(driverLocationChannel);
       }
     };
-  };
+  }, [orderId, order?.assigned_driver_id]);
+
+  // Fetch data when orderId is available
+  useEffect(() => {
+    if (!orderId || !user) return;
+
+    fetchOrderData();
+    const cleanup = subscribeToUpdates();
+    return cleanup;
+  }, [orderId, user, fetchOrderData, subscribeToUpdates]);
 
   const getStatusColor = (status: string): string => {
     const colors: Record<string, string> = {

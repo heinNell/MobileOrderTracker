@@ -2,7 +2,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { exportOrderToPDF } from "../../lib/pdf-export";
 import
@@ -60,13 +60,28 @@ export default function EnhancedOrdersPage() {
   const ordersPerPage = 10;
   const router = useRouter();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const filterAndSortOrders = useCallback(() => {
+    let result = [...orders];
 
-  useEffect(() => {
-    filterAndSortOrders();
-  }, [orders, searchTerm, statusFilter, sortBy, sortOrder, currentPage]);
+    // Apply search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (order) =>
+          order.order_number.toLowerCase().includes(term) ||
+          (order.sku && order.sku.toLowerCase().includes(term)) ||
+          order.loading_point_name.toLowerCase().includes(term) ||
+          order.unloading_point_name.toLowerCase().includes(term)
+      );
+    }
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      result = result.filter((order) => order.status === statusFilter);
+    }
+
+    setFilteredOrders(result);
+  }, [orders, searchTerm, statusFilter]);
 
   const checkAuth = async () => {
     try {
@@ -101,6 +116,15 @@ export default function EnhancedOrdersPage() {
       handleApiError(error, "Failed to authenticate");
     }
   };
+
+  useEffect(() => {
+    checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    filterAndSortOrders();
+  }, [filterAndSortOrders]);
 
   const performDiagnostics = async (user: any) => {
     try {
@@ -389,29 +413,6 @@ export default function EnhancedOrdersPage() {
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(driversChannel);
     };
-  };
-
-  const filterAndSortOrders = () => {
-    let result = [...orders];
-
-    // Apply search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (order) =>
-          order.order_number.toLowerCase().includes(term) ||
-          (order.sku && order.sku.toLowerCase().includes(term)) ||
-          order.loading_point_name.toLowerCase().includes(term) ||
-          order.unloading_point_name.toLowerCase().includes(term)
-      );
-    }
-
-    // Apply status filter
-    if (statusFilter !== "all") {
-      result = result.filter((order) => order.status === statusFilter);
-    }
-
-    setFilteredOrders(result);
   };
 
   const handleGenerateQR = async (orderId: string) => {

@@ -34,7 +34,7 @@ import
     useDisclosure
   } from "@nextui-org/react";
 import { debounce } from "lodash";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { CreateContactModal } from "../../components/modals/CreateContactModal";
 import { EnhancedContact, useContacts } from "../../hooks/useEnhancedData";
@@ -62,12 +62,13 @@ export default function ContactsPage() {
   const editModal = useDisclosure();
   const deleteModal = useDisclosure();
 
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setSearchTerm(value);
-      setPage(1);
-    }, 300),
-    []
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((value: string) => {
+        setSearchTerm(value);
+        setPage(1);
+      }, 300),
+    [setSearchTerm, setPage]
   );
 
   const filteredContacts = useMemo(() => {
@@ -303,6 +304,7 @@ export default function ContactsPage() {
                 className="md:w-96"
                 isClearable
                 onClear={() => setSearchTerm("")}
+                aria-label="Search contacts"
                 classNames={{
                   input: "text-sm",
                   inputWrapper: "border-1 border-gray-200 hover:border-purple-400 focus-within:!border-purple-500 shadow-sm"
@@ -318,6 +320,7 @@ export default function ContactsPage() {
                 className="md:w-64"
                 startContent={<FunnelIcon className="w-4 h-4 text-gray-400" />}
                 items={[{ key: "", label: "All Types" }, ...contactTypes.map(type => ({ key: type, label: type.charAt(0).toUpperCase() + type.slice(1) }))]}
+                aria-label="Filter by contact type"
                 classNames={{
                   trigger: "border-1 border-gray-200 hover:border-purple-400 shadow-sm"
                 }}
@@ -336,6 +339,7 @@ export default function ContactsPage() {
                   setPage(1);
                 }}
                 className="md:w-48"
+                aria-label="Filter by status"
                 classNames={{
                   trigger: "border-1 border-gray-200 hover:border-purple-400 shadow-sm"
                 }}
@@ -353,6 +357,7 @@ export default function ContactsPage() {
                   setPage(1);
                 }}
                 className="md:w-48"
+                aria-label="Sort contacts by"
               >
                 <SelectItem key="full_name" value="full_name">Name</SelectItem>
                 <SelectItem key="company_name" value="company_name">Company</SelectItem>

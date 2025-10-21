@@ -87,21 +87,21 @@ export default function GeofencesPage() {
   );
 
   useEffect(() => {
+    const checkAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+      setUser(session.user);
+      fetchGeofences();
+    };
+
     checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-    setUser(session.user);
-    fetchGeofences();
-  };
+  }, [router]);
 
   const fetchGeofences = async () => {
     try {

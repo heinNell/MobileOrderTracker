@@ -2,8 +2,6 @@
 
 import React, { useState } from "react";
 import {
-  generateQRCode,
-  validateQRCode,
   testQRCodeFlow,
   generateMobileDeepLink,
 } from "../../lib/qr-service";

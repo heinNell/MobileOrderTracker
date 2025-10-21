@@ -173,10 +173,14 @@ export default function PublicOrderTracking() {
 
   // Cleanup on unmount
   useEffect(() => {
+    // Capture ref values at effect time for cleanup
+    const routeCalculator = routeCalculatorRef.current;
+    const etaCalculator = etaCalculatorRef.current;
+
     return () => {
       isMountedRef.current = false;
-      routeCalculatorRef.current.clearCache();
-      etaCalculatorRef.current.clearHistory();
+      routeCalculator.clearCache();
+      etaCalculator.clearHistory();
     };
   }, []);
 

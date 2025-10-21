@@ -34,7 +34,7 @@ import
     useDisclosure,
   } from "@nextui-org/react";
 import { debounce } from "lodash";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { CreateTransporterModal } from "../../components/modals/CreateTransporterModal";
 import { EnhancedTransporter, useTransporters } from "../../hooks/useEnhancedData";
@@ -62,12 +62,13 @@ export default function TransportersPage() {
   const editModal = useDisclosure();
   const deleteModal = useDisclosure();
 
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setSearchTerm(value);
-      setPage(1);
-    }, 300),
-    []
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((value: string) => {
+        setSearchTerm(value);
+        setPage(1);
+      }, 300),
+    [setSearchTerm, setPage]
   );
 
   const filteredTransporters = useMemo(() => {

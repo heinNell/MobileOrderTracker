@@ -32,7 +32,7 @@ import
     useDisclosure,
   } from "@nextui-org/react";
 import { debounce } from "lodash";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { CreateTemplateModal } from "../../components/modals/CreateModalsExtended";
 import { OrderTemplate, useOrderTemplates } from "../../hooks/useEnhancedData";
@@ -59,12 +59,13 @@ export default function TemplatesPage() {
     return { success: false, error: "Not implemented" };
   };
 
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setSearchTerm(value);
-      setPage(1);
-    }, 300),
-    []
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((value: string) => {
+        setSearchTerm(value);
+        setPage(1);
+      }, 300),
+    [setSearchTerm, setPage]
   );
 
   // Filter and sort templates

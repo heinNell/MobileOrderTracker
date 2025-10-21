@@ -42,7 +42,31 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+
+    const checkAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      setUser(session.user);
+      fetchOrders();
+      cleanup = subscribeToOrders();
+    };
+
     checkAuth();
+
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -56,6 +80,7 @@ export default function DashboardPage() {
     }, 300000); // 5 minutes
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh]);
 
   const handleManualRefresh = () => {
@@ -63,21 +88,6 @@ export default function DashboardPage() {
     setLoading(true);
     fetchOrders();
     setLastRefresh(new Date());
-  };
-
-  const checkAuth = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-
-    setUser(session.user);
-    fetchOrders();
-    subscribeToOrders();
   };
 
   const fetchOrders = async () => {
