@@ -213,17 +213,20 @@ export default function EnhancedOrderForm({
 
         // Convert TEXT latitude/longitude to numbers
         const parsedGeofences = (fallbackGeofences || []).map(g => {
+          const lat = parseFloat(g.latitude);
+          const lng = parseFloat(g.longitude);
+          console.log(`Parsing geofence: ${g.name}, lat: ${g.latitude} -> ${lat}, lng: ${g.longitude} -> ${lng}`);
           return {
             id: g.id,
             name: g.name,
-            latitude: parseFloat(g.latitude) || 0,
-            longitude: parseFloat(g.longitude) || 0,
+            latitude: lat || 0,
+            longitude: lng || 0,
             radius_meters: g.radius_meters
           };
         });
 
         setAvailableGeofences(parsedGeofences);
-        console.log(`Loaded ${parsedGeofences.length} geofences from geofences table`);
+        console.log(`✅ Loaded ${parsedGeofences.length} geofences from geofences table:`, parsedGeofences.slice(0, 3));
         return;
       }
 
@@ -567,11 +570,11 @@ export default function EnhancedOrderForm({
   };
 
   const tabs = [
-    { id: "basic", label: "Basic Info", icon: "📋" },
-    { id: "driver", label: "Driver", icon: "👤" },
-    { id: "locations", label: "Locations", icon: "📍" },
-    { id: "transporter", label: "Transporter", icon: "🚚" },
-    { id: "additional", label: "Additional", icon: "📝" },
+    { id: "basic", label: "Basic Info", icon: "" },
+    { id: "driver", label: "Driver", icon: "" },
+    { id: "locations", label: "Locations", icon: "" },
+    { id: "transporter", label: "Transporter", icon: "" },
+    { id: "additional", label: "Additional", icon: "" },
   ] as const;
 
   return (
@@ -693,7 +696,7 @@ export default function EnhancedOrderForm({
                               )}
                               <div className="flex gap-4 mt-1">
                                 {selectedCustomerContact.primary_phone && (
-                                  <p className="text-sm text-gray-600">📞 {selectedCustomerContact.primary_phone}</p>
+                                  <p className="text-sm text-gray-600">{selectedCustomerContact.primary_phone}</p>
                                 )}
                                 {selectedCustomerContact.primary_email && (
                                   <p className="text-sm text-gray-600">✉️ {selectedCustomerContact.primary_email}</p>
@@ -978,7 +981,7 @@ export default function EnhancedOrderForm({
                   ) : availableGeofences.length > 0 ? (
                     <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
                       <label className="block text-sm font-medium text-blue-900 mb-2">
-                        📍 Quick Select from Saved Locations
+                        Quick Select from Saved Locations
                       </label>
                       <select
                         onChange={(e) => handleLoadingGeofenceSelect(e.target.value)}
@@ -992,7 +995,7 @@ export default function EnhancedOrderForm({
                         ))}
                       </select>
                       <p className="text-xs text-blue-700 mt-2">
-                        💡 Tip: Select a location to auto-fill the fields below, or enter details manually
+                        Tip: Select a location to auto-fill the fields below, or enter details manually
                       </p>
                     </div>
                   ) : null}
@@ -1089,7 +1092,7 @@ export default function EnhancedOrderForm({
                   ) : availableGeofences.length > 0 ? (
                     <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
                       <label className="block text-sm font-medium text-green-900 mb-2">
-                        📍 Quick Select from Saved Locations
+                        Quick Select from Saved Locations
                       </label>
                       <select
                         onChange={(e) => handleUnloadingGeofenceSelect(e.target.value)}
@@ -1103,7 +1106,7 @@ export default function EnhancedOrderForm({
                         ))}
                       </select>
                       <p className="text-xs text-green-700 mt-2">
-                        💡 Tip: Select a location to auto-fill the fields below, or enter details manually
+                        Tip: Select a location to auto-fill the fields below, or enter details manually
                       </p>
                     </div>
                   ) : null}
@@ -1217,7 +1220,7 @@ export default function EnhancedOrderForm({
                               )}
                               <div className="flex flex-wrap gap-4 mt-2">
                                 {selectedTransporter.primary_contact_phone && (
-                                  <p className="text-sm text-gray-600">📞 {selectedTransporter.primary_contact_phone}</p>
+                                  <p className="text-sm text-gray-600">{selectedTransporter.primary_contact_phone}</p>
                                 )}
                                 {selectedTransporter.primary_contact_email && (
                                   <p className="text-sm text-gray-600">✉️ {selectedTransporter.primary_contact_email}</p>
