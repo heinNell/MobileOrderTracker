@@ -26,13 +26,16 @@ import
     ModalContent,
     ModalFooter,
     ModalHeader,
+    Pagination,
     Select,
     SelectItem,
     Spinner,
     Tooltip,
     useDisclosure,
   } from "@nextui-org/react";
-import { useMemo, useState } from "react";
+import { debounce } from "lodash";
+import { useCallback, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { CreateTransporterModal } from "../../components/modals/CreateTransporterModal";
 import { EnhancedTransporter, useTransporters } from "../../hooks/useEnhancedData";
 
@@ -44,18 +47,31 @@ export default function TransportersPage() {
     return { success: false, error: "Not implemented" };
   };
 
+  const [page, setPage] = useState(1);
+  const [rowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterServiceType, setFilterServiceType] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedTransporter, setSelectedTransporter] = useState<EnhancedTransporter | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const createModal = useDisclosure();
   const editModal = useDisclosure();
   const deleteModal = useDisclosure();
 
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setSearchTerm(value);
+      setPage(1);
+    }, 300),
+    []
+  );
+
   const filteredTransporters = useMemo(() => {
-    return transporters.filter((transporter) => {
+    let result = transporters.filter((transporter) => {
       const matchesSearch =
         !searchTerm ||
         transporter.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -75,7 +91,33 @@ export default function TransportersPage() {
 
       return matchesSearch && matchesServiceType && matchesStatus;
     });
-  }, [transporters, searchTerm, filterServiceType, filterStatus]);
+
+    // Sort transporters
+    result.sort((a, b) => {
+      const aValue = a[sortBy as keyof EnhancedTransporter];
+      const bValue = b[sortBy as keyof EnhancedTransporter];
+      
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortOrder === "asc"
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [transporters, searchTerm, filterServiceType, filterStatus, sortBy, sortOrder]);
+
+  // Pagination
+  const paginatedTransporters = useMemo(() => {
+    const start = (page - 1) * rowsPerPage;
+    return filteredTransporters.slice(start, start + rowsPerPage);
+  }, [filteredTransporters, page, rowsPerPage]);
+
+  const totalPages = Math.ceil(filteredTransporters.length / rowsPerPage);
 
   const handleEdit = (transporter: EnhancedTransporter) => {
     setSelectedTransporter(transporter);
@@ -89,25 +131,49 @@ export default function TransportersPage() {
 
   const handleDeleteConfirm = async () => {
     if (deleteConfirmId) {
-      const result = await deleteTransporter(deleteConfirmId);
-      if (result.success) {
-        refetch();
-      } else {
-        alert(`Failed to delete: ${result.error}`);
+      setActionLoading(deleteConfirmId);
+      try {
+        const result = await deleteTransporter(deleteConfirmId);
+        if (result.success) {
+          toast.success("Transporter deleted successfully");
+          refetch();
+        } else {
+          toast.error(`Failed to delete: ${result.error}`);
+        }
+      } catch (error: any) {
+        toast.error(`Error: ${error.message}`);
+      } finally {
+        setActionLoading(null);
+        deleteModal.onClose();
+        setDeleteConfirmId(null);
       }
-      deleteModal.onClose();
-      setDeleteConfirmId(null);
     }
   };
 
   const handleTogglePreferred = async (transporter: EnhancedTransporter) => {
-    await updateTransporter(transporter.id, { is_preferred: !transporter.is_preferred });
-    refetch();
+    setActionLoading(transporter.id);
+    try {
+      await updateTransporter(transporter.id, { is_preferred: !transporter.is_preferred });
+      toast.success(`Transporter ${transporter.is_preferred ? 'removed from' : 'added to'} preferred list`);
+      refetch();
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleToggleActive = async (transporter: EnhancedTransporter) => {
-    await updateTransporter(transporter.id, { is_active: !transporter.is_active });
-    refetch();
+    setActionLoading(transporter.id);
+    try {
+      await updateTransporter(transporter.id, { is_active: !transporter.is_active });
+      toast.success(`Transporter ${transporter.is_active ? 'deactivated' : 'activated'}`);
+      refetch();
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const serviceTypes = useMemo(() => {
@@ -223,7 +289,7 @@ export default function TransportersPage() {
               <Input
                 placeholder="Search by name, company, email, or phone..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => debouncedSearch(e.target.value)}
                 startContent={<MagnifyingGlassIcon className="w-5 h-5 text-gray-400" />}
                 className="md:w-96"
                 isClearable
@@ -236,7 +302,10 @@ export default function TransportersPage() {
               <Select
                 placeholder="Filter by Service Type"
                 selectedKeys={filterServiceType ? [filterServiceType] : []}
-                onChange={(e) => setFilterServiceType(e.target.value)}
+                onChange={(e) => {
+                  setFilterServiceType(e.target.value);
+                  setPage(1);
+                }}
                 className="md:w-64"
                 startContent={<FunnelIcon className="w-4 h-4 text-gray-400" />}
                 items={[
@@ -262,7 +331,10 @@ export default function TransportersPage() {
               <Select
                 placeholder="Filter by Status"
                 selectedKeys={[filterStatus]}
-                onChange={(e) => setFilterStatus(e.target.value || "all")}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value || "all");
+                  setPage(1);
+                }}
                 className="md:w-48"
                 classNames={{
                   trigger: "border-1 border-gray-200 hover:border-purple-400 shadow-sm"
@@ -271,8 +343,28 @@ export default function TransportersPage() {
                 <SelectItem key="all" value="all">All Status</SelectItem>
                 <SelectItem key="active" value="active">Active Only</SelectItem>
                 <SelectItem key="inactive" value="inactive">Inactive Only</SelectItem>
-                <SelectItem key="primary" value="primary">Primary Only</SelectItem>
+                <SelectItem key="preferred" value="preferred">Preferred Only</SelectItem>
               </Select>
+              <Select
+                placeholder="Sort By"
+                selectedKeys={[sortBy]}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setPage(1);
+                }}
+                className="md:w-48"
+              >
+                <SelectItem key="name" value="name">Name</SelectItem>
+                <SelectItem key="company_name" value="company_name">Company</SelectItem>
+                <SelectItem key="performance_rating" value="performance_rating">Rating</SelectItem>
+              </Select>
+              <Button
+                variant="light"
+                onPress={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                aria-label={`Sort ${sortOrder === "asc" ? "Descending" : "Ascending"}`}
+              >
+                {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+              </Button>
             </div>
           </CardBody>
         </Card>
@@ -294,6 +386,16 @@ export default function TransportersPage() {
                   <span className="font-semibold text-gray-700">{filteredTransporters.length}</span>
                 </Chip>
               </div>
+              {totalPages > 1 && (
+                <Pagination
+                  total={totalPages}
+                  page={page}
+                  onChange={setPage}
+                  size="sm"
+                  showControls
+                  aria-label="Transporter Pagination"
+                />
+              )}
             </div>
           </CardHeader>
           <CardBody className="p-6">
@@ -301,10 +403,10 @@ export default function TransportersPage() {
               <div className="flex justify-center py-20">
                 <div className="text-center">
                   <Spinner size="lg" className="mb-4" color="secondary" />
-                  <p className="text-gray-500">Loading contacts...</p>
+                  <p className="text-gray-500">Loading transporters...</p>
                 </div>
               </div>
-            ) : filteredTransporters.length === 0 ? (
+            ) : paginatedTransporters.length === 0 ? (
               <div className="text-center py-20">
                 <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mx-auto mb-6">
                   <TruckIcon className="w-12 h-12 text-gray-400" />
@@ -328,7 +430,7 @@ export default function TransportersPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredTransporters.map((transporter) => (
+                {paginatedTransporters.map((transporter) => (
                   <Card 
                     key={transporter.id} 
                     className="border-1 border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-300 transition-all duration-200 bg-white"

@@ -1,36 +1,39 @@
 "use client";
 
-import {
-  EnvelopeIcon,
-  FunnelIcon,
-  MagnifyingGlassIcon,
-  MapPinIcon,
-  PencilIcon,
-  PhoneIcon,
-  PlusIcon,
-  TrashIcon,
-  TruckIcon,
-  UserGroupIcon,
-} from "@heroicons/react/24/outline";
-import {
-  Button,
-  Card,
-  CardBody,
-  CardHeader,
-  Chip,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Select,
-  SelectItem,
-  Spinner,
-  Tooltip,
-  useDisclosure,
-} from "@nextui-org/react";
-import { useMemo, useState } from "react";
+import
+  {
+    EnvelopeIcon,
+    FunnelIcon,
+    MagnifyingGlassIcon,
+    MapPinIcon,
+    PencilIcon,
+    PhoneIcon,
+    PlusIcon,
+    TrashIcon,
+    TruckIcon,
+    UserGroupIcon,
+  } from "@heroicons/react/24/outline";
+import
+  {
+    Button,
+    Card,
+    CardBody,
+    CardHeader,
+    Chip,
+    Input,
+    Modal,
+    ModalBody,
+    ModalContent,
+    ModalFooter,
+    ModalHeader,
+    Select,
+    SelectItem,
+    Spinner,
+    Tooltip,
+    useDisclosure
+  } from "@nextui-org/react";
+import { debounce } from "lodash";
+import { useCallback, useMemo, useState } from "react";
 import { CreateContactModal } from "../../components/modals/CreateContactModal";
 import { EnhancedContact, useContacts } from "../../hooks/useEnhancedData";
 
@@ -42,18 +45,31 @@ export default function ContactsPage() {
     return { success: false, error: "Not implemented" };
   };
 
+  const [page, setPage] = useState(1);
+  const [rowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterContactType, setFilterContactType] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [sortBy, setSortBy] = useState("full_name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedContact, setSelectedContact] = useState<EnhancedContact | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const createModal = useDisclosure();
   const editModal = useDisclosure();
   const deleteModal = useDisclosure();
 
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setSearchTerm(value);
+      setPage(1);
+    }, 300),
+    []
+  );
+
   const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
+    let result = contacts.filter((contact) => {
       const matchesSearch =
         !searchTerm ||
         contact.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -71,7 +87,33 @@ export default function ContactsPage() {
 
       return matchesSearch && matchesType && matchesStatus;
     });
-  }, [contacts, searchTerm, filterContactType, filterStatus]);
+
+    // Sort contacts
+    result.sort((a, b) => {
+      const aValue = a[sortBy as keyof EnhancedContact];
+      const bValue = b[sortBy as keyof EnhancedContact];
+      
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortOrder === "asc"
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [contacts, searchTerm, filterContactType, filterStatus, sortBy, sortOrder]);
+
+  // Pagination
+  const paginatedContacts = useMemo(() => {
+    const start = (page - 1) * rowsPerPage;
+    return filteredContacts.slice(start, start + rowsPerPage);
+  }, [filteredContacts, page, rowsPerPage]);
+
+  const totalPages = Math.ceil(filteredContacts.length / rowsPerPage);
 
   const handleEdit = (contact: EnhancedContact) => {
     setSelectedContact(contact);
@@ -85,25 +127,49 @@ export default function ContactsPage() {
 
   const handleDeleteConfirm = async () => {
     if (deleteConfirmId) {
-      const result = await deleteContact(deleteConfirmId);
-      if (result.success) {
-        refetch();
-      } else {
-        alert(`Failed to delete: ${result.error}`);
+      setActionLoading(deleteConfirmId);
+      try {
+        const result = await deleteContact(deleteConfirmId);
+        if (result.success) {
+          toast.success("Contact deleted successfully");
+          refetch();
+        } else {
+          toast.error(`Failed to delete: ${result.error}`);
+        }
+      } catch (error: any) {
+        toast.error(`Error: ${error.message}`);
+      } finally {
+        setActionLoading(null);
+        deleteModal.onClose();
+        setDeleteConfirmId(null);
       }
-      deleteModal.onClose();
-      setDeleteConfirmId(null);
     }
   };
 
   const handleTogglePrimary = async (contact: EnhancedContact) => {
-    await updateContact(contact.id, { is_primary: !contact.is_primary });
-    refetch();
+    setActionLoading(contact.id);
+    try {
+      await updateContact(contact.id, { is_primary: !contact.is_primary });
+      toast.success(`Contact ${contact.is_primary ? 'removed from' : 'set as'} primary`);
+      refetch();
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleToggleActive = async (contact: EnhancedContact) => {
-    await updateContact(contact.id, { is_active: !contact.is_active });
-    refetch();
+    setActionLoading(contact.id);
+    try {
+      await updateContact(contact.id, { is_active: !contact.is_active });
+      toast.success(`Contact ${contact.is_active ? 'deactivated' : 'activated'}`);
+      refetch();
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const contactTypes = useMemo(() => {
@@ -230,7 +296,7 @@ export default function ContactsPage() {
               <Input
                 placeholder="Search by name, company, email, or phone..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => debouncedSearch(e.target.value)}
                 startContent={<MagnifyingGlassIcon className="w-5 h-5 text-gray-400" />}
                 className="md:w-96"
                 isClearable
@@ -243,7 +309,10 @@ export default function ContactsPage() {
               <Select
                 placeholder="Filter by Contact Type"
                 selectedKeys={filterContactType ? [filterContactType] : []}
-                onChange={(e) => setFilterContactType(e.target.value)}
+                onChange={(e) => {
+                  setFilterContactType(e.target.value);
+                  setPage(1);
+                }}
                 className="md:w-64"
                 startContent={<FunnelIcon className="w-4 h-4 text-gray-400" />}
                 items={[{ key: "", label: "All Types" }, ...contactTypes.map(type => ({ key: type, label: type.charAt(0).toUpperCase() + type.slice(1) }))]}
@@ -260,7 +329,10 @@ export default function ContactsPage() {
               <Select
                 placeholder="Filter by Status"
                 selectedKeys={[filterStatus]}
-                onChange={(e) => setFilterStatus(e.target.value || "all")}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value || "all");
+                  setPage(1);
+                }}
                 className="md:w-48"
                 classNames={{
                   trigger: "border-1 border-gray-200 hover:border-purple-400 shadow-sm"
@@ -271,6 +343,26 @@ export default function ContactsPage() {
                 <SelectItem key="inactive" value="inactive">Inactive Only</SelectItem>
                 <SelectItem key="primary" value="primary">Primary Only</SelectItem>
               </Select>
+              <Select
+                placeholder="Sort By"
+                selectedKeys={[sortBy]}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setPage(1);
+                }}
+                className="md:w-48"
+              >
+                <SelectItem key="full_name" value="full_name">Name</SelectItem>
+                <SelectItem key="company_name" value="company_name">Company</SelectItem>
+                <SelectItem key="contact_type" value="contact_type">Type</SelectItem>
+              </Select>
+              <Button
+                variant="light"
+                onPress={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                aria-label={`Sort ${sortOrder === "asc" ? "Descending" : "Ascending"}`}
+              >
+                {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+              </Button>
             </div>
           </CardBody>
         </Card>
@@ -292,6 +384,16 @@ export default function ContactsPage() {
                   <span className="font-semibold text-gray-700">{filteredContacts.length}</span>
                 </Chip>
               </div>
+              {totalPages > 1 && (
+                <Pagination
+                  total={totalPages}
+                  page={page}
+                  onChange={setPage}
+                  size="sm"
+                  showControls
+                  aria-label="Contact Pagination"
+                />
+              )}
             </div>
           </CardHeader>
           <CardBody className="p-6">
@@ -302,7 +404,7 @@ export default function ContactsPage() {
                   <p className="text-gray-500">Loading contacts...</p>
                 </div>
               </div>
-            ) : filteredContacts.length === 0 ? (
+            ) : paginatedContacts.length === 0 ? (
               <div className="text-center py-20">
                 <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mx-auto mb-6">
                   <UserGroupIcon className="w-12 h-12 text-gray-400" />
@@ -326,7 +428,7 @@ export default function ContactsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredContacts.map((contact) => (
+                {paginatedContacts.map((contact) => (
                   <Card 
                     key={contact.id} 
                     className="border-1 border-gray-200 shadow-sm hover:shadow-lg hover:border-purple-300 transition-all duration-200 bg-white"
