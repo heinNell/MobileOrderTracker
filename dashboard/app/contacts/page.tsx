@@ -26,6 +26,7 @@ import
     ModalContent,
     ModalFooter,
     ModalHeader,
+    Pagination,
     Select,
     SelectItem,
     Spinner,
@@ -34,6 +35,7 @@ import
   } from "@nextui-org/react";
 import { debounce } from "lodash";
 import { useCallback, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { CreateContactModal } from "../../components/modals/CreateContactModal";
 import { EnhancedContact, useContacts } from "../../hooks/useEnhancedData";
 
