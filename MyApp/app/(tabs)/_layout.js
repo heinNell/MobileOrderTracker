@@ -24,7 +24,6 @@ const LABEL_FONT_SIZE = IS_SMALL_DEVICE ? 11 : 12;
 const PADDING_BOTTOM = Platform.OS === 'ios' ? 8 : 12;
 
 export default function TabLayout() {
-  // Memoize screenOptions to prevent unnecessary re-renders
   const screenOptions = useMemo(
     () => ({
       headerShown: false,
@@ -59,9 +58,9 @@ export default function TabLayout() {
         marginBottom: 2,
       },
       tabBarItemStyle: {
-        paddingVertical: 6, // Increase touch target size
+        paddingVertical: 6,
       },
-      tabBarActiveBackgroundColor: `${colors.primary}10`, // Subtle background for active tab
+      tabBarActiveBackgroundColor: `${colors.primary}10`,
     }),
     []
   );
@@ -69,6 +68,16 @@ export default function TabLayout() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Tabs screenOptions={screenOptions}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Dashboard',
+            tabBarIcon: ({ color }) => (
+              <MaterialIcons name="dashboard" size={ICON_SIZE} color={color} />
+            ),
+            tabBarAccessibilityLabel: 'Dashboard',
+          }}
+        />
         <Tabs.Screen
           name="orders"
           options={{
@@ -90,16 +99,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Dashboard',
-            tabBarIcon: ({ color }) => (
-              <MaterialIcons name="dashboard" size={ICON_SIZE} color={color} />
-            ),
-            tabBarAccessibilityLabel: 'Dashboard',
-          }}
-        />
-        <Tabs.Screen
           name="profile"
           options={{
             title: 'Profile',
@@ -118,12 +117,6 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="DriverDashboard"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="LoadActivationScreen"
           options={{
             href: null,
           }}

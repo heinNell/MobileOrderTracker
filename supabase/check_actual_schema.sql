@@ -28,3 +28,20 @@ FROM information_schema.columns
 WHERE table_schema = 'public'
 AND table_name = 'tenants'
 ORDER BY ordinal_position;
+[
+  {
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "name",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES"
+  }
+]

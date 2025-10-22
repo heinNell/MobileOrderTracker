@@ -14,10 +14,10 @@ import
     TouchableOpacity,
     View
   } from "react-native";
-import LogoutButton from "../components/LogoutButton";
+import LogoutButton from "../components/auth/LogoutButton";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import LocationService from "../services/LocationService";
+import LocationService from '@/services/LocationService';
 
 const locationService = new LocationService();
 
@@ -142,7 +142,7 @@ export default function OrdersScreen() {
       const location = await locationService.setCurrentLocationAsStartingPoint();
       setStartingPoint(location);
       Alert.alert("Starting Point Set", `Your current location has been set as the starting point for orders.\n\nLat: ${location.latitude.toFixed(6)}\nLng: ${location.longitude.toFixed(6)}`, [{ text: "OK" }]);
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Failed to set starting point. Please check location permissions and try again.", [{ text: "OK" }]);
     } finally {
       setSettingLocation(false);
@@ -154,7 +154,7 @@ export default function OrdersScreen() {
       await locationService.clearStartingPoint();
       setStartingPoint(null);
       Alert.alert("Starting Point Cleared", "The starting point has been removed.", [{ text: "OK" }]);
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Failed to clear starting point.", [{ text: "OK" }]);
     }
   };
@@ -259,7 +259,7 @@ export default function OrdersScreen() {
       await AsyncStorage.setItem('activeOrderId', order.id.toString());
       
       // Initialize LocationService and start tracking (same as QR scan)
-      const LocationService = require("../services/LocationService").default;
+      const LocationService = require("../../services/LocationService").default;
       const locationService = new LocationService();
       
       // Initialize the service to detect current order

@@ -2,9 +2,9 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import ErrorBoundary from "../components/ErrorBoundary";
-import LogoutButton from "../components/LogoutButton";
-import { QRCodeScanner } from "../components/QRCodeScanner";
+import ErrorBoundary from "../components/ui/ErrorBoundary";
+import LogoutButton from "../components/auth/LogoutButton";
+import { QRCodeScanner } from "../components/scanner/QRCodeScanner";
 
 // Define colors constant to fix ESLint warnings
 const colors = {
@@ -44,7 +44,7 @@ export default function ScannerScreen() {
       await storage.setItem('activeOrderId', String(order.id));
       
       // Initialize LocationService and start tracking
-      const LocationService = require("../services/LocationService").default;
+      const LocationService = require("../../services/LocationService").default;
       const locationService = new LocationService();
       
       // Initialize the service to detect current order

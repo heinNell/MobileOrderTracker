@@ -6,19 +6,23 @@ import { AuthProvider } from "./context/AuthContext";
 
 export default function RootLayout() {
   useEffect(() => {
-    // Prevent Safari double-click zoom & suppress noisy gesture warnings
+    let originalWarn;
+    const handleDoubleClick = (e) => e.preventDefault();
+
     if (Platform.OS === "web" && typeof document !== "undefined") {
-      document.addEventListener("dblclick", (e) => e.preventDefault());
+      // Add double-click prevention
+      document.addEventListener("dblclick", handleDoubleClick);
+      
+      // Suppress development warnings
       if (__DEV__) {
-        const originalWarn = console.warn;
+        originalWarn = console.warn;
         console.warn = (message, ...args) => {
           if (typeof message === "string") {
-            // Suppress specific React Native Web deprecation warnings
             const suppressedWarnings = [
               "Cannot record touch end without a touch start",
-              "pointerEvents is deprecated", // From expo-router/react-navigation
+              "pointerEvents is deprecated",
+              "VirtualizedLists should never be nested",
             ];
-            
             if (suppressedWarnings.some(warning => message.includes(warning))) {
               return; // Suppress these warnings
             }
@@ -27,6 +31,18 @@ export default function RootLayout() {
         };
       }
     }
+
+    // Cleanup function
+    return () => {
+      if (Platform.OS === "web" && typeof document !== "undefined") {
+        document.removeEventListener("dblclick", handleDoubleClick);
+        
+        // Restore original console.warn if it was modified
+        if (originalWarn && __DEV__) {
+          console.warn = originalWarn;
+        }
+      }
+    };
   }, []);
 
   return (

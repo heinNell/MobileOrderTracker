@@ -2,15 +2,15 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import
-    {
-        ActivityIndicator,
-        Alert,
-        ScrollView,
-        StyleSheet,
-        Text,
-        TouchableOpacity,
-        View,
-    } from "react-native";
+  {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+  } from "react-native";
 import { LocationDiagnostics } from "../services/LocationDiagnostics";
 
 const colors = {

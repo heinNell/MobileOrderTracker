@@ -1,153 +1,104 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
+  View,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { router } from 'expo-router';
 
-// Define colors constant to fix ESLint warnings
+// Define color constants
 const colors = {
-  primary: '#2563eb',
-  white: '#fff',
-  gray: {
-    100: '#f3f4f6',
-    200: '#e5e7eb',
-    500: '#6b7280',
-  },
-  slate: {
-    900: '#111827',
-  },
+  background: '#ffffff',
+  titleColor: '#1f2937',
+  subtitleColor: '#6b7280',
+  labelColor: '#374151',
+  inputBorderColor: '#d1d5db',
+  buttonColor: '#2563eb',
+  buttonTextColor: '#ffffff',
+  linkTextColor: '#2563eb',
 };
 
 export default function LoginScreen() {
-  const router = useRouter();
-  const { signIn, isAuthenticated, loading: authLoading, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Navigate to Main tabs if already authenticated
-  useEffect(() => {
-    console.log('🔐 Auth state:', { isAuthenticated, authLoading, user: !!user });
-    
-    if (isAuthenticated && user && !authLoading) {
-      console.log('✅ User authenticated, redirecting to tabs');
-      router.replace('/(tabs)');
-    }
-  }, [isAuthenticated, authLoading, user, router]);
-
-  // Show loading only for initial auth check
-  if (authLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Checking authentication...</Text>
-      </View>
-    );
-  }
+  const { login, loading } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    setLoading(true);
-    console.log('🔄 Attempting login...');
-    const result = await signIn(email, password);
-    setLoading(false);
-
+    const result = await login({ email, password });
     if (result.success) {
-      console.log('✅ Login successful, user:', result.user?.email);
-      // Navigation will happen automatically via useEffect
+      router.replace('/(tabs)');
     } else {
-      console.log('❌ Login failed:', result.error);
       Alert.alert('Login Failed', result.error || 'Invalid credentials');
     }
   };
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <MaterialIcons name="local-shipping" size={64} color={colors.primary} />
-          <Text style={styles.title}>Order Tracker</Text>
-          <Text style={styles.subtitle}>Driver Login</Text>
-        </View>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.formContainer}>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Sign in to your account</Text>
 
-        <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <MaterialIcons name="email" size={20} color={colors.gray[500]} style={styles.inputIcon} />
+            <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
-              placeholder="Email"
               value={email}
               onChangeText={setEmail}
-              autoCapitalize="none"
+              placeholder="Enter your email"
               keyboardType="email-address"
-              autoComplete="email"
-              editable={!loading}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <MaterialIcons name="lock" size={20} color={colors.gray[500]} style={styles.inputIcon} />
+            <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
-              placeholder="Password"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoComplete="password"
-              editable={!loading}
+              placeholder="Enter your password"
+              secureTextEntry
+              autoCapitalize="none"
             />
-            <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeIcon}
-            >
-              <MaterialIcons
-                name={showPassword ? 'visibility' : 'visibility-off'}
-                size={20}
-                color={colors.gray[500]}
-              />
-            </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+            style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <>
-                <MaterialIcons name="login" size={20} color={colors.white} style={styles.loginIcon} />
-                <Text style={styles.loginButtonText}>Login</Text>
-              </>
-            )}
+            <Text style={styles.buttonText}>
+              {loading ? 'Signing In...' : 'Sign In'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => router.push('/(auth)/register')}
+          >
+            <Text style={styles.linkText}>
+              Don&apos;t have an account? Sign Up
+            </Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Forgot password? Contact your administrator
-          </Text>
-        </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -155,93 +106,70 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.background,
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.gray[100],
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.gray[500],
-  },
-  content: {
-    flex: 1,
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: colors.slate[900],
-    marginTop: 16,
+    color: colors.titleColor,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.gray[500],
-    marginTop: 8,
-  },
-  form: {
-    width: '100%',
+    color: colors.subtitleColor,
+    textAlign: 'center',
+    marginBottom: 32,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 12,
     marginBottom: 16,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
   },
-  inputIcon: {
-    marginRight: 12,
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.labelColor,
+    marginBottom: 8,
   },
   input: {
-    flex: 1,
-    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: colors.inputBorderColor,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
-    color: colors.slate[900],
+    backgroundColor: colors.background,
   },
-  eyeIcon: {
-    padding: 8,
-  },
-  loginButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
+  button: {
+    backgroundColor: colors.buttonColor,
+    borderRadius: 8,
     paddingVertical: 16,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     marginTop: 8,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 3,
   },
-  loginButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.6,
   },
-  loginIcon: {
-    marginRight: 8,
-  },
-  loginButtonText: {
-    color: colors.white,
-    fontSize: 18,
+  buttonText: {
+    color: colors.buttonTextColor,
+    fontSize: 16,
     fontWeight: '600',
   },
-  footer: {
-    marginTop: 32,
+  linkButton: {
+    marginTop: 16,
     alignItems: 'center',
   },
-  footerText: {
+  linkText: {
+    color: colors.linkTextColor,
     fontSize: 14,
-    color: colors.gray[500],
-    textAlign: 'center',
   },
 });

@@ -21,7 +21,7 @@
       "@screens/*": ["./screens/*"],
       "@shared/*": ["../shared/*"],
       "@utils/*": ["./app/utils/*"],
-      "@services/*": ["./app/services/*"],
+      "@services/*": ["../services/*"],
       "@types/*": ["./app/types/*"]
     }
   },

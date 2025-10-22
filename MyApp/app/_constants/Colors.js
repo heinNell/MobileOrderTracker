@@ -28,6 +28,9 @@ const Colors = {
     800: '#1e293b',
     900: '#0f172a',
   },
+  
+  // Add transparent color
+  transparent: 'transparent', // Added transparent color definition
 };
 
 export default Colors;

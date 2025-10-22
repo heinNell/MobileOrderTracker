@@ -3,7 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
+import
+  {
     ActivityIndicator,
     Alert,
     Linking,
@@ -13,13 +14,14 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    View
-} from "react-native";
-import StatusUpdateButtons from "../../components/StatusUpdateButtons";
-import StatusUpdateService from "../../services/StatusUpdateService";
+    View,
+  } from "react-native";
+
+import StatusUpdateButtons from "../components/order/StatusUpdateButtons";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import LocationService from "../services/LocationService";
+import LocationService from '@/services/LocationService';
+import StatusUpdateService from "../services/StatusUpdateService";
 import { useResponsive } from "../utils/responsive";
 
 const locationService = new LocationService();
@@ -308,51 +310,46 @@ function DriverDashboard() {
           }
         }
 
-        // Perform load activation
-        const updateData = {
-          load_activated_at: new Date().toISOString(),
-          status: "activated",
-          updated_at: new Date().toISOString(),
+        // Prepare activation data for the edge function
+        const activationData = {
+          order_id: orderId,
+          notes: 'Load activated automatically by driver from dashboard'
         };
 
-        // Store GPS coordinates in proper latitude/longitude columns
+        // Add location if available
         if (currentLocation) {
-          updateData.loading_point_latitude = currentLocation.coords.latitude;
-          updateData.loading_point_longitude = currentLocation.coords.longitude;
+          activationData.location = {
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude
+          };
         }
 
-        console.log("📝 Attempting load activation with data:", {
-          orderId,
-          updateData,
-          hasLocation: !!currentLocation
+        // Add device info
+        activationData.device_info = {
+          platform: Platform.OS,
+          app_version: '1.0.0'
+        };
+
+        console.log("📝 Calling activate-load edge function with data:", activationData);
+
+        // Call the activate-load edge function
+        const { data: activationResponse, error: activationError } = await supabase.functions.invoke('activate-load', {
+          body: activationData
         });
 
-        const { data: updatedOrder, error: updateError } = await supabase
-          .from("orders")
-          .update(updateData)
-          .eq("id", orderId)
-          .select()
-          .single();
-
-        if (updateError) {
-          console.error("Error in load activation:", {
-            error: updateError,
-            message: updateError.message,
-            details: updateError.details,
-            hint: updateError.hint,
-            code: updateError.code
-          });
-          throw updateError;
+        if (activationError) {
+          console.error("❌ Edge function error:", activationError);
+          throw activationError;
         }
 
-        // Create status update record
-        await supabase.from("status_updates").insert({
-          order_id: orderId,
-          driver_id: user.id,
-          status: "activated",
-          notes: "Load activated manually by driver",
-          created_at: new Date().toISOString()
-        });
+        if (!activationResponse || !activationResponse.success) {
+          console.error("❌ Activation failed:", activationResponse);
+          throw new Error(activationResponse?.message || 'Failed to activate load');
+        }
+
+        console.log("✅ Load activated successfully via edge function:", activationResponse);
+
+        const updatedOrder = activationResponse.data?.order;
 
         console.log("✅ Load activation successful:", {
           orderId,
@@ -638,7 +635,7 @@ function DriverDashboard() {
       } else {
         Alert.alert("Location Tracking", "Stopped tracking your location.");
       }
-    } catch (error) {
+    } catch {
       if (Platform.OS === 'web') {
         alert("Failed to stop location tracking.");
       } else {

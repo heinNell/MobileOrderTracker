@@ -1,3 +1,4 @@
+// app/(tabs)/[orderId].js
 import { MaterialIcons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as Location from "expo-location";
@@ -15,28 +16,17 @@ import
     Text,
     View,
   } from "react-native";
-import GeocodingService from "../../services/GeocodingService";
-import { supabase } from "../lib/supabase";
-import { startBackgroundLocation, stopBackgroundLocation } from "../services/LocationService";
 
-// Conditionally import react-native-maps only on native platforms
-let MapView, Marker, Polyline, PROVIDER_GOOGLE;
-if (Platform.OS !== 'web') {
-  try {
-    const Maps = require('react-native-maps');
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-    Polyline = Maps.Polyline;
-    PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
-  } catch (error) {
-    console.warn('react-native-maps not available:', error);
-  }
-}
+// Platform-specific map imports - bundler will choose .web.js or .native.js
+import GeocodingService from "@/services/GeocodingService";
+import { startBackgroundLocation, stopBackgroundLocation } from "@/services/LocationService";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "../components/map/MapView";
+import { supabase } from "../lib/supabase";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const IS_SMALL_DEVICE = SCREEN_WIDTH < 375;
 
-// Modern mobile-first color palette with enhanced accessibility
+// Colors (unchanged)
 const colors = {
   white: "#ffffff",
   black: "#000000",
@@ -85,7 +75,7 @@ const colors = {
   shadowDark: "rgba(15, 23, 42, 0.2)",
 };
 
-// Polyline Decoder
+// Polyline Decoder (unchanged)
 const decodePolyline = (encoded) => {
   let index = 0;
   let lat = 0;
@@ -124,7 +114,7 @@ const decodePolyline = (encoded) => {
   return coordinates;
 };
 
-// Reusable Info Row Component
+// Reusable Components (unchanged)
 const InfoRow = ({ icon, iconColor, label, value, isLast = false }) => (
   <View style={[styles.infoRow, isLast && styles.infoRowLast]}>
     <View style={styles.infoIconContainer}>
@@ -139,45 +129,27 @@ const InfoRow = ({ icon, iconColor, label, value, isLast = false }) => (
   </View>
 );
 
-// Timeline Item Component
 const TimelineItem = ({ icon, color, label, value, isCompleted, isLast }) => (
   <View style={[styles.timelineItem, isLast && styles.timelineItemLast]}>
     <View style={styles.timelineIconSection}>
-      <View style={[
-        styles.timelineIconWrapper,
-        { backgroundColor: isCompleted ? color : colors.gray300 }
-      ]}>
-        <MaterialIcons 
-          name={icon} 
-          size={18} 
-          color={colors.white} 
-        />
+      <View style={[styles.timelineIconWrapper, { backgroundColor: isCompleted ? color : colors.gray300 }]}>
+        <MaterialIcons name={icon} size={18} color={colors.white} />
       </View>
       {!isLast && (
-        <View style={[
-          styles.timelineLine,
-          { backgroundColor: isCompleted ? color : colors.gray300 }
-        ]} />
+        <View style={[styles.timelineLine, { backgroundColor: isCompleted ? color : colors.gray300 }]} />
       )}
     </View>
     <View style={styles.timelineContent}>
-      <Text style={[
-        styles.timelineLabel,
-        isCompleted && styles.timelineLabelCompleted
-      ]}>
+      <Text style={[styles.timelineLabel, isCompleted && styles.timelineLabelCompleted]}>
         {label}
       </Text>
-      <Text style={[
-        styles.timelineValue,
-        !isCompleted && styles.timelineValuePending
-      ]}>
+      <Text style={[styles.timelineValue, !isCompleted && styles.timelineValuePending]}>
         {value}
       </Text>
     </View>
   </View>
 );
 
-// Quick Stats Card Component
 const QuickStatCard = ({ icon, label, value, color }) => (
   <View style={styles.quickStatCard}>
     <View style={[styles.quickStatIcon, { backgroundColor: color + '15' }]}>
@@ -259,15 +231,27 @@ export default function OrderDetailsScreen() {
   // Request foreground location permission
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status);
-      if (status !== "granted") {
-        setLocationError("Location permission denied. Enable it in settings to see your position on the map.");
+      if (Platform.OS === 'web') {
+        if (navigator.permissions) {
+          const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+          setLocationPermission(permissionStatus.state);
+          if (permissionStatus.state !== 'granted') {
+            setLocationError("Location permission denied. Enable it in browser settings to see your position on the map.");
+          }
+        } else {
+          setLocationPermission('prompt');
+        }
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        setLocationPermission(status);
+        if (status !== "granted") {
+          setLocationError("Location permission denied. Enable it in settings to see your position on the map.");
+        }
       }
     })();
   }, []);
 
-  // Start background location tracking if user is the assigned driver and order is active
+  // Start background location tracking for drivers
   useEffect(() => {
     if (
       Platform.OS !== 'web' &&
@@ -286,36 +270,32 @@ export default function OrderDetailsScreen() {
       });
     }
     return () => {
-      if (backgroundLocationStarted) {
+      if (backgroundLocationStarted && Platform.OS !== 'web') {
         stopBackgroundLocation();
       }
     };
   }, [order, currentUser, backgroundLocationStarted]);
 
-  // Track foreground user location with web compatibility
+  // Track foreground user location
   useEffect(() => {
     let subscription;
     let watchId;
-    
-    if (Platform.OS === 'web') {
-      if (navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            setUserLocation({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            });
-            setLocationError(null);
-          },
-          (err) => {
-            console.error("Web location tracking error:", err);
-            setLocationError("Failed to track location. Check browser settings.");
-          },
-          { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-        );
-      } else {
-        setLocationError("Geolocation is not supported in this browser.");
-      }
+
+    if (Platform.OS === 'web' && navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+          setLocationError(null);
+        },
+        (err) => {
+          console.error("Web location tracking error:", err);
+          setLocationError("Failed to track location. Check browser settings.");
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      );
     } else if (locationPermission === "granted") {
       (async () => {
         try {
@@ -339,7 +319,7 @@ export default function OrderDetailsScreen() {
         }
       })();
     }
-    
+
     return () => {
       if (Platform.OS === 'web' && watchId !== undefined) {
         navigator.geolocation.clearWatch(watchId);
@@ -356,9 +336,7 @@ export default function OrderDetailsScreen() {
         setMapLoading(true);
         setMapError(null);
         try {
-          // Use the new GeocodingService with database fallback
           const { loadingCoord, unloadingCoord } = await GeocodingService.getCoordinatesWithFallback(order);
-          
           if (loadingCoord.length > 0) {
             setLoadingCoord({
               latitude: loadingCoord[0].latitude,
@@ -387,7 +365,7 @@ export default function OrderDetailsScreen() {
 
   const isDriver = useMemo(() => currentUser && order?.assigned_driver?.id === currentUser.id, [currentUser, order]);
 
-  // Supabase real-time subscription for order updates
+  // Supabase real-time subscriptions
   useEffect(() => {
     if (!orderId) return;
 
@@ -416,18 +394,17 @@ export default function OrderDetailsScreen() {
     };
   }, [orderId]);
 
-  // Supabase real-time subscription for driver location updates
   useEffect(() => {
     if (!order || isDriver) return;
 
     const locationSubscription = supabase
-      .channel(`order_locations:${orderId}`)
+      .channel(`map_locations:${orderId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'order_locations',
+          table: 'map_locations',
           filter: `order_id=eq.${orderId}`,
         },
         (payload) => {
@@ -534,6 +511,30 @@ export default function OrderDetailsScreen() {
     if (unloadingCoord) coords.push(unloadingCoord);
     if (isDriver && userLocation) coords.push(userLocation);
     if (!isDriver && driverLocation) coords.push(driverLocation);
+
+    if (Platform.OS === 'web') {
+      if (coords.length > 0) {
+        const latitudes = coords.map(c => c.latitude);
+        const longitudes = coords.map(c => c.longitude);
+        const minLat = Math.min(...latitudes);
+        const maxLat = Math.max(...latitudes);
+        const minLng = Math.min(...longitudes);
+        const maxLng = Math.max(...longitudes);
+        return {
+          center: {
+            lat: (minLat + maxLat) / 2,
+            lng: (minLng + maxLng) / 2,
+          },
+          bounds: {
+            north: maxLat + 0.05,
+            south: minLat - 0.05,
+            east: maxLng + 0.05,
+            west: minLng - 0.05,
+          },
+        };
+      }
+      return null;
+    }
 
     if (directions) {
       const bounds = directions.bounds;
@@ -731,115 +732,116 @@ export default function OrderDetailsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Route Map</Text>
         <View style={styles.card}>
-          {Platform.OS === 'web' ? (
+          {mapLoading && (
             <View style={styles.centeredDisabled}>
-              <MaterialIcons name="map" size={48} color={colors.primary} />
-              <Text style={styles.infoText}>📍 Map view is available on mobile app</Text>
-              <Text style={styles.loadingText}>Install the mobile app to see interactive maps with directions</Text>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading map...</Text>
             </View>
-          ) : (
+          )}
+          {mapError && (
+            <View style={styles.centeredDisabled}>
+              <MaterialIcons name="error-outline" size={48} color={colors.danger} />
+              <Text style={styles.errorText}>{mapError}</Text>
+            </View>
+          )}
+
+          {/* Unified Map - bundler picks .web.js or .native.js */}
+          {!mapLoading && !mapError && mapRegion && (
+            <MapView 
+              style={styles.map} 
+              initialRegion={mapRegion} 
+              provider={PROVIDER_GOOGLE}
+            >
+              {loadingCoord && (
+                <Marker
+                  coordinate={loadingCoord}
+                  position={Platform.OS === 'web' ? { lat: loadingCoord.latitude, lng: loadingCoord.longitude } : undefined}
+                  title="Loading Point"
+                  description={order.loading_point_name}
+                  pinColor={colors.success}
+                />
+              )}
+              {unloadingCoord && (
+                <Marker
+                  coordinate={unloadingCoord}
+                  position={Platform.OS === 'web' ? { lat: unloadingCoord.latitude, lng: unloadingCoord.longitude } : undefined}
+                  title="Delivery Point"
+                  description={order.unloading_point_name}
+                  pinColor={colors.danger}
+                />
+              )}
+              {isDriver && userLocation && (
+                <Marker
+                  coordinate={userLocation}
+                  position={Platform.OS === 'web' ? { lat: userLocation.latitude, lng: userLocation.longitude } : undefined}
+                  title="Your Location"
+                  description="Current position"
+                  pinColor={colors.info}
+                />
+              )}
+              {!isDriver && driverLocation && (
+                <Marker
+                  coordinate={driverLocation}
+                  position={Platform.OS === 'web' ? { lat: driverLocation.latitude, lng: driverLocation.longitude } : undefined}
+                  title="Driver Location"
+                  description="Current driver position"
+                  pinColor={colors.primary}
+                />
+              )}
+              {directions ? (
+                <Polyline
+                  coordinates={decodePolyline(directions.overview_polyline.points)}
+                  strokeColor={colors.primary}
+                  strokeWidth={3}
+                />
+              ) : (
+                loadingCoord && unloadingCoord && (
+                  <Polyline
+                    coordinates={[loadingCoord, unloadingCoord]}
+                    strokeColor={colors.primary}
+                    strokeWidth={3}
+                  />
+                )
+              )}
+            </MapView>
+          )}
+
+          {!mapLoading && !mapError && !mapRegion && (
+            <Text style={styles.infoText}>Map data not available.</Text>
+          )}
+
+          {locationError && (
+            <View style={styles.infoAlert}>
+              <MaterialIcons name="location-off" size={22} color={colors.danger} />
+              <Text style={styles.infoAlertText}>{locationError}</Text>
+            </View>
+          )}
+          {directionsLoading && (
+            <View style={styles.centeredDisabled}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading directions...</Text>
+            </View>
+          )}
+          {directionsError && <Text style={styles.errorText}>{directionsError}</Text>}
+          {directions && !directionsLoading && (
             <>
-              {mapLoading && (
-                <View style={styles.centeredDisabled}>
-                  <ActivityIndicator size="large" color={colors.primary} />
-                  <Text style={styles.loadingText}>Loading map...</Text>
-                </View>
-              )}
-              {mapError && (
-                <View style={styles.centeredDisabled}>
-                  <MaterialIcons name="error-outline" size={48} color={colors.danger} />
-                  <Text style={styles.errorText}>{mapError}</Text>
-                </View>
-              )}
-              {!mapLoading && !mapError && mapRegion && MapView && (
-                <MapView style={styles.map} initialRegion={mapRegion} provider={PROVIDER_GOOGLE}>
-                  {loadingCoord && (
-                    <Marker
-                      coordinate={loadingCoord}
-                      title="Loading Point"
-                      description={order.loading_point_name}
-                      pinColor={colors.success}
-                    />
-                  )}
-                  {unloadingCoord && (
-                    <Marker
-                      coordinate={unloadingCoord}
-                      title="Delivery Point"
-                      description={order.unloading_point_name}
-                      pinColor={colors.danger}
-                    />
-                  )}
-                  {isDriver && userLocation && (
-                    <Marker
-                      coordinate={userLocation}
-                      title="Your Location"
-                      description="Current position"
-                      pinColor={colors.info}
-                    />
-                  )}
-                  {!isDriver && driverLocation && (
-                    <Marker
-                      coordinate={driverLocation}
-                      title="Driver Location"
-                      description="Current driver position"
-                      pinColor={colors.primary}
-                    />
-                  )}
-                  {directions ? (
-                    <Polyline
-                      coordinates={decodePolyline(directions.overview_polyline.points)}
-                      strokeColor={colors.primary}
-                      strokeWidth={3}
-                    />
-                  ) : (
-                    loadingCoord &&
-                    unloadingCoord && (
-                      <Polyline
-                        coordinates={[loadingCoord, unloadingCoord]}
-                        strokeColor={colors.primary}
-                        strokeWidth={3}
-                      />
-                    )
-                  )}
-                </MapView>
-              )}
-              {!mapRegion && !mapLoading && !mapError && (
-                <Text style={styles.infoText}>Map data not available.</Text>
-              )}
-              {locationError && (
-                <View style={styles.infoAlert}>
-                  <MaterialIcons name="location-off" size={22} color={colors.danger} />
-                  <Text style={styles.infoAlertText}>{locationError}</Text>
-                </View>
-              )}
-              {directionsLoading && (
-                <View style={styles.centeredDisabled}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.loadingText}>Loading directions...</Text>
-                </View>
-              )}
-              {directionsError && <Text style={styles.errorText}>{directionsError}</Text>}
-              {directions && !directionsLoading && (
-                <>
-                  <View style={styles.directionsSummary}>
-                    <MaterialIcons name="directions-car" size={20} color={colors.primary} />
-                    <Text style={styles.summaryText}>
-                      {directions.legs[0].distance.text} • {directions.legs[0].duration.text}
+              <View style={styles.directionsSummary}>
+                <MaterialIcons name="directions-car" size={20} color={colors.primary} />
+                <Text style={styles.summaryText}>
+                  {directions.legs[0].distance.text} • {directions.legs[0].duration.text}
+                </Text>
+              </View>
+              <ScrollView style={styles.stepsContainer} nestedScrollEnabled={true}>
+                {directions.legs[0].steps.map((step, index) => (
+                  <View key={index} style={styles.stepRow}>
+                    <MaterialIcons name="directions" size={18} color={colors.gray600} />
+                    <Text style={styles.stepInstruction}>{step.html_instructions.replace(/<[^>]*>/g, '')}</Text>
+                    <Text style={styles.stepDetails}>
+                      {step.distance.text} • {step.duration.text}
                     </Text>
                   </View>
-                  <ScrollView style={styles.stepsContainer} nestedScrollEnabled={true}>
-                    {directions.legs[0].steps.map((step, index) => (
-                      <View key={index} style={styles.stepRow}>
-                        <MaterialIcons name="directions" size={18} color={colors.gray600} />
-                        <Text style={styles.stepInstruction}>{step.html_instructions.replace(/<[^>]*>/g, '')}</Text>
-                        <Text style={styles.stepDetails}>
-                          {step.distance.text} • {step.duration.text}
-                        </Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </>
-              )}
+                ))}
+              </ScrollView>
             </>
           )}
         </View>
@@ -930,7 +932,7 @@ export default function OrderDetailsScreen() {
   );
 }
 
-// Helper Functions
+// Helper Functions (unchanged)
 const getStatusStyle = (status) => {
   const statusStyles = {
     pending: { backgroundColor: colors.gray500 },
@@ -971,6 +973,7 @@ const getStatusIcon = (status) => {
   return iconMap[status] || "info";
 };
 
+// Styles (unchanged)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1453,4 +1456,3 @@ const styles = StyleSheet.create({
     padding: 16 
   },
 });
-

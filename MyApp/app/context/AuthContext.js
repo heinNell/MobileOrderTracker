@@ -1,187 +1,123 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-const AuthContext = createContext({});
+const AuthContext = createContext();
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const authListenerRef = useRef(null);
-  const isInitializedRef = useRef(false);
 
+  // Check for existing session on app start
   useEffect(() => {
-    // Prevent double initialization
-    if (isInitializedRef.current) {
-      return;
-    }
-    isInitializedRef.current = true;
-
-    // Check active sessions
-    checkUser();
-
-    // Listen for auth changes with debouncing
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔐 Auth event:', event, 'Session exists:', !!session);
-        
-        // Prevent unnecessary updates during initialization
-        if (event === 'INITIAL_SESSION') {
-          console.log('🔍 Initial session detected, handled by checkUser()');
-          return;
-        }
-        
-        if (session?.user) {
-          setUser(session.user);
-          setIsAuthenticated(true);
-          await AsyncStorage.setItem('supabase.auth.token', JSON.stringify(session));
-          console.log('✅ User authenticated via listener:', session.user.email);
-        } else {
-          setUser(null);
-          setIsAuthenticated(false);
-          await AsyncStorage.removeItem('supabase.auth.token');
-          console.log('❌ User signed out via listener');
-        }
-        setLoading(false);
-      }
-    );
-
-    authListenerRef.current = authListener;
-
-    return () => {
-      if (authListenerRef.current?.subscription) {
-        authListenerRef.current.subscription.unsubscribe();
-      }
-    };
+    checkAuthState();
   }, []);
 
-  async function checkUser() {
+  const checkAuthState = async () => {
     try {
-      setLoading(true);
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) {
-        console.error('❌ Error getting session:', error);
-        throw error;
-      }
-      
-      if (session?.user) {
-        setUser(session.user);
-        setIsAuthenticated(true);
-        console.log('✅ User authenticated on app start:', session.user.email);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-        console.log('❌ No active session on app start');
+        console.log('❌ Error checking auth state:', error);
+      } else if (session?.user) {
+        // Get user profile with role from database
+        const { data: profile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          console.log('❌ Error fetching user profile:', profileError);
+        } else {
+          setUser(profile);
+          setIsAuthenticated(true);
+          console.log('✅ Found existing session for:', profile.email, 'Role:', profile.role);
+        }
       }
     } catch (error) {
-      console.error('❌ Error checking user:', error);
-      setUser(null);
-      setIsAuthenticated(false);
+      console.log('❌ Error checking auth state:', error);
     } finally {
       setLoading(false);
     }
-  }
-
-  async function signIn(email, password) {
-    try {
-      console.log('🔄 Signing in with email:', email);
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password.trim(),
-      });
-
-      if (error) {
-        console.error('❌ Sign in error:', error);
-        throw error;
-      }
-
-      console.log('✅ Sign in successful:', data.user.email);
-      return { success: true, user: data.user };
-    } catch (error) {
-      console.error('❌ Sign in error:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async function signOut() {
-    try {
-      console.log('🔄 Starting centralized sign out process...');
-      
-      // Prevent multiple simultaneous sign-outs
-      if (loading) {
-        console.log('⚠️ Sign out already in progress, skipping...');
-        return { success: true };
-      }
-
-      setLoading(true);
-      
-      // Clean up location services before signing out
-      try {
-        const LocationServiceModule = await import('../services/LocationService');
-        const LocationService = LocationServiceModule.default;
-        const locationService = new LocationService();
-        await locationService.cleanup();
-        console.log('✅ Location service cleanup completed');
-      } catch (locationError) {
-        console.warn('⚠️ Location cleanup error:', locationError);
-      }
-
-      // Sign out from Supabase first
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('❌ Supabase signOut error:', error);
-        throw error;
-      }
-
-      // Clear local storage
-      await AsyncStorage.multiRemove([
-        'supabase.auth.token',
-        'trackingOrderId',
-        'orderStartingPoint',
-        'lastKnownLocation',
-        'activeOrderId'
-      ]);
-
-      // Clear local state (auth listener will handle the rest)
-      setUser(null);
-      setIsAuthenticated(false);
-      
-      console.log('✅ Sign out successful with full cleanup');
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Sign out error:', error);
-      // Ensure state is cleared even on error
-      setUser(null);
-      setIsAuthenticated(false);
-      return { success: false, error: error.message };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const value = {
-    user,
-    loading,
-    isAuthenticated,
-    signIn,
-    signOut,
-    checkUser,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+  // Supabase authentication with role checking
+  const login = async ({ email, password }) => {
+    try {
+      setLoading(true);
+      
+      // Sign in with Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
+      if (authError) {
+        console.log('❌ Login error:', authError.message);
+        return { success: false, error: authError.message };
+      }
 
-export default function AuthContextComponent() {
-  return null;
-}
+      if (!authData.user) {
+        return { success: false, error: 'No user data returned' };
+      }
+
+      // Get user profile with role from database
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError) {
+        console.log('❌ Error fetching user profile:', profileError);
+        return { success: false, error: 'Failed to fetch user profile' };
+      }
+
+      // Store user data
+      await AsyncStorage.setItem('userData', JSON.stringify(profile));
+      
+      setUser(profile);
+      setIsAuthenticated(true);
+      
+      console.log('✅ Login successful:', profile.email, 'Role:', profile.role);
+      return { success: true, user: profile };
+      
+    } catch (error) {
+      console.log('❌ Login error:', error);
+      return { success: false, error: error.message || 'Login failed' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.log('❌ Sign out error:', error);
+      }
+      
+      await AsyncStorage.removeItem('userData');
+      setUser(null);
+      setIsAuthenticated(false);
+      console.log('🚪 User signed out.');
+    } catch (error) {
+      console.log('❌ Sign out error:', error);
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ login, signOut, user, loading, isAuthenticated }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
+};

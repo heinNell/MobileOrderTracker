@@ -11,7 +11,7 @@ import
   } from 'react-native';
 
 // ✅ Import the hook with correct path
-import LogoutButton from "../components/LogoutButton";
+import LogoutButton from "../components/auth/LogoutButton";
 import { useAuth } from "../context/AuthContext";
 
 // Modern mobile-first color palette

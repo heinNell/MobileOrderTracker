@@ -2,7 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import
   {
     ActivityIndicator,
@@ -14,8 +14,8 @@ import
     TouchableOpacity,
     View,
   } from "react-native";
-import GeocodingService from "../../services/GeocodingService";
 import { supabase } from "../lib/supabase";
+import GeocodingService from "../services/GeocodingService";
 
 // Modern mobile-first color palette
 const colors = {
@@ -101,17 +101,95 @@ const getStatusStyle = (status) => {
   return statusStyles[status] || { backgroundColor: colors.gray[500] };
 };
 
+// Helper function to validate UUID
+const isValidUUID = (uuid) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuid && typeof uuid === 'string' && uuidRegex.test(uuid);
+};
+
 export default function LoadActivationScreen() {
-  const { orderId, orderNumber } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const { orderId, orderNumber, autoStart } = params;
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [orderDetails, setOrderDetails] = useState(null);
   const [location, setLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(false);
+  const [paramError, setParamError] = useState(null);
+  const isActivatingRef = useRef(false);
+
+  // Debug and validate parameters on component mount
+  useEffect(() => {
+    console.log('=== LoadActivationScreen Debug ===');
+    console.log('Raw params:', params);
+    console.log('orderId:', orderId, 'Type:', typeof orderId);
+    console.log('orderNumber:', orderNumber, 'Type:', typeof orderNumber);
+    console.log('autoStart:', autoStart, 'Type:', typeof autoStart);
+    
+    // Check for invalid orderId
+    if (!orderId || orderId === 'undefined' || orderId === 'null') {
+      const error = `Invalid orderId: "${orderId}"`;
+      console.error('❌', error);
+      setParamError(error);
+      return;
+    }
+    
+    // Validate UUID format
+    if (!isValidUUID(orderId)) {
+      const error = `Invalid UUID format: "${orderId}"`;
+      console.error('❌', error);
+      setParamError(error);
+      return;
+    }
+    
+    console.log('✅ Parameters validated successfully');
+    setParamError(null);
+  }, [params, orderId, orderNumber, autoStart]);
+
+  // Helper: get location with timeout fallback
+  const getLocationWithTimeout = useCallback(async (ms = 4000) => {
+    try {
+      const result = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Location timeout')), ms)),
+      ]);
+      return result;
+    } catch (e) {
+      console.warn('⚠️ getLocationWithTimeout failed:', e?.message || e);
+      return null; // Fallback to no-location activation
+    }
+  }, []);
 
   const loadOrderDetails = useCallback(async () => {
     try {
+      // CRITICAL: Validate orderId immediately before any operations
+      if (!orderId) {
+        console.warn('⚠️ loadOrderDetails called with no orderId');
+        return;
+      }
+      
+      if (orderId === 'undefined' || orderId === 'null') {
+        console.error('❌ loadOrderDetails called with string "undefined" or "null"');
+        Alert.alert('Error', 'Invalid order ID. Please select an order from the dashboard.');
+        router.back();
+        return;
+      }
+      
+      if (!isValidUUID(orderId)) {
+        console.error('❌ loadOrderDetails called with invalid UUID:', orderId);
+        Alert.alert('Error', 'Invalid order ID format. Please try again.');
+        router.back();
+        return;
+      }
+
+      // Don't proceed if there's a parameter error
+      if (paramError) {
+        console.log('Skipping loadOrderDetails due to parameter error:', paramError);
+        return;
+      }
+
       setLoading(true);
+      console.log('🔍 Loading order details for ID:', orderId);
 
       const { data: order, error } = await supabase
         .from("orders")
@@ -127,16 +205,36 @@ export default function LoadActivationScreen() {
         .eq("id", orderId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        throw error;
+      }
 
+      console.log('✅ Order loaded successfully:', order?.order_number);
       setOrderDetails(order);
     } catch (error) {
-      console.error("Error loading order:", error);
-      Alert.alert("Error", "Failed to load order details");
+      console.error("❌ Error loading order:", error);
+      
+      let errorMessage = "Failed to load order details";
+      
+      if (error.code === 'PGRST116') {
+        errorMessage = "Order not found";
+      } else if (error.message.includes('invalid input syntax for type uuid')) {
+        errorMessage = "Invalid order ID format";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert("Error", errorMessage, [
+        {
+          text: "Go Back",
+          onPress: () => router.back(),
+        },
+      ]);
     } finally {
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, paramError, router]);
 
   const requestLocationPermission = useCallback(async () => {
     try {
@@ -155,9 +253,36 @@ export default function LoadActivationScreen() {
   }, []);
 
   useEffect(() => {
-    loadOrderDetails();
+    if (!paramError) {
+      loadOrderDetails();
+    }
     requestLocationPermission();
-  }, [loadOrderDetails, requestLocationPermission]);
+  }, [loadOrderDetails, requestLocationPermission, paramError]);
+
+  // Auto-start activation if requested and order is not already activated
+  useEffect(() => {
+    const shouldAutoStart = String(autoStart || '').toLowerCase() === '1' || String(autoStart || '').toLowerCase() === 'true';
+    if (!shouldAutoStart) return;
+    if (!orderDetails) return;
+    if (orderDetails?.load_activated_at) return;
+    if (loading || isActivatingRef.current) return;
+    if (paramError) return;
+
+    // Fire and forget: attempt activation without confirmation
+    (async () => {
+      try {
+        // Try to ensure we have a location, but don't block excessively
+        if (!location && locationPermission) {
+          const loc = await getLocationWithTimeout(3000);
+          if (loc) setLocation(loc);
+        }
+        await activateLoad(true);
+      } catch {
+        // Any error will be surfaced via activateLoad
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, orderDetails, locationPermission, paramError]);
 
   const handleActivateLoad = async () => {
     try {
@@ -166,9 +291,7 @@ export default function LoadActivationScreen() {
           "Location Required",
           "Please wait while we get your current location..."
         );
-        const currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
+        const currentLocation = await getLocationWithTimeout(4000);
         setLocation(currentLocation);
       }
 
@@ -184,7 +307,7 @@ export default function LoadActivationScreen() {
             text: "Activate",
             style: "default",
             onPress: async () => {
-              await activateLoad();
+              await activateLoad(false);
             },
           },
         ]
@@ -195,33 +318,104 @@ export default function LoadActivationScreen() {
     }
   };
 
-  const activateLoad = async () => {
+  // Fallback activation using direct database updates
+  const activateLoadFallback = async (locationData = null) => {
+    console.log("🔄 Using fallback activation method");
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("Not authenticated");
+    }
+
+    const now = new Date().toISOString();
+    
+    // Prepare update data
+    const updateData = {
+      load_activated_at: now,
+      status: 'activated',
+      updated_at: now
+    };
+
+    // Add location data if available
+    if (locationData) {
+      updateData.activation_location_lat = locationData.latitude;
+      updateData.activation_location_lng = locationData.longitude;
+      
+      if (locationData.address) {
+        updateData.activation_location_address = locationData.address;
+      }
+    }
+
+    // Update the order
+    const { data: updatedOrder, error: updateError } = await supabase
+      .from('orders')
+      .update(updateData)
+      .eq('id', orderId)
+      .eq('assigned_driver_id', session.user.id) // Ensure driver is assigned
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('❌ Fallback activation failed:', updateError);
+      throw updateError;
+    }
+
+    console.log('✅ Fallback activation successful:', updatedOrder);
+
+    // Create activation log entry
     try {
+      const { error: logError } = await supabase
+        .from('order_status_logs')
+        .insert({
+          order_id: orderId,
+          status: 'activated',
+          notes: 'Load activated from mobile app (fallback method)',
+          location_lat: locationData?.latitude,
+          location_lng: locationData?.longitude,
+          location_address: locationData?.address,
+          created_by: session.user.id,
+          created_at: now
+        });
+
+      if (logError) {
+        console.warn('⚠️ Failed to create activation log:', logError);
+        // Don't fail the activation if logging fails
+      }
+    } catch (logError) {
+      console.warn('⚠️ Failed to create activation log:', logError);
+    }
+
+    return updatedOrder;
+  };
+
+  const activateLoad = async (isAuto = false) => {
+    try {
+      if (isActivatingRef.current) return;
+      
+      // Validate orderId before proceeding
+      if (!orderId || orderId === 'undefined' || orderId === 'null' || !isValidUUID(orderId)) {
+        throw new Error(`Cannot activate load: Invalid orderId "${orderId}"`);
+      }
+      
+      isActivatingRef.current = true;
       setLoading(true);
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error("Not authenticated");
       }
 
       console.log("🔄 Activating load for order:", orderId);
 
-      // Prepare activation data
-      const now = new Date().toISOString();
-      const updateData = {
-        load_activated_at: now,
-        status: 'activated',
-        updated_at: now,
-      };
-
-      // Add location data if available
+      // Prepare location data
+      let locationData = null;
       if (location) {
-        updateData.loading_point_latitude = location.coords.latitude;
-        updateData.loading_point_longitude = location.coords.longitude;
+        locationData = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude
+        };
 
+        // Try to get address via reverse geocoding
         try {
           const addresses = await GeocodingService.reverseGeocodeAsync({
             latitude: location.coords.latitude,
@@ -238,48 +432,80 @@ export default function LoadActivationScreen() {
             ].filter(Boolean).join(", ");
 
             if (address) {
-              updateData.loading_point_address = address;
+              locationData.address = address;
             }
           }
         } catch (geoError) {
-          console.warn("Reverse geocoding failed:", geoError);        }
-      }
-
-      console.log("📝 Update data:", updateData);
-
-      // Update the order directly in the database
-      const { data: updatedOrder, error: updateError } = await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("id", orderId)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error("❌ Database update error:", updateError);
-        throw updateError;
-      }
-
-      console.log("✅ Load activated successfully:", updatedOrder);
-
-      // Insert a status update record
-      try {
-        const { error: statusError } = await supabase
-          .from("status_updates")
-          .insert({
-            order_id: orderId,
-            driver_id: session.user.id,
-            status: 'activated',
-            notes: 'Load activated from mobile app',
-            created_at: now,
-          });
-
-        if (statusError) {
-          console.warn("⚠️ Status update insert failed:", statusError);
-          // Don't fail the whole operation if status update fails
+          console.warn("Reverse geocoding failed:", geoError);
         }
-      } catch (statusErr) {
-        console.warn("⚠️ Status update error:", statusErr);
+      }
+
+      // Try Edge Function first, fallback to direct database update
+      let activationResult = null;
+      let usedFallback = false;
+
+      try {
+        // Prepare activation data for the edge function
+        const activationData = {
+          order_id: orderId,
+          notes: 'Load activated from mobile app'
+        };
+
+        // Add location data if available
+        if (locationData) {
+          activationData.location = {
+            latitude: locationData.latitude,
+            longitude: locationData.longitude
+          };
+
+          if (locationData.address) {
+            activationData.location_address = locationData.address;
+          }
+        }
+
+        // Add device info
+        activationData.device_info = {
+          platform: Platform.OS,
+          app_version: '1.0.0'
+        };
+
+        console.log("📝 Trying Edge Function first...");
+
+        // Call the activate-load edge function with shorter timeout
+        const edgeCall = supabase.functions.invoke('activate-load', { body: activationData });
+        const timeoutMs = 8000; // Reduced timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Edge function timeout')), timeoutMs)
+        );
+
+        const { data: activationResponse, error: activationError } = await Promise.race([
+          edgeCall, 
+          timeoutPromise
+        ]);
+
+        if (activationError) {
+          throw activationError;
+        }
+
+        if (!activationResponse || !activationResponse.success) {
+          throw new Error(activationResponse?.message || 'Edge function returned failure');
+        }
+
+        console.log("✅ Edge Function activation successful:", activationResponse);
+        activationResult = activationResponse;
+
+      } catch (edgeError) {
+        console.warn("⚠️ Edge Function failed, using fallback:", edgeError.message);
+        
+        // Use fallback method
+        try {
+          const fallbackResult = await activateLoadFallback(locationData);
+          activationResult = { success: true, data: fallbackResult };
+          usedFallback = true;
+        } catch (fallbackError) {
+          console.error("❌ Fallback activation also failed:", fallbackError);
+          throw fallbackError;
+        }
       }
 
       // Store as active order
@@ -303,7 +529,7 @@ export default function LoadActivationScreen() {
 
       // Initialize location tracking
       try {
-        const LocationService = require("../services/LocationService").default;
+        const LocationService = require("../../services/LocationService").default;
         const locationService = new LocationService();
         await locationService.initialize();
         await locationService.setCurrentOrder(orderId);
@@ -317,27 +543,39 @@ export default function LoadActivationScreen() {
         // Don't fail activation if tracking fails
       }
 
-      Alert.alert(
-        "Load Activated!",
-        `Order ${orderNumber} has been activated successfully.\n\nYou can now scan QR codes for pickup and delivery.`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              router.back();
+      // Refresh order details to show updated status
+      await loadOrderDetails();
+
+      const successMessage = usedFallback 
+        ? `Order ${orderNumber} has been activated successfully using backup method.\n\nYou can now scan QR codes for pickup and delivery.`
+        : `Order ${orderNumber} has been activated successfully.\n\nYou can now scan QR codes for pickup and delivery.`;
+
+      if (isAuto) {
+        // On auto-activation, take user directly to scanner for speed
+        router.push({ pathname: "/(tabs)/scanner", params: { orderId, orderNumber } });
+      } else {
+        Alert.alert(
+          "Load Activated!",
+          successMessage,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                router.back();
+              },
             },
-          },
-          {
-            text: "Scan QR Code",
-            onPress: () => {
-              router.push({
-                pathname: "/(tabs)/scanner",
-                params: { orderId, orderNumber },
-              });
+            {
+              text: "Scan QR Code",
+              onPress: () => {
+                router.push({
+                  pathname: "/(tabs)/scanner",
+                  params: { orderId, orderNumber },
+                });
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }
     } catch (error) {
       console.error("❌ Error activating load:", error);
       let message = "Failed to activate load";
@@ -354,13 +592,33 @@ export default function LoadActivationScreen() {
         message = "This load has already been activated";
       } else if (error.message.includes("status")) {
         message = "Order is not in a valid status for activation";
+      } else if (error.message.includes("Invalid orderId")) {
+        message = "Invalid order ID. Please try again.";
       }
 
       Alert.alert("Activation Failed", message);
     } finally {
+      isActivatingRef.current = false;
       setLoading(false);
     }
   };
+
+  // Show error screen if there's a parameter error
+  if (paramError) {
+    return (
+      <View style={styles.centerContainer}>
+        <MaterialIcons name="error-outline" size={64} color={colors.red[500]} />
+        <Text style={styles.errorTitle}>Invalid Parameters</Text>
+        <Text style={styles.errorText}>{paramError}</Text>
+        <TouchableOpacity
+          style={styles.errorButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.errorButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (loading && !orderDetails) {
     return (
@@ -572,6 +830,35 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+  },
+  
+  // Error screen styles
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: colors.red[500],
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.gray[600],
+    textAlign: "center",
+    marginBottom: 24,
+    paddingHorizontal: 20,
+    lineHeight: 22,
+  },
+  errorButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  errorButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: "600",
   },
   
   // Enhanced header design
