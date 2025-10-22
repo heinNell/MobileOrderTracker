@@ -638,6 +638,24 @@ export default function TransportersPage() {
           }}
         />
 
+        {/* Edit Modal - Using Create Modal with initial data */}
+        {selectedTransporter && (
+          <CreateTransporterModal
+            isOpen={editModal.isOpen}
+            onClose={() => {
+              editModal.onClose();
+              setSelectedTransporter(null);
+            }}
+            onSuccess={() => {
+              refetch();
+              editModal.onClose();
+              setSelectedTransporter(null);
+            }}
+            initialData={selectedTransporter}
+            isEditing={true}
+          />
+        )}
+
         {/* Delete Confirmation Modal */}
         <Modal 
           isOpen={deleteModal.isOpen} 

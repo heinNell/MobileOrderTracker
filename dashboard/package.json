@@ -44,6 +44,7 @@
     "semver": "^7.7.3",
     "undici": "^7.16.0",
     "vercel": "^32.0.1",
+    "xlsx": "^0.18.5",
     "zustand": "^4.4.7"
   },
   "devDependencies": {

@@ -36,61 +36,65 @@ interface CreateContactModalProps {
   onClose: () => void;
   onSuccess?: (contact: EnhancedContact) => void;
   defaultType?: string;
+  initialData?: EnhancedContact;
+  isEditing?: boolean;
 }
 
 export function CreateContactModal({
   isOpen,
   onClose,
   onSuccess,
-  defaultType = 'customer'
+  defaultType = 'customer',
+  initialData,
+  isEditing = false
 }: CreateContactModalProps) {
-  const { createContact } = useContacts();
+  const { createContact, updateContact } = useContacts();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    company_name: '',
-    job_title: '',
-    department: '',
+    first_name: initialData?.first_name || '',
+    last_name: initialData?.last_name || '',
+    company_name: initialData?.company_name || '',
+    job_title: initialData?.job_title || '',
+    department: initialData?.department || '',
     
     // Contact Methods
-    primary_phone: '',
-    secondary_phone: '',
-    mobile_phone: '',
-    primary_email: '',
-    secondary_email: '',
-    fax: '',
+    primary_phone: initialData?.primary_phone || '',
+    secondary_phone: initialData?.secondary_phone || '',
+    mobile_phone: initialData?.mobile_phone || '',
+    primary_email: initialData?.primary_email || '',
+    secondary_email: initialData?.secondary_email || '',
+    fax: initialData?.fax || '',
     
     // Address
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    state: '',
-    postal_code: '',
-    country: '',
+    address_line1: initialData?.address_line1 || '',
+    address_line2: initialData?.address_line2 || '',
+    city: initialData?.city || '',
+    state: initialData?.state || '',
+    postal_code: initialData?.postal_code || '',
+    country: initialData?.country || '',
     
     // Preferences
-    preferred_contact_method: 'phone',
-    language_preference: 'en',
-    timezone: '',
+    preferred_contact_method: initialData?.preferred_contact_method || 'phone',
+    language_preference: initialData?.language_preference || 'en',
+    timezone: initialData?.timezone || '',
     
     // Contact Type
-    contact_type: defaultType,
-    categories: [] as string[],
-    relationship_type: '',
+    contact_type: initialData?.contact_type || defaultType,
+    categories: (initialData?.categories as string[]) || [] as string[],
+    relationship_type: initialData?.relationship_type || '',
     
     // Customer/Supplier Specific
-    customer_id: '',
-    supplier_id: '',
-    account_number: '',
-    credit_limit: '',
-    payment_terms: '',
+    customer_id: initialData?.customer_id || '',
+    supplier_id: initialData?.supplier_id || '',
+    account_number: initialData?.account_number || '',
+    credit_limit: initialData?.credit_limit?.toString() || '',
+    payment_terms: initialData?.payment_terms || '',
     
     // Status
-    is_active: true,
-    is_primary: false,
-    tags: [] as string[],
-    notes: ''
+    is_active: initialData?.is_active !== undefined ? initialData.is_active : true,
+    is_primary: initialData?.is_primary || false,
+    tags: (initialData?.tags as string[]) || [] as string[],
+    notes: initialData?.notes || ''
   });
 
   const [categoryInput, setCategoryInput] = useState('');
@@ -145,24 +149,28 @@ export function CreateContactModal({
         notes: formData.notes || undefined
       };
 
-      const result = await createContact(contactData);
+      const result = isEditing && initialData
+        ? await updateContact(initialData.id, contactData)
+        : await createContact(contactData);
       
       if (result.success && result.data) {
-        toast.success('Contact created successfully!');
+        toast.success(`Contact ${isEditing ? 'updated' : 'created'} successfully!`);
         if (onSuccess) onSuccess(result.data);
         onClose();
-        // Reset form
-        setFormData({
-          first_name: '', last_name: '', company_name: '', job_title: '', department: '',
-          primary_phone: '', secondary_phone: '', mobile_phone: '', primary_email: '', secondary_email: '', fax: '',
-          address_line1: '', address_line2: '', city: '', state: '', postal_code: '', country: '',
-          preferred_contact_method: 'phone', language_preference: 'en', timezone: '',
-          contact_type: defaultType, categories: [], relationship_type: '',
-          customer_id: '', supplier_id: '', account_number: '', credit_limit: '', payment_terms: '',
-          is_active: true, is_primary: false, tags: [], notes: ''
-        });
+        // Reset form only when creating
+        if (!isEditing) {
+          setFormData({
+            first_name: '', last_name: '', company_name: '', job_title: '', department: '',
+            primary_phone: '', secondary_phone: '', mobile_phone: '', primary_email: '', secondary_email: '', fax: '',
+            address_line1: '', address_line2: '', city: '', state: '', postal_code: '', country: '',
+            preferred_contact_method: 'phone', language_preference: 'en', timezone: '',
+            contact_type: defaultType, categories: [], relationship_type: '',
+            customer_id: '', supplier_id: '', account_number: '', credit_limit: '', payment_terms: '',
+            is_active: true, is_primary: false, tags: [], notes: ''
+          });
+        }
       } else {
-        toast.error(`Failed to create contact: ${result.error}`);
+        toast.error(`Failed to ${isEditing ? 'update' : 'create'} contact: ${result.error}`);
       }
     } catch (error: any) {
       toast.error(`Error: ${error.message}`);
@@ -224,8 +232,10 @@ export function CreateContactModal({
       <ModalContent className="bg-white">
         <form onSubmit={handleSubmit}>
           <ModalHeader className="flex flex-col gap-1 bg-white">
-            <h2 className="text-2xl font-bold text-gray-800">Create New Contact</h2>
-            <p className="text-sm text-gray-600 font-normal">Add a customer or site contact</p>
+            <h2 className="text-2xl font-bold text-gray-800">{isEditing ? 'Edit Contact' : 'Create New Contact'}</h2>
+            <p className="text-sm text-gray-600 font-normal">
+              {isEditing ? 'Update contact information' : 'Add a customer or site contact'}
+            </p>
           </ModalHeader>
           <ModalBody className="bg-gray-50">
             <div className="space-y-6">

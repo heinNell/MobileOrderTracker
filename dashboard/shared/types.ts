@@ -160,6 +160,14 @@ export interface Order {
   actual_start_time?: string;
   actual_end_time?: string;
   load_activated_at?: string;
+  // Expected loading and unloading dates for load planning
+  expected_loading_date?: string;
+  expected_unloading_date?: string;
+  expected_loading_time?: string;
+  expected_unloading_time?: string;
+  // Rate and currency for PDF export
+  rate?: number;
+  rate_currency?: string;
   // Transporter supplier information
   transporter_supplier?: TransporterSupplier;
   metadata?: Record<string, any>;

@@ -65,11 +65,8 @@ export class OrderPDFExporter {
     // Company name and details
     this.pdf.setFontSize(20);
     this.pdf.setFont("helvetica", "bold");
-    this.pdf.text(
-      options.companyName || "Matanuska Load Confirmation",
-      this.margin,
-      this.currentY
-    );
+    const companyName = options.companyName || "Matanuska Load Confirmation";
+    this.pdf.text(companyName, this.margin, this.currentY);
     this.currentY += 10;
 
     if (options.companyAddress) {
@@ -122,6 +119,12 @@ export class OrderPDFExporter {
           ? `${order.estimated_duration_minutes} minutes`
           : "N/A",
       ],
+      [
+        "Rate:",
+        order.rate && order.rate_currency
+          ? `${order.rate_currency} ${order.rate.toFixed(2)}`
+          : "N/A",
+      ],
     ];
 
     if (order.assigned_driver?.full_name) {
@@ -137,9 +140,9 @@ export class OrderPDFExporter {
 
     orderDetails.forEach(([label, value]) => {
       this.pdf.setFont("helvetica", "bold");
-      this.pdf.text(label, this.margin, this.currentY);
+      this.pdf.text(String(label), this.margin, this.currentY);
       this.pdf.setFont("helvetica", "normal");
-      this.pdf.text(value, this.margin + 40, this.currentY);
+      this.pdf.text(String(value), this.margin + 40, this.currentY);
       this.currentY += this.lineHeight;
     });
 
@@ -206,9 +209,9 @@ export class OrderPDFExporter {
 
     transporterDetails.forEach(([label, value]) => {
       this.pdf.setFont("helvetica", "bold");
-      this.pdf.text(label, this.margin, this.currentY);
+      this.pdf.text(String(label), this.margin, this.currentY);
       this.pdf.setFont("helvetica", "normal");
-      this.pdf.text(value, this.margin + 40, this.currentY);
+      this.pdf.text(String(value), this.margin + 40, this.currentY);
       this.currentY += this.lineHeight;
     });
 
@@ -260,6 +263,13 @@ export class OrderPDFExporter {
       // Ignore coordinate parsing errors
     }
 
+    if (order.expected_loading_date) {
+      loadingDetails.push([
+        "Expected Loading Date:",
+        new Date(order.expected_loading_date).toLocaleString(),
+      ]);
+    }
+
     if (order.loading_time_window_start && order.loading_time_window_end) {
       loadingDetails.push([
         "Time Window:",
@@ -269,10 +279,10 @@ export class OrderPDFExporter {
 
     loadingDetails.forEach(([label, value]) => {
       this.pdf.setFont("helvetica", "bold");
-      this.pdf.text(label, this.margin, this.currentY);
+      this.pdf.text(String(label), this.margin, this.currentY);
       this.pdf.setFont("helvetica", "normal");
       const lines = this.pdf.splitTextToSize(
-        value,
+        String(value),
         this.pageWidth - this.margin - 40
       );
       this.pdf.text(lines, this.margin + 40, this.currentY);
@@ -310,6 +320,13 @@ export class OrderPDFExporter {
       // Ignore coordinate parsing errors
     }
 
+    if (order.expected_unloading_date) {
+      unloadingDetails.push([
+        "Expected Unloading Date:",
+        new Date(order.expected_unloading_date).toLocaleString(),
+      ]);
+    }
+
     if (order.unloading_time_window_start && order.unloading_time_window_end) {
       unloadingDetails.push([
         "Time Window:",
@@ -319,10 +336,10 @@ export class OrderPDFExporter {
 
     unloadingDetails.forEach(([label, value]) => {
       this.pdf.setFont("helvetica", "bold");
-      this.pdf.text(label, this.margin, this.currentY);
+      this.pdf.text(String(label), this.margin, this.currentY);
       this.pdf.setFont("helvetica", "normal");
       const lines = this.pdf.splitTextToSize(
-        value,
+        String(value),
         this.pageWidth - this.margin - 40
       );
       this.pdf.text(lines, this.margin + 40, this.currentY);

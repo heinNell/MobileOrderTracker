@@ -33,66 +33,70 @@ interface CreateTransporterModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (transporter: EnhancedTransporter) => void;
+  initialData?: EnhancedTransporter;
+  isEditing?: boolean;
 }
 
 export function CreateTransporterModal({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
+  initialData,
+  isEditing = false
 }: CreateTransporterModalProps) {
-  const { createTransporter } = useTransporters();
+  const { createTransporter, updateTransporter } = useTransporters();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
-    company_name: '',
-    registration_number: '',
-    tax_id: '',
+    name: initialData?.name || '',
+    company_name: initialData?.company_name || '',
+    registration_number: initialData?.registration_number || '',
+    tax_id: initialData?.tax_id || '',
     
     // Contact Information
-    primary_contact_name: '',
-    primary_contact_phone: '',
-    primary_contact_email: '',
-    secondary_contact_name: '',
-    secondary_contact_phone: '',
-    secondary_contact_email: '',
+    primary_contact_name: initialData?.primary_contact_name || '',
+    primary_contact_phone: initialData?.primary_contact_phone || '',
+    primary_contact_email: initialData?.primary_contact_email || '',
+    secondary_contact_name: initialData?.secondary_contact_name || '',
+    secondary_contact_phone: initialData?.secondary_contact_phone || '',
+    secondary_contact_email: initialData?.secondary_contact_email || '',
     
     // Address
-    business_address: '',
-    business_city: '',
-    business_state: '',
-    business_postal_code: '',
-    business_country: '',
+    business_address: initialData?.business_address || '',
+    business_city: initialData?.business_city || '',
+    business_state: initialData?.business_state || '',
+    business_postal_code: initialData?.business_postal_code || '',
+    business_country: initialData?.business_country || '',
     
     // Service Details
-    service_types: [] as string[],
-    coverage_areas: [] as string[],
-    vehicle_types: [] as string[],
-    max_capacity_kg: '',
-    max_volume_m3: '',
+    service_types: (initialData?.service_types as string[]) || [] as string[],
+    coverage_areas: (initialData?.coverage_areas as string[]) || [] as string[],
+    vehicle_types: (initialData?.vehicle_types as string[]) || [] as string[],
+    max_capacity_kg: initialData?.max_capacity_kg?.toString() || '',
+    max_volume_m3: initialData?.max_volume_m3?.toString() || '',
     
     // Pricing
-    base_rate_per_km: '',
-    base_rate_per_hour: '',
-    fuel_surcharge_rate: '',
-    minimum_charge: '',
-    currency: 'USD',
+    base_rate_per_km: initialData?.base_rate_per_km?.toString() || '',
+    base_rate_per_hour: initialData?.base_rate_per_hour?.toString() || '',
+    fuel_surcharge_rate: initialData?.fuel_surcharge_rate?.toString() || '',
+    minimum_charge: initialData?.minimum_charge?.toString() || '',
+    currency: initialData?.currency || 'USD',
     
     // Operational
-    lead_time_hours: '',
+    lead_time_hours: initialData?.lead_time_hours?.toString() || '',
     
     // Quality & Compliance
-    certifications: [] as string[],
-    performance_rating: '5',
+    certifications: (initialData?.certifications as string[]) || [] as string[],
+    performance_rating: initialData?.performance_rating?.toString() || '5',
     
     // Status
-    is_active: true,
-    is_preferred: false,
-    auto_assign_eligible: false,
-    priority_level: 5,
+    is_active: initialData?.is_active !== undefined ? initialData.is_active : true,
+    is_preferred: initialData?.is_preferred || false,
+    auto_assign_eligible: initialData?.auto_assign_eligible || false,
+    priority_level: initialData?.priority_level || 5,
     
     // Metadata
-    tags: [] as string[],
-    notes: ''
+    tags: (initialData?.tags as string[]) || [] as string[],
+    notes: initialData?.notes || ''
   });
 
   const [serviceTypeInput, setServiceTypeInput] = useState('');
@@ -151,28 +155,55 @@ export function CreateTransporterModal({
         notes: formData.notes || undefined
       };
 
-      const result = await createTransporter(transporterData);
+      const result = isEditing && initialData
+        ? await updateTransporter(initialData.id, transporterData)
+        : await createTransporter(transporterData);
       
       if (result.success && result.data) {
-        toast.success('Transporter created successfully!');
+        toast.success(`Transporter ${isEditing ? 'updated' : 'created'} successfully!`);
         if (onSuccess) onSuccess(result.data);
         onClose();
-        // Reset form
-        setFormData({
-          name: '', company_name: '', registration_number: '', tax_id: '',
-          primary_contact_name: '', primary_contact_phone: '', primary_contact_email: '',
-          secondary_contact_name: '', secondary_contact_phone: '', secondary_contact_email: '',
-          business_address: '', business_city: '', business_state: '', business_postal_code: '', business_country: '',
-          service_types: [], coverage_areas: [], vehicle_types: [],
-          max_capacity_kg: '', max_volume_m3: '',
-          base_rate_per_km: '', base_rate_per_hour: '', fuel_surcharge_rate: '', minimum_charge: '', currency: 'USD',
-          lead_time_hours: '',
-          certifications: [], performance_rating: '5',
-          is_active: true, is_preferred: false, auto_assign_eligible: false, priority_level: 5,
-          tags: [], notes: ''
-        });
+        // Reset form only when creating
+        if (!isEditing) {
+          setFormData({
+            name: '',
+            company_name: '',
+            registration_number: '',
+            tax_id: '',
+            primary_contact_name: '',
+            primary_contact_phone: '',
+            primary_contact_email: '',
+            secondary_contact_name: '',
+            secondary_contact_phone: '',
+            secondary_contact_email: '',
+            business_address: '',
+            business_city: '',
+            business_state: '',
+            business_postal_code: '',
+            business_country: '',
+            service_types: [],
+            coverage_areas: [],
+            vehicle_types: [],
+            max_capacity_kg: '',
+            max_volume_m3: '',
+            base_rate_per_km: '',
+            base_rate_per_hour: '',
+            fuel_surcharge_rate: '',
+            minimum_charge: '',
+            currency: 'USD',
+            lead_time_hours: '',
+            certifications: [],
+            performance_rating: '5',
+            is_active: true,
+            is_preferred: false,
+            auto_assign_eligible: false,
+            priority_level: 5,
+            tags: [],
+            notes: ''
+          });
+        }
       } else {
-        toast.error(`Failed to create transporter: ${result.error}`);
+        toast.error(`Failed to ${isEditing ? 'update' : 'create'} transporter: ${result.error}`);
       }
     } catch (error: any) {
       toast.error(`Error: ${error.message}`);
@@ -255,8 +286,10 @@ export function CreateTransporterModal({
       <ModalContent className="bg-white">
         <form onSubmit={handleSubmit}>
           <ModalHeader className="flex flex-col gap-1 bg-white">
-            <h2 className="text-2xl font-bold">Create New Transporter</h2>
-            <p className="text-sm text-gray-600 font-normal">Add a carrier or logistics provider</p>
+            <h2 className="text-2xl font-bold">{isEditing ? 'Edit Transporter' : 'Create New Transporter'}</h2>
+            <p className="text-sm text-gray-600 font-normal">
+              {isEditing ? 'Update transporter information' : 'Add a carrier or logistics provider'}
+            </p>
           </ModalHeader>
           <ModalBody className="bg-white">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -1,7 +1,6 @@
 "use client";
 
-import
-  {
+import {
     EnvelopeIcon,
     FunnelIcon,
     MagnifyingGlassIcon,
@@ -12,9 +11,8 @@ import
     TrashIcon,
     TruckIcon,
     UserGroupIcon,
-  } from "@heroicons/react/24/outline";
-import
-  {
+} from "@heroicons/react/24/outline";
+import {
     Button,
     Card,
     CardBody,
@@ -32,7 +30,7 @@ import
     Spinner,
     Tooltip,
     useDisclosure
-  } from "@nextui-org/react";
+} from "@nextui-org/react";
 import { debounce } from "lodash";
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -635,6 +633,24 @@ export default function ContactsPage() {
             createModal.onClose();
           }}
         />
+
+        {/* Edit Modal - Using Create Modal with initial data */}
+        {selectedContact && (
+          <CreateContactModal
+            isOpen={editModal.isOpen}
+            onClose={() => {
+              editModal.onClose();
+              setSelectedContact(null);
+            }}
+            onSuccess={() => {
+              refetch();
+              editModal.onClose();
+              setSelectedContact(null);
+            }}
+            initialData={selectedContact}
+            isEditing={true}
+          />
+        )}
 
         {/* Delete Confirmation Modal */}
         <Modal 

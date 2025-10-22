@@ -71,6 +71,10 @@ export default function EnhancedOrderForm({
     special_handling_instructions: order?.special_handling_instructions || "",
     contact_name: order?.contact_name || "",
     contact_phone: order?.contact_phone || "",
+    
+    // Expected dates for load planning
+    expected_loading_date: order?.expected_loading_date || "",
+    expected_unloading_date: order?.expected_unloading_date || "",
 
     // Transporter supplier info
     transporter_name: order?.transporter_supplier?.name || "",
@@ -152,6 +156,8 @@ export default function EnhancedOrderForm({
         special_handling_instructions: order.special_handling_instructions || "",
         contact_name: order.contact_name || "",
         contact_phone: order.contact_phone || "",
+        expected_loading_date: order.expected_loading_date || "",
+        expected_unloading_date: order.expected_unloading_date || "",
         transporter_name: order.transporter_supplier?.name || "",
         transporter_phone: order.transporter_supplier?.contact_phone || "",
         transporter_email: order.transporter_supplier?.contact_email || "",
@@ -159,6 +165,41 @@ export default function EnhancedOrderForm({
         transporter_currency: order.transporter_supplier?.cost_currency || "USD",
         transporter_notes: order.transporter_supplier?.notes || "",
       });
+
+      // IMPORTANT: Restore selected transporter and contact state if they exist
+      // This ensures the UI shows the selected items instead of just the manual entry fields
+      if (order.transporter_supplier?.name) {
+        // Create a minimal transporter object from the order data for display
+        // Note: We don't have full transporter details, but we can show what we have
+        const mockTransporter: EnhancedTransporter = {
+          id: "", // Unknown - would need to fetch from DB
+          tenant_id: order.tenant_id,
+          name: order.transporter_supplier.name,
+          primary_contact_phone: order.transporter_supplier.contact_phone,
+          primary_contact_email: order.transporter_supplier.contact_email,
+          created_at: "",
+          updated_at: "",
+          is_active: true,
+        } as EnhancedTransporter;
+        setSelectedTransporter(mockTransporter);
+        console.log("Restored transporter:", mockTransporter);
+      }
+
+      if (order.contact_name) {
+        // Create a minimal contact object from the order data for display
+        const mockContact: EnhancedContact = {
+          id: "", // Unknown - would need to fetch from DB
+          tenant_id: order.tenant_id,
+          full_name: order.contact_name,
+          first_name: order.contact_name.split(" ")[0] || "",
+          last_name: order.contact_name.split(" ").slice(1).join(" ") || "",
+          primary_phone: order.contact_phone,
+          created_at: "",
+          updated_at: "",
+        } as EnhancedContact;
+        setSelectedCustomerContact(mockContact);
+        console.log("Restored contact:", mockContact);
+      }
     }
   }, [order, isEditing]);
 
@@ -558,6 +599,8 @@ export default function EnhancedOrderForm({
           formData.special_handling_instructions || undefined,
         contact_name: formData.contact_name || undefined,
         contact_phone: formData.contact_phone || undefined,
+        expected_loading_date: formData.expected_loading_date || undefined,
+        expected_unloading_date: formData.expected_unloading_date || undefined,
         transporter_supplier: transporterSupplier,
       };
 
@@ -672,6 +715,34 @@ export default function EnhancedOrderForm({
                       placeholder="e.g., SKU-12345"
                     />
                     <p className="mt-1 text-xs text-gray-500">Unique identifier for this order</p>
+                  </div>
+
+                  {/* Expected Loading Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Expected Loading Date <span className="text-orange-500">★</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.expected_loading_date}
+                      onChange={(e) => handleInputChange("expected_loading_date", e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">When should loading begin?</p>
+                  </div>
+
+                  {/* Expected Unloading Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Expected Unloading Date <span className="text-orange-500">★</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.expected_unloading_date}
+                      onChange={(e) => handleInputChange("expected_unloading_date", e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Expected delivery completion date</p>
                   </div>
 
                   {/* Customer Contact Selection */}
@@ -1369,12 +1440,12 @@ export default function EnhancedOrderForm({
                           }
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base bg-white"
                         >
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="GBP">GBP</option>
-                          <option value="ZAR">ZAR</option>
-                          <option value="NGN">NGN</option>
-                          <option value="KES">KES</option>
+                          <option value="USD">USD - US Dollar</option>
+                          <option value="ZAR">ZAR - South African Rand</option>
+                          <option value="EUR">EUR - Euro</option>
+                          <option value="GBP">GBP - British Pound</option>
+                          <option value="NGN">NGN - Nigerian Naira</option>
+                          <option value="KES">KES - Kenyan Shilling</option>
                         </select>
                       </div>
 

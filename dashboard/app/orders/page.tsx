@@ -4,6 +4,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
+import { exportOrdersToExcel, exportOrderDetailToExcel } from "../../lib/excel-export";
 import { exportOrderToPDF } from "../../lib/pdf-export";
 import
   {
@@ -269,6 +270,7 @@ export default function EnhancedOrdersPage() {
           .select(`
             id,
             order_number,
+            sku,
             status,
             assigned_driver_id,
             assigned_driver_name,
@@ -276,11 +278,22 @@ export default function EnhancedOrdersPage() {
             tenant_id,
             loading_point_name,
             loading_point_address,
+            loading_point_location,
             unloading_point_name,
             unloading_point_address,
+            unloading_point_location,
+            estimated_distance_km,
+            estimated_duration_minutes,
             delivery_instructions,
+            special_handling_instructions,
             contact_name,
             contact_phone,
+            expected_loading_date,
+            expected_unloading_date,
+            transporter_supplier,
+            load_activated_at,
+            actual_start_time,
+            actual_end_time,
             created_at,
             updated_at,
             qr_code_data
@@ -710,6 +723,30 @@ export default function EnhancedOrdersPage() {
     }
   };
 
+  const handleExportToExcel = () => {
+    try {
+      setLoading(true);
+      const result = exportOrdersToExcel(filteredOrders);
+      handleSuccess(`Excel file exported successfully! ${result.recordCount} orders exported to ${result.filename}`);
+    } catch (error: any) {
+      handleApiError(error, "Failed to export to Excel");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportOrderToExcel = (order: Order) => {
+    try {
+      setLoading(true);
+      const result = exportOrderDetailToExcel(order);
+      handleSuccess(`Order details exported to ${result.filename}`);
+    } catch (error: any) {
+      handleApiError(error, "Failed to export order to Excel");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditOrder = (order: Order) => {
     setEditingOrder(order);
     setShowEditModal(true);
@@ -875,6 +912,17 @@ export default function EnhancedOrdersPage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 hidden md:block"
               >
                 Create New Order
+              </button>
+              <button
+                onClick={handleExportToExcel}
+                disabled={filteredOrders.length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed hidden md:flex items-center gap-2"
+                title="Export all filtered orders to Excel"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export to Excel ({filteredOrders.length})
               </button>
               <button
                 onClick={runQuickDiagnostic}
@@ -1159,7 +1207,7 @@ export default function EnhancedOrdersPage() {
                                 className="text-indigo-600 hover:text-indigo-900"
                                 title="Open Tracking Page"
                               >
-                                � View
+                                📍 View
                               </button>
                             </>
                           )}
@@ -1176,6 +1224,13 @@ export default function EnhancedOrdersPage() {
                             title="Export to PDF"
                           >
                             PDF
+                          </button>
+                          <button
+                            onClick={() => handleExportOrderToExcel(order)}
+                            className="text-green-700 hover:text-green-900 font-semibold"
+                            title="Export to Excel"
+                          >
+                            📊 XLS
                           </button>
                           <button
                             onClick={() => router.push(`/orders/${order.id}`)}
