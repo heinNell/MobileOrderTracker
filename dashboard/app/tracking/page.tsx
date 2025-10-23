@@ -831,42 +831,44 @@ export default function TrackingPage() {
 
                   return (
                     <React.Fragment key={`points-${order.id}`}>
-                      {/* Loading Point - Larger, more visible */}
+                      {/* Loading Point - RED marker */}
                       <MarkerTyped
                         position={loadingPoint}
                         icon={{
-                          url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                          scaledSize: isHighlighted 
-                            ? new google.maps.Size(48, 48) 
-                            : new google.maps.Size(32, 32),
+                          path: google.maps.SymbolPath.CIRCLE,
+                          scale: isHighlighted ? 12 : 8,
+                          fillColor: "#EF4444",
+                          fillOpacity: 1,
+                          strokeColor: "#FFFFFF",
+                          strokeWeight: 3,
                         }}
                         label={{
-                          text: "L",
-                          color: "white",
-                          fontSize: isHighlighted ? "16px" : "12px",
-                          fontWeight: "bold",
+                          text: "🏭",
+                          fontSize: isHighlighted ? "24px" : "18px",
                         }}
                         title={`Loading Point\n${order.loading_point_name}\nOrder: ${order.order_number}`}
                         zIndex={isHighlighted ? 10 : 5}
+                        onClick={() => setSelectedOrder(order)}
                       />
 
-                      {/* Unloading Point - Larger, more visible */}
+                      {/* Unloading Point - BLUE marker */}
                       <MarkerTyped
                         position={unloadingPoint}
                         icon={{
-                          url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-                          scaledSize: isHighlighted 
-                            ? new google.maps.Size(48, 48) 
-                            : new google.maps.Size(32, 32),
+                          path: google.maps.SymbolPath.CIRCLE,
+                          scale: isHighlighted ? 12 : 8,
+                          fillColor: "#3B82F6",
+                          fillOpacity: 1,
+                          strokeColor: "#FFFFFF",
+                          strokeWeight: 3,
                         }}
                         label={{
-                          text: "U",
-                          color: "white",
-                          fontSize: isHighlighted ? "16px" : "12px",
-                          fontWeight: "bold",
+                          text: "🏢",
+                          fontSize: isHighlighted ? "24px" : "18px",
                         }}
                         title={`Unloading Point\n${order.unloading_point_name}\nOrder: ${order.order_number}`}
                         zIndex={isHighlighted ? 10 : 5}
+                        onClick={() => setSelectedOrder(order)}
                       />
                     </React.Fragment>
                   );
