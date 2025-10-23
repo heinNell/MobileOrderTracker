@@ -512,35 +512,66 @@ export default function TransportersPage() {
                             </div>
                           </div>
 
-                          {/* Transporter Info Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            {transporter.primary_contact_phone && (
-                              <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border-1 border-gray-200">
-                                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                                  <PhoneIcon className="w-4 h-4 text-blue-600" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs text-gray-500 font-medium">Phone</p>
-                                  <p className="text-sm font-semibold text-blue-600 truncate">
-                                    {transporter.primary_contact_phone}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
+                          {/* Primary Contact Section */}
+                          {(transporter.primary_contact_name || transporter.primary_contact_phone || transporter.primary_contact_email) && (
+                            <div className="mb-4">
+                              <p className="text-xs font-semibold text-gray-600 mb-2">Primary Contact</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {transporter.primary_contact_name && (
+                                  <div className="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 border-1 border-blue-200">
+                                    <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center shrink-0">
+                                      <span className="text-white text-sm font-bold">
+                                        {transporter.primary_contact_name.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs text-gray-600 font-medium">Contact Person</p>
+                                      <p className="text-sm font-semibold text-gray-900 truncate">
+                                        {transporter.primary_contact_name}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
 
-                            {transporter.primary_contact_email && (
-                              <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border-1 border-gray-200">
-                                <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
-                                  <EnvelopeIcon className="w-4 h-4 text-purple-600" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs text-gray-500 font-medium">Email</p>
-                                  <p className="text-sm font-semibold text-blue-600 truncate">
-                                    {transporter.primary_contact_email}
-                                  </p>
-                                </div>
+                                {transporter.primary_contact_phone && (
+                                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border-1 border-gray-200">
+                                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                                      <PhoneIcon className="w-4 h-4 text-blue-600" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs text-gray-500 font-medium">Phone</p>
+                                      <a 
+                                        href={`tel:${transporter.primary_contact_phone}`}
+                                        className="text-sm font-semibold text-blue-600 truncate hover:underline"
+                                      >
+                                        {transporter.primary_contact_phone}
+                                      </a>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {transporter.primary_contact_email && (
+                                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border-1 border-gray-200">
+                                    <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                                      <EnvelopeIcon className="w-4 h-4 text-purple-600" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs text-gray-500 font-medium">Email</p>
+                                      <a 
+                                        href={`mailto:${transporter.primary_contact_email}`}
+                                        className="text-sm font-semibold text-blue-600 truncate hover:underline"
+                                      >
+                                        {transporter.primary_contact_email}
+                                      </a>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            </div>
+                          )}
+
+                          {/* Additional Transporter Info Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 
                             {transporter.coverage_areas && transporter.coverage_areas.length > 0 && (
                               <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border-1 border-gray-200">
@@ -571,6 +602,53 @@ export default function TransportersPage() {
                               </div>
                             )}
                           </div>
+
+                          {/* Secondary Contact Section */}
+                          {(transporter.secondary_contact_name || transporter.secondary_contact_phone || transporter.secondary_contact_email) && (
+                            <div className="mb-4 pb-4 border-b border-gray-200">
+                              <p className="text-xs font-semibold text-gray-600 mb-2">Secondary Contact</p>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {transporter.secondary_contact_name && (
+                                  <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 border-1 border-gray-200">
+                                    <div className="w-7 h-7 rounded-lg bg-gray-300 flex items-center justify-center shrink-0">
+                                      <span className="text-white text-xs font-bold">
+                                        {transporter.secondary_contact_name.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs text-gray-900 font-medium truncate">
+                                        {transporter.secondary_contact_name}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {transporter.secondary_contact_phone && (
+                                  <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 border-1 border-gray-200">
+                                    <PhoneIcon className="w-4 h-4 text-gray-600 shrink-0" />
+                                    <a 
+                                      href={`tel:${transporter.secondary_contact_phone}`}
+                                      className="text-xs font-medium text-blue-600 truncate hover:underline"
+                                    >
+                                      {transporter.secondary_contact_phone}
+                                    </a>
+                                  </div>
+                                )}
+
+                                {transporter.secondary_contact_email && (
+                                  <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 border-1 border-gray-200">
+                                    <EnvelopeIcon className="w-4 h-4 text-gray-600 shrink-0" />
+                                    <a 
+                                      href={`mailto:${transporter.secondary_contact_email}`}
+                                      className="text-xs font-medium text-blue-600 truncate hover:underline"
+                                    >
+                                      {transporter.secondary_contact_email}
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Vehicle Types */}
                           {transporter.vehicle_types && transporter.vehicle_types.length > 0 && (

@@ -168,6 +168,9 @@ export interface Order {
   // Rate and currency for PDF export
   rate?: number;
   rate_currency?: string;
+  // Truck details
+  truck_registration?: string; // Horse/Truck registration number
+  trailer_registration?: string; // Trailer registration number
   // Transporter supplier information
   transporter_supplier?: TransporterSupplier;
   metadata?: Record<string, any>;

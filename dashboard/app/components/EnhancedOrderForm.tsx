@@ -76,6 +76,10 @@ export default function EnhancedOrderForm({
     expected_loading_date: order?.expected_loading_date || "",
     expected_unloading_date: order?.expected_unloading_date || "",
 
+    // Truck details
+    truck_registration: order?.truck_registration || "",
+    trailer_registration: order?.trailer_registration || "",
+
     // Transporter supplier info
     transporter_name: order?.transporter_supplier?.name || "",
     transporter_phone: order?.transporter_supplier?.contact_phone || "",
@@ -158,6 +162,8 @@ export default function EnhancedOrderForm({
         contact_phone: order.contact_phone || "",
         expected_loading_date: order.expected_loading_date || "",
         expected_unloading_date: order.expected_unloading_date || "",
+        truck_registration: order.truck_registration || "",
+        trailer_registration: order.trailer_registration || "",
         transporter_name: order.transporter_supplier?.name || "",
         transporter_phone: order.transporter_supplier?.contact_phone || "",
         transporter_email: order.transporter_supplier?.contact_email || "",
@@ -601,6 +607,8 @@ export default function EnhancedOrderForm({
         contact_phone: formData.contact_phone || undefined,
         expected_loading_date: formData.expected_loading_date || undefined,
         expected_unloading_date: formData.expected_unloading_date || undefined,
+        truck_registration: formData.truck_registration || undefined,
+        trailer_registration: formData.trailer_registration || undefined,
         transporter_supplier: transporterSupplier,
       };
 
@@ -743,6 +751,36 @@ export default function EnhancedOrderForm({
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                     />
                     <p className="mt-1 text-xs text-gray-500">Expected delivery completion date</p>
+                  </div>
+
+                  {/* Truck Registration */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Horse/Truck Registration
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.truck_registration}
+                      onChange={(e) => handleInputChange("truck_registration", e.target.value)}
+                      placeholder="e.g., ABC123GP"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Registration number for the truck/horse</p>
+                  </div>
+
+                  {/* Trailer Registration */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Trailer Registration
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.trailer_registration}
+                      onChange={(e) => handleInputChange("trailer_registration", e.target.value)}
+                      placeholder="e.g., XYZ789GP"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Registration number for the trailer</p>
                   </div>
 
                   {/* Customer Contact Selection */}

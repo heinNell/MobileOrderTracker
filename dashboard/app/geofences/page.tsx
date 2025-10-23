@@ -140,24 +140,64 @@ export default function GeofencesPage() {
       // Ensure we have auth user
       if (!user?.id) throw new Error("Not authenticated");
 
+      // Validate input data
+      if (!newGeofence.name || newGeofence.name.trim() === "") {
+        throw new Error("Geofence name is required");
+      }
+      if (!newGeofence.latitude || newGeofence.latitude === 0) {
+        throw new Error("Latitude is required and cannot be 0");
+      }
+      if (!newGeofence.longitude || newGeofence.longitude === 0) {
+        throw new Error("Longitude is required and cannot be 0");
+      }
+      if (!newGeofence.radius_meters || newGeofence.radius_meters <= 0) {
+        throw new Error("Radius must be greater than 0");
+      }
+
+      console.log("Creating geofence with data:", newGeofence);
+
       // Get user's tenant_id
       const { data: userRow, error: userError } = await supabase
         .from("users")
         .select("tenant_id")
         .eq("id", user.id)
         .single();
-      if (userError) throw userError;
+      
+      if (userError) {
+        console.error("Error fetching user tenant:", userError);
+        throw new Error(`Failed to get user tenant: ${userError.message}`);
+      }
+      
+      if (!userRow?.tenant_id) {
+        throw new Error("User does not have a tenant assigned");
+      }
+
+      console.log("User tenant_id:", userRow.tenant_id);
 
       // Insert using numeric lat/lng (trigger will set location)
-      const { error } = await supabase.from("geofences").insert({
+      const geofenceData = {
         tenant_id: userRow.tenant_id,
-        name: newGeofence.name,
-        latitude: newGeofence.latitude,
-        longitude: newGeofence.longitude,
-        radius_meters: newGeofence.radius_meters,
+        name: newGeofence.name.trim(),
+        latitude: parseFloat(newGeofence.latitude.toString()),
+        longitude: parseFloat(newGeofence.longitude.toString()),
+        radius_meters: parseInt(newGeofence.radius_meters.toString()),
         is_active: true,
-      });
-      if (error) throw error;
+      };
+
+      console.log("Inserting geofence data:", geofenceData);
+
+      const { data: insertedData, error } = await supabase
+        .from("geofences")
+        .insert(geofenceData)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Supabase insert error:", error);
+        throw error;
+      }
+
+      console.log("Successfully created geofence:", insertedData);
 
       setShowCreateModal(false);
       setNewGeofence({
@@ -167,9 +207,26 @@ export default function GeofencesPage() {
         radius_meters: 100,
       });
       fetchGeofences();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating geofence:", err);
-      alert("Failed to create geofence");
+      
+      // Provide more detailed error message
+      let errorMessage = "Failed to create geofence";
+      if (err?.message) {
+        errorMessage += `: ${err.message}`;
+      }
+      if (err?.details) {
+        errorMessage += ` - ${err.details}`;
+      }
+      if (err?.hint) {
+        errorMessage += ` (Hint: ${err.hint})`;
+      }
+      if (err?.code) {
+        errorMessage += ` [Error Code: ${err.code}]`;
+      }
+      
+      alert(errorMessage);
+      console.error("Full error object:", JSON.stringify(err, null, 2));
     }
   };
 

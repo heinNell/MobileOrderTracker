@@ -50,6 +50,7 @@ export function CreateContactModal({
 }: CreateContactModalProps) {
   const { createContact, updateContact } = useContacts();
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     first_name: initialData?.first_name || '',
     last_name: initialData?.last_name || '',
@@ -103,6 +104,7 @@ export function CreateContactModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setEmailError(null); // Clear any previous email errors
 
     try {
       const full_name = `${formData.first_name} ${formData.last_name}`.trim();
@@ -170,10 +172,22 @@ export function CreateContactModal({
           });
         }
       } else {
-        toast.error(`Failed to ${isEditing ? 'update' : 'create'} contact: ${result.error}`);
+        // Check if it's a duplicate email error
+        if (result.error && (result.error.includes('email') || result.error.includes('duplicate'))) {
+          setEmailError(result.error);
+          toast.error('Duplicate email address detected');
+        } else {
+          toast.error(`Failed to ${isEditing ? 'update' : 'create'} contact: ${result.error}`);
+        }
       }
     } catch (error: any) {
-      toast.error(`Error: ${error.message}`);
+      // Check if it's a duplicate email error
+      if (error.message && (error.message.includes('email') || error.message.includes('duplicate'))) {
+        setEmailError(error.message);
+        toast.error('Duplicate email address detected');
+      } else {
+        toast.error(`Error: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -462,11 +476,16 @@ export function CreateContactModal({
                       placeholder="john.doe@company.com"
                       type="email"
                       value={formData.primary_email}
-                      onChange={(e) => setFormData({ ...formData, primary_email: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, primary_email: e.target.value });
+                        setEmailError(null); // Clear error when user types
+                      }}
                       size="lg"
                       variant="bordered"
                       radius="md"
-                      description="Main email address"
+                      description={emailError || "Main email address"}
+                      isInvalid={!!emailError}
+                      errorMessage={emailError}
                       startContent={<EnvelopeIcon className="w-4 h-4 text-gray-400" />}
                       classNames={{
                         label: "text-sm font-semibold text-gray-700 mb-1",

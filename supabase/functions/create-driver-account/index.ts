@@ -55,27 +55,69 @@ Deno.serve(async (req)=>{
     const temporaryPassword = generateTempPassword();
     console.log('Creating driver account for:', requestData.email);
     // Step 1: Create auth user
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: requestData.email.trim().toLowerCase(),
-      password: temporaryPassword,
-      email_confirm: true,
-      user_metadata: {
-        full_name: requestData.full_name,
-        role: 'driver'
-      }
-    });
+    let authData, authError;
+    try {
+      const authResult = await supabaseAdmin.auth.admin.createUser({
+        email: requestData.email.trim().toLowerCase(),
+        password: temporaryPassword,
+        email_confirm: true,
+        user_metadata: {
+          full_name: requestData.full_name,
+          role: 'driver'
+        }
+      });
+      authData = authResult.data;
+      authError = authResult.error;
+    } catch (createError: any) {
+      console.error('Auth creation exception:', createError);
+      return new Response(JSON.stringify({
+        error: 'Auth creation failed: ' + (createError?.message || 'Unknown error'),
+        details: createError?.toString()
+      }), {
+        status: 500,
+        headers: corsHeaders
+      });
+    }
+    
     if (authError) {
       console.error('Auth creation error:', authError);
-      if (authError.message?.includes('already exists')) {
+      console.error('Auth error details:', JSON.stringify(authError, null, 2));
+      
+      // Check for specific error types
+      if (authError.message?.includes('already exists') || authError.message?.includes('duplicate')) {
         return new Response(JSON.stringify({
-          error: 'User already exists'
+          error: 'Email already exists. Please use a different email address.',
+          details: authError.message
         }), {
           status: 409,
           headers: corsHeaders
         });
       }
+      
+      if (authError.message?.includes('rate limit')) {
+        return new Response(JSON.stringify({
+          error: 'Rate limit exceeded. Please try again in a few minutes.',
+          details: authError.message
+        }), {
+          status: 429,
+          headers: corsHeaders
+        });
+      }
+      
+      if (authError.message?.includes('invalid email')) {
+        return new Response(JSON.stringify({
+          error: 'Invalid email format',
+          details: authError.message
+        }), {
+          status: 400,
+          headers: corsHeaders
+        });
+      }
+      
       return new Response(JSON.stringify({
-        error: 'Auth creation failed: ' + authError.message
+        error: 'Auth creation failed: ' + authError.message,
+        details: authError,
+        hint: 'Check Supabase Auth settings and email provider configuration'
       }), {
         status: 400,
         headers: corsHeaders

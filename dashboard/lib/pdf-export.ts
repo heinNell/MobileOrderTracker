@@ -128,7 +128,15 @@ export class OrderPDFExporter {
     ];
 
     if (order.assigned_driver?.full_name) {
-      orderDetails.push(["Assigned Driver:", order.assigned_driver.full_name]);
+      orderDetails.push(["Assigned Driver:", String(order.assigned_driver.full_name)]);
+    }
+
+    if (order.truck_registration) {
+      orderDetails.push(["Truck Registration:", String(order.truck_registration)]);
+    }
+
+    if (order.trailer_registration) {
+      orderDetails.push(["Trailer Registration:", String(order.trailer_registration)]);
     }
 
     if (order.contact_name || order.contact_phone) {
@@ -194,16 +202,21 @@ export class OrderPDFExporter {
     this.pdf.setFont("helvetica", "normal");
     this.pdf.setFontSize(10);
 
+    // Handle both old and new field names for compatibility
+    const companyName = (transporter as any).company_name || transporter.name || "N/A";
+    const contactPhone = (transporter as any).primary_contact_phone || transporter.contact_phone || "N/A";
+    const contactEmail = (transporter as any).primary_contact_email || transporter.contact_email || "N/A";
+
     const transporterDetails = [
-      ["Company Name:", transporter.name],
-      ["Phone:", transporter.contact_phone || "N/A"],
-      ["Email:", transporter.contact_email || "N/A"],
+      ["Company Name:", String(companyName)],
+      ["Phone:", String(contactPhone)],
+      ["Email:", String(contactEmail)],
     ];
 
     if (transporter.cost_amount && transporter.cost_currency) {
       transporterDetails.push([
         "Cost:",
-        `${transporter.cost_currency} ${transporter.cost_amount.toFixed(2)}`,
+        `${String(transporter.cost_currency)} ${Number(transporter.cost_amount).toFixed(2)}`,
       ]);
     }
 
@@ -223,7 +236,7 @@ export class OrderPDFExporter {
 
       this.pdf.setFont("helvetica", "normal");
       const lines = this.pdf.splitTextToSize(
-        transporter.notes,
+        String(transporter.notes),
         this.pageWidth - 2 * this.margin
       );
       this.pdf.text(lines, this.margin, this.currentY);

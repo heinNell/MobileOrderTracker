@@ -4,7 +4,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-import { exportOrdersToExcel, exportOrderDetailToExcel } from "../../lib/excel-export";
+import { exportOrderDetailToExcel, exportOrdersToExcel } from "../../lib/excel-export";
 import { exportOrderToPDF } from "../../lib/pdf-export";
 import
   {
@@ -139,16 +139,22 @@ export default function EnhancedOrdersPage() {
           full_name,
           role,
           tenant_id,
-          is_active,
-          tenants:tenant_id (
-            id,
-            name,
-            is_active
-          )
+          is_active
         `
         )
         .eq("id", user.id)
         .maybeSingle();
+      
+      // Fetch tenant info separately if user has tenant_id
+      let tenantData = null;
+      if (userData?.tenant_id) {
+        const { data: tenant } = await supabase
+          .from("tenants")
+          .select("id, name, is_active")
+          .eq("id", userData.tenant_id)
+          .single();
+        tenantData = tenant;
+      }
 
       if (userError) {
         setDebugInfo((prev) => ({
@@ -187,7 +193,7 @@ export default function EnhancedOrdersPage() {
       setDebugInfo((prev) => ({
         ...prev,
         userStatus: "User properly configured",
-        tenantInfo: userData.tenants,
+        tenantInfo: tenantData,
         orderCount: orderCount || 0,
         rlsStatus: countError
           ? "RLS may be blocking access"

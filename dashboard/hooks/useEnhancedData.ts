@@ -459,6 +459,19 @@ export function useContacts() {
         throw new Error('User not found or unauthorized');
       }
 
+      // Check for existing email if primary_email is provided
+      if (contactData.primary_email) {
+        const { data: existingContact } = await supabase
+          .from('contacts')
+          .select('id, full_name, primary_email')
+          .eq('primary_email', contactData.primary_email)
+          .maybeSingle();
+
+        if (existingContact) {
+          throw new Error(`This email address is already in use by contact: ${existingContact.full_name}`);
+        }
+      }
+
       // Add tenant_id to the contact data
       const dataWithTenant = {
         ...contactData,
@@ -471,7 +484,13 @@ export function useContacts() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Handle specific database constraint errors
+        if (error.message.includes('contacts_email_key') || error.message.includes('duplicate key')) {
+          throw new Error('This email address is already registered. Please use a different email or update the existing contact.');
+        }
+        throw error;
+      }
       
       setContacts(prev => [...prev, data]);
       return { success: true, data };
