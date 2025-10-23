@@ -827,34 +827,46 @@ export default function TrackingPage() {
                     return null;
                   }
 
+                  const isHighlighted = selectedOrder?.id === order.id;
+
                   return (
                     <React.Fragment key={`points-${order.id}`}>
-                      {/* Loading Point */}
+                      {/* Loading Point - Larger, more visible */}
                       <MarkerTyped
                         position={loadingPoint}
                         icon={{
-                          path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                          scale: 6,
-                          fillColor: "#EF4444",
-                          fillOpacity: 1,
-                          strokeColor: "#FFFFFF",
-                          strokeWeight: 1,
+                          url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                          scaledSize: isHighlighted 
+                            ? new google.maps.Size(48, 48) 
+                            : new google.maps.Size(32, 32),
                         }}
-                        title={`Loading: ${order.loading_point_name}`}
+                        label={{
+                          text: "L",
+                          color: "white",
+                          fontSize: isHighlighted ? "16px" : "12px",
+                          fontWeight: "bold",
+                        }}
+                        title={`Loading Point\n${order.loading_point_name}\nOrder: ${order.order_number}`}
+                        zIndex={isHighlighted ? 10 : 5}
                       />
 
-                      {/* Unloading Point */}
+                      {/* Unloading Point - Larger, more visible */}
                       <MarkerTyped
                         position={unloadingPoint}
                         icon={{
-                          path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                          scale: 6,
-                          fillColor: "#3B82F6",
-                          fillOpacity: 1,
-                          strokeColor: "#FFFFFF",
-                          strokeWeight: 1,
+                          url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                          scaledSize: isHighlighted 
+                            ? new google.maps.Size(48, 48) 
+                            : new google.maps.Size(32, 32),
                         }}
-                        title={`Unloading: ${order.unloading_point_name}`}
+                        label={{
+                          text: "U",
+                          color: "white",
+                          fontSize: isHighlighted ? "16px" : "12px",
+                          fontWeight: "bold",
+                        }}
+                        title={`Unloading Point\n${order.unloading_point_name}\nOrder: ${order.order_number}`}
+                        zIndex={isHighlighted ? 10 : 5}
                       />
                     </React.Fragment>
                   );
@@ -948,8 +960,8 @@ export default function TrackingPage() {
           {/* Map Legend */}
           <div className="mt-4 flex flex-wrap gap-4 text-sm">
             <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full bg-green-500 mr-2"></div>
-              <span>Vehicle Location</span>
+              <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
+              <span>Current Vehicle Location</span>
             </div>
             <div className="flex items-center">
               <div className="w-8 h-1 bg-green-500 mr-2"></div>
@@ -965,11 +977,13 @@ export default function TrackingPage() {
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full bg-red-500 mr-2"></div>
-              <span>Loading Point</span>
+              <span className="font-semibold">L</span>
+              <span className="ml-1">- Loading Point</span>
             </div>
             <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
-              <span>Unloading Point</span>
+              <div className="w-4 h-4 rounded-full bg-blue-600 mr-2"></div>
+              <span className="font-semibold">U</span>
+              <span className="ml-1">- Unloading Point</span>
             </div>
           </div>
         </div>
