@@ -247,7 +247,8 @@ export default function GeofencesPage() {
   const handleDeleteGeofence = async (id: string) => {
     if (!confirm("Are you sure you want to delete this geofence?")) return;
     try {
-      const { error } = await supabase.from("geofences").delete().eq("id", id);
+      // Delete from enhanced_geofences table (not the view)
+      const { error } = await supabase.from("enhanced_geofences").delete().eq("id", id);
       if (error) throw error;
       fetchGeofences();
     } catch (err) {
