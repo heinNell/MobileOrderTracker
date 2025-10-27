@@ -1,7 +1,26 @@
 // Web implementation using Google Maps API
-import { GoogleMap, Marker, Polyline as GoogleMapsPolyline, Circle as GoogleMapsCircle, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, Circle as GoogleMapsCircle, Polyline as GoogleMapsPolyline, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import React from 'react';
+
+// Static libraries array to prevent performance warning
+const GOOGLE_MAPS_LIBRARIES = ['geometry'];
+
+// Suppress Google Maps font loading timeout errors globally (only once)
+let fontErrorSuppressed = false;
+if (typeof window !== 'undefined' && !fontErrorSuppressed) {
+  fontErrorSuppressed = true;
+  const originalError = console.error;
+  console.error = (...args) => {
+    const errorMsg = args[0]?.toString() || '';
+    // Suppress Google Maps font loading timeout errors (harmless)
+    if (errorMsg.includes('timeout exceeded') || 
+        errorMsg.includes('FontFaceObserver') ||
+        errorMsg.includes('fontfaceobserver')) {
+      return; // Suppress this error
+    }
+    originalError.apply(console, args);
+  };
+}
 
 const mapContainerStyle = {
   width: '100%',
@@ -35,7 +54,7 @@ export function MapView({
 }) {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-    libraries: ['geometry'], // Add libraries if needed
+    libraries: GOOGLE_MAPS_LIBRARIES, // Static libraries array
   });
 
   if (loadError) {

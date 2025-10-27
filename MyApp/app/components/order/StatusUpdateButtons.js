@@ -14,7 +14,7 @@ import
     TextInput,
     View
   } from 'react-native';
-import StatusUpdateService, { ORDER_STATUSES, STATUS_INFO } from '../../services/StatusUpdateService';
+import statusUpdateServiceInstance, { StatusUpdateService, ORDER_STATUSES, STATUS_INFO } from '../../services/StatusUpdateService';
 
 // Color constants to avoid ESLint warnings
 const colors = {
@@ -92,7 +92,7 @@ const StatusUpdateButtons = ({
     setIsUpdating(true);
     
     try {
-      const result = await StatusUpdateService.updateOrderStatus(
+      const result = await statusUpdateServiceInstance.updateOrderStatus(
         order.id, 
         newStatus, 
         note
@@ -232,70 +232,6 @@ const StatusUpdateButtons = ({
           })}
         </View>
 
-        {/* Quick action buttons for common updates */}
-        {order.status === ORDER_STATUSES.ACTIVATED && (
-          <View style={styles.quickActions}>
-            <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-            <View style={styles.quickActionsRow}>
-              <Pressable
-                style={[styles.quickActionButton, styles.yellowButton]}
-                onPress={() => handleStatusPress(ORDER_STATUSES.IN_PROGRESS)}
-                disabled={disabled || isUpdating}
-              >
-                <MaterialIcons name="play-arrow" size={16} color="white" />
-                <Text style={styles.quickActionText}>Start Trip</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {order.status === ORDER_STATUSES.IN_TRANSIT && (
-          <View style={styles.quickActions}>
-            <Text style={styles.quickActionsTitle}>Arrival Updates</Text>
-            <View style={styles.quickActionsRow}>
-              <Pressable
-                style={[styles.quickActionButton, styles.greenButton]}
-                onPress={() => handleStatusPress(ORDER_STATUSES.ARRIVED_AT_LOADING_POINT)}
-                disabled={disabled || isUpdating}
-              >
-                <MaterialIcons name="location-on" size={16} color="white" />
-                <Text style={styles.quickActionText}>At Loading Point</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {order.status === ORDER_STATUSES.LOADED && (
-          <View style={styles.quickActions}>
-            <Text style={styles.quickActionsTitle}>Delivery Updates</Text>
-            <View style={styles.quickActionsRow}>
-              <Pressable
-                style={[styles.quickActionButton, styles.greenButton]}
-                onPress={() => handleStatusPress(ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT)}
-                disabled={disabled || isUpdating}
-              >
-                <MaterialIcons name="location-on" size={16} color="white" />
-                <Text style={styles.quickActionText}>At Unloading Point</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {order.status === ORDER_STATUSES.UNLOADING && (
-          <View style={styles.quickActions}>
-            <Text style={styles.quickActionsTitle}>Final Step</Text>
-            <View style={styles.quickActionsRow}>
-              <Pressable
-                style={[styles.quickActionButton, styles.successButton]}
-                onPress={() => handleStatusPress(ORDER_STATUSES.DELIVERED)}
-                disabled={disabled || isUpdating}
-              >
-                <MaterialIcons name="check-circle" size={16} color="white" />
-                <Text style={styles.quickActionText}>Mark Delivered</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
       </View>
 
       {/* Note input modal */}
@@ -406,45 +342,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     textAlign: 'center',
-  },
-  quickActions: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[200],
-  },
-  quickActionsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.gray[500],
-    marginBottom: 8,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  quickActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 6,
-    gap: 6,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  quickActionText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  yellowButton: {
-    backgroundColor: colors.yellow[500],
-  },
-  greenButton: {
-    backgroundColor: colors.green[500],
-  },
-  successButton: {
-    backgroundColor: colors.emerald[600],
   },
   
   // Modal styles

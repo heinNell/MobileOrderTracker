@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import
   {
     ActivityIndicator,
@@ -20,212 +20,754 @@ import
 import StatusUpdateButtons from "../components/order/StatusUpdateButtons";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import LocationService from '@/services/LocationService';
-import StatusUpdateService from "../services/StatusUpdateService";
-import { useResponsive } from "../utils/responsive";
+import LocationService from "../services/LocationService";
+import statusUpdateServiceInstance from "../services/StatusUpdateService";
 
-const locationService = new LocationService();
+const DriverDashboard = () => {
+  // Initialize LocationService inside the component to prevent memory leaks
+  const locationServiceRef = useRef(null);
+  
+  // Complete color palette - wrapped in useMemo to prevent recreation
+  const colors = useMemo(() => ({
+    // Primary brand colors
+    primary: '#3B82F6',
+    primaryLight: '#60A5FA',
+    primaryDark: '#1D4ED8',
+    
+    // Semantic colors
+    success: '#059669',
+    successLight: '#10B981',
+    successBackground: '#ECFDF5',
+    successDark: '#047857',
+    
+    danger: '#DC2626',
+    dangerLight: '#EF4444',
+    dangerBackground: '#FEF2F2',
+    
+    warning: '#D97706',
+    warningLight: '#F59E0B',
+    warningBackground: '#FFFBEB',
+    
+    info: '#2563EB',
+    infoLight: '#3B82F6',
+    infoBackground: '#EFF6FF',
+    
+    purple: '#7C3AED',
+    purpleLight: '#8B5CF6',
+    purpleBackground: '#F3E8FF',
+    
+    // Neutral grays
+    white: '#FFFFFF',
+    gray50: '#F8FAFC',
+    gray100: '#F1F5F9',
+    gray200: '#E2E8F0',
+    gray300: '#CBD5E1',
+    gray400: '#94A3B8',
+    gray500: '#64748B',
+    gray600: '#475569',
+    gray700: '#334155',
+    gray800: '#1E293B',
+    gray900: '#0F172A',
+    
+    // Background colors
+    background: '#F8FAFC',
+    surface: '#FFFFFF',
+    surfaceSecondary: '#F1F5F9',
+    
+    // Border colors
+    border: '#E2E8F0',
+    borderLight: '#F1F5F9',
+    borderDark: '#CBD5E1',
+    
+    // Shadow colors
+    shadow: 'rgba(15, 23, 42, 0.08)',
+    shadowDark: 'rgba(15, 23, 42, 0.16)',
+    
+    // Additional colors
+    greenLight: '#D1FAE5',
+    redLight: '#FEE2E2',
+    redBorder: '#FECACA',
+  }), []);
 
-// Modern Mobile-First Color System
-const colors = {
-  // Primary brand colors
-  primary: '#3B82F6',
-  primaryLight: '#60A5FA',
-  primaryDark: '#1D4ED8',
-  
-  // Semantic colors
-  success: '#059669',
-  successLight: '#10B981',
-  successBackground: '#ECFDF5',
-  
-  danger: '#DC2626',
-  dangerLight: '#EF4444',
-  dangerBackground: '#FEF2F2',
-  
-  warning: '#D97706',
-  warningLight: '#F59E0B',
-  warningBackground: '#FFFBEB',
-  
-  info: '#2563EB',
-  infoLight: '#3B82F6',
-  infoBackground: '#EFF6FF',
-  
-  purple: '#7C3AED',
-  purpleLight: '#8B5CF6',
-  purpleBackground: '#F3E8FF',
-  
-  // Neutral grays (improved contrast)
-  white: '#FFFFFF',
-  gray50: '#F8FAFC',
-  gray100: '#F1F5F9',
-  gray200: '#E2E8F0',
-  gray300: '#CBD5E1',
-  gray400: '#94A3B8',
-  gray500: '#64748B',
-  gray600: '#475569',
-  gray700: '#334155',
-  gray800: '#1E293B',
-  gray900: '#0F172A',
-  
-  // Background colors
-  background: '#F8FAFC',
-  surface: '#FFFFFF',
-  surfaceSecondary: '#F1F5F9',
-  
-  // Border colors
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  borderDark: '#CBD5E1',
-  
-  // Shadow colors
-  shadow: 'rgba(15, 23, 42, 0.08)',
-  shadowDark: 'rgba(15, 23, 42, 0.16)',
-};
+  const styles = StyleSheet.create({
+    // Main container
+    container: { 
+      flex: 1, 
+      backgroundColor: colors.background 
+    },
+    scrollView: { 
+      flex: 1 
+    },
+    
+    // Loading and centered states
+    centered: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+      paddingVertical: 32,
+      backgroundColor: colors.surface,
+    },
+    loadingText: { 
+      marginTop: 16, 
+      fontSize: 16, 
+      color: colors.primary,
+      fontWeight: '500'
+    },
+    
+    // Header design
+    header: {
+      backgroundColor: colors.surface,
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+      elevation: 3,
+    },
+    headerContent: { 
+      flexDirection: "row", 
+      justifyContent: "space-between", 
+      alignItems: "flex-start",
+      gap: 16
+    },
+    
+    // Typography
+    title: { 
+      fontSize: 28, 
+      fontWeight: "bold", 
+      color: colors.gray900,
+      letterSpacing: -0.5
+    },
+    subtitle: { 
+      fontSize: 16, 
+      color: colors.gray600, 
+      marginTop: 4,
+      fontWeight: '500'
+    },
+    
+    // Header actions
+    headerActions: { 
+      flexDirection: "row", 
+      alignItems: "center", 
+      gap: 12 
+    },
+    autoRefreshToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.gray50,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    autoRefreshToggleActive: {
+      backgroundColor: colors.greenLight,
+      borderColor: colors.success,
+      shadowColor: colors.success,
+      shadowOpacity: 0.15,
+    },
+    autoRefreshText: {
+      fontSize: 12,
+      color: colors.gray600,
+      marginLeft: 4,
+      fontWeight: "600",
+    },
+    autoRefreshTextActive: {
+      color: colors.successDark,
+    },
+    logoutButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.redLight,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.redBorder,
+      shadowColor: colors.danger,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    logoutText: { 
+      color: colors.danger, 
+      fontSize: 12, 
+      fontWeight: "600", 
+      marginLeft: 4 
+    },
+    
+    // Order cards
+    activeOrderCard: {
+      backgroundColor: colors.white,
+      padding: 24,
+      marginTop: 16,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.gray100,
+    },
+    noActiveOrderCard: {
+      backgroundColor: colors.white,
+      padding: 32,
+      marginTop: 16,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      alignItems: "center",
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.gray100,
+    },
+    noActiveText: { 
+      fontSize: 20, 
+      fontWeight: "700", 
+      color: colors.gray900, 
+      marginTop: 12,
+      letterSpacing: -0.3
+    },
+    noActiveSubtext: { 
+      fontSize: 15, 
+      color: colors.gray600, 
+      marginTop: 8, 
+      textAlign: "center",
+      lineHeight: 22
+    },
+    
+    // Card headers
+    cardHeader: { 
+      flexDirection: "row", 
+      justifyContent: "space-between", 
+      alignItems: "center", 
+      marginBottom: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.gray100
+    },
+    cardHeaderLeft: { 
+      flexDirection: "row", 
+      alignItems: "center" 
+    },
+    cardTitle: { 
+      fontSize: 19, 
+      fontWeight: "700", 
+      color: colors.gray900, 
+      marginLeft: 8,
+      letterSpacing: -0.3
+    },
+    
+    // Tracking indicator
+    trackingIndicator: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.greenLight,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.successLight,
+    },
+    trackingText: { 
+      fontSize: 12, 
+      color: colors.successDark, 
+      marginLeft: 4, 
+      fontWeight: '700' 
+    },
+    
+    // Order info
+    orderInfo: { 
+      flexDirection: "row", 
+      justifyContent: "space-between", 
+      alignItems: "center", 
+      marginBottom: 16,
+      paddingVertical: 4
+    },
+    orderNumber: { 
+      fontSize: 17, 
+      fontWeight: "700", 
+      color: colors.gray900,
+      letterSpacing: -0.2
+    },
+    statusBadge: { 
+      paddingHorizontal: 14, 
+      paddingVertical: 8, 
+      borderRadius: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    statusText: { 
+      color: colors.white, 
+      fontSize: 12, 
+      fontWeight: "700",
+      letterSpacing: 0.5
+    },
+    
+    // Route information
+    routeInfo: { 
+      marginBottom: 20,
+      paddingTop: 4
+    },
+    navigationRow: {
+      flexDirection: "row", 
+      alignItems: "center", 
+      marginVertical: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      backgroundColor: colors.gray50,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+    },
+    routeArrow: {
+      alignSelf: 'center', 
+      marginVertical: 8
+    },
+    locationText: { 
+      fontSize: 15, 
+      color: colors.gray700, 
+      marginLeft: 12, 
+      flex: 1,
+      lineHeight: 20,
+      fontWeight: '500'
+    },
+    
+    // Action buttons
+    actionButtons: { 
+      flexDirection: "row", 
+      justifyContent: "space-between",
+      gap: 12,
+      marginTop: 8,
+      marginBottom: 16
+    },
+    primaryButton: {
+      flex: 1,
+      backgroundColor: colors.primary,
+      paddingVertical: 16,
+      borderRadius: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+    buttonText: { 
+      color: colors.white, 
+      fontSize: 15, 
+      fontWeight: "700", 
+      marginLeft: 8,
+      letterSpacing: 0.2
+    },
+    
+    // Tracking control section
+    trackingControlSection: {
+      marginTop: 20,
+      padding: 16,
+      backgroundColor: colors.gray50,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+    },
+    trackingPromptSection: {
+      borderColor: colors.warning,
+      borderWidth: 2,
+      backgroundColor: colors.warningBackground,
+    },
+    trackingControlHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    trackingControlTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.gray900,
+      marginLeft: 8,
+      flex: 1,
+      letterSpacing: -0.2,
+    },
+    promptBadge: {
+      backgroundColor: colors.warning,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 10,
+    },
+    promptBadgeText: {
+      color: colors.white,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+    },
+    
+    // ✅ MISSING STYLES ADDED
+    trackingInactiveContainer: {
+      alignItems: 'stretch',
+    },
+    trackingPromptCard: {
+      alignItems: 'center',
+      padding: 16,
+      backgroundColor: colors.infoBackground,
+      borderRadius: 12,
+      marginTop: 8,
+    },
+    trackingPromptTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.info,
+      marginTop: 8,
+      textAlign: 'center',
+    },
+    trackingPromptText: {
+      fontSize: 14,
+      color: colors.gray600,
+      marginTop: 8,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    
+    trackingActiveContainer: {
+      alignItems: 'stretch',
+    },
+    trackingStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+      paddingHorizontal: 4,
+    },
+    trackingStatusText: {
+      fontSize: 14,
+      color: colors.success,
+      marginLeft: 8,
+      fontWeight: '600',
+    },
+    stopTrackingButton: {
+      backgroundColor: colors.danger,
+      paddingVertical: 14,
+      borderRadius: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: colors.danger,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+    stopTrackingButtonText: {
+      color: colors.white,
+      fontSize: 15,
+      fontWeight: '700',
+      marginLeft: 8,
+    },
+    
+    // Recent orders card
+    recentOrdersCard: {
+      backgroundColor: colors.white,
+      padding: 24,
+      marginTop: 16,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.gray100,
+    },
+    recentOrderItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 16,
+      paddingHorizontal: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.gray100,
+      borderRadius: 8,
+      marginVertical: 2,
+    },
+    recentOrderNumber: { 
+      fontSize: 16, 
+      fontWeight: "700", 
+      color: colors.gray900,
+      letterSpacing: -0.2
+    },
+    recentOrderDate: { 
+      fontSize: 13, 
+      color: colors.gray600, 
+      marginTop: 4,
+      fontWeight: '500'
+    },
+    miniStatusBadge: { 
+      paddingHorizontal: 12, 
+      paddingVertical: 6, 
+      borderRadius: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    miniStatusText: { 
+      color: colors.white, 
+      fontSize: 11, 
+      fontWeight: "700",
+      letterSpacing: 0.3
+    },
+    viewAllButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 14,
+      marginTop: 12,
+      backgroundColor: colors.gray50,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+    },
+    viewAllText: { 
+      fontSize: 14, 
+      color: colors.primary, 
+      fontWeight: "700", 
+      marginRight: 4 
+    },
+    
+    // Quick actions card
+    quickActionsCard: {
+      backgroundColor: colors.white,
+      padding: 24,
+      marginTop: 16,
+      marginBottom: 24,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.gray100,
+    },
+    quickActionGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      marginTop: 16,
+      gap: 12,
+    },
+    quickActionButton: {
+      width: "48%",
+      backgroundColor: colors.gray50,
+      padding: 16,
+      borderRadius: 12,
+      alignItems: "center",
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    quickActionText: { 
+      fontSize: 14, 
+      fontWeight: "700", 
+      color: colors.gray700, 
+      marginTop: 8,
+      textAlign: 'center'
+    },
+    
+    // Assigned orders card
+    assignedOrdersCard: {
+      backgroundColor: colors.white,
+      padding: 24,
+      marginTop: 16,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: colors.gray100,
+    },
+    cardSubtitle: {
+      fontSize: 15,
+      color: colors.gray600,
+      marginBottom: 20,
+      fontWeight: '500',
+      lineHeight: 20,
+    },
+    assignedOrderItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+      borderRadius: 12,
+      marginBottom: 12,
+      backgroundColor: colors.gray50,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    assignedOrderNumber: {
+      fontSize: 17,
+      fontWeight: "700",
+      color: colors.primary,
+      letterSpacing: -0.2,
+    },
+    assignedOrderDetails: {
+      fontSize: 14,
+      color: colors.gray700,
+      marginTop: 4,
+      fontWeight: '500',
+    },
+    assignedOrderDate: {
+      fontSize: 12,
+      color: colors.gray600,
+      marginTop: 4,
+      fontWeight: '500',
+    },
+    activateButton: {
+      backgroundColor: colors.success,
+      borderRadius: 16,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: colors.success,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 3,
+      elevation: 3,
+    },
+  });
 
-const getStatusColor = (status) => {
-  const statusColors = {
-    pending: colors.gray400,
-    assigned: colors.primary,
-    activated: colors.success,
-    in_progress: colors.info,
-    in_transit: colors.purple,
-    arrived: colors.successLight,
-    arrived_at_loading_point: colors.successLight,
-    loading: colors.warning,
-    loaded: colors.success,
-    arrived_at_unloading_point: colors.successLight,
-    unloading: colors.warningLight,
-    delivered: colors.success,
-    completed: colors.success,
-    cancelled: colors.danger,
-  };
-  return statusColors[status] || colors.gray500;
-};
-
-const storage = Platform.OS === 'web' 
-  ? {
-      getItem: (key) => {
-        if (typeof window !== 'undefined') {
-          return Promise.resolve(window.localStorage.getItem(key));
-        }
-        return Promise.resolve(null);
-      },
-      setItem: (key, value) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, value);
-        }
-        return Promise.resolve();
-      },
-      removeItem: (key) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(key);
-        }
-        return Promise.resolve();
-      },
-    }
-  : AsyncStorage;
-
-function DriverDashboard() {
+  // State management
   const [activeOrder, setActiveOrder] = useState(null);
   const [scannedOrders, setScannedOrders] = useState([]);
   const [assignedOrders, setAssignedOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [locationTracking, setLocationTracking] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true); // Add auto-refresh toggle
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [navigationInProgress, setNavigationInProgress] = useState(false); // ✅ PREVENT DOUBLE NAVIGATION
+  
   const { user, signOut, isAuthenticated } = useAuth();
   const router = useRouter();
-  
-  // Responsive utilities for mobile-first design
-  const { spacing, fontSizes, isSmallScreen, scale, touchTarget } = useResponsive();
 
-  // Dynamic responsive styles (memoized for performance)
-  const responsiveStyles = useMemo(() => ({
-    header: {
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.lg,
-    },
-    title: {
-      fontSize: fontSizes['3xl'],
-    },
-    subtitle: {
-      fontSize: fontSizes.md,
-      marginTop: spacing.xs,
-    },
-    statsContainer: {
-      flexDirection: isSmallScreen ? 'column' : 'row',
-      gap: isSmallScreen ? spacing.sm : spacing.md,
-      marginTop: spacing.md,
-    },
-    statCard: {
-      padding: spacing.md,
-      marginBottom: isSmallScreen ? spacing.sm : 0,
-    },
-    statNumber: {
-      fontSize: isSmallScreen ? fontSizes['2xl'] : fontSizes['3xl'],
-    },
-    statLabel: {
-      fontSize: fontSizes.sm,
-      marginTop: spacing.xs,
-    },
-    card: {
-      padding: spacing.lg,
-      margin: spacing.md,
-      borderRadius: scale(16),
-    },
-    cardTitle: {
-      fontSize: fontSizes.lg,
-    },
-    cardSubtitle: {
-      fontSize: fontSizes.sm,
-      marginTop: spacing.xs,
-    },
-    button: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      minHeight: touchTarget(44),
-      borderRadius: scale(12),
-    },
-    buttonText: {
-      fontSize: fontSizes.md,
-      marginLeft: spacing.xs,
-    },
-    orderItem: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.sm,
-    },
-    orderNumber: {
-      fontSize: fontSizes.lg,
-    },
-    orderDetails: {
-      fontSize: fontSizes.sm,
-      marginTop: spacing.xs,
-    },
-  }), [spacing, fontSizes, isSmallScreen, scale, touchTarget]);
 
-  // Define activateOrderWithTracking to properly activate orders through load activation
+  // Initialize LocationService inside component
+  useEffect(() => {
+    if (!locationServiceRef.current) {
+      locationServiceRef.current = new LocationService();
+    }
+  }, []);
+
+  // Status color helper function
+  const getStatusColor = useCallback((status) => {
+    switch (status) {
+      case 'pending': return colors.warning;
+      case 'assigned': return colors.info;
+      case 'in_transit': return colors.primary;
+      case 'arrived': return colors.purple;
+      case 'loading': return colors.warning;
+      case 'loaded': return colors.success;
+      case 'unloading': return colors.warning;
+      case 'completed': return colors.success;
+      case 'cancelled': return colors.danger;
+      default: return colors.gray500;
+    }
+  }, [colors]);
+
+  // ✅ SINGLE NAVIGATION HANDLER - PREVENTS DOUBLE NAVIGATION
+  const handleOrderNavigation = useCallback((orderId) => {
+    if (navigationInProgress) {
+      console.log('🚫 Navigation already in progress, ignoring duplicate request');
+      return;
+    }
+    
+    if (!orderId || orderId === 'undefined' || orderId === 'null') {
+      console.error('❌ Invalid order ID for navigation:', orderId);
+      return;
+    }
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(orderId)) {
+      console.error('❌ Invalid UUID format for navigation:', orderId);
+      return;
+    }
+    
+    setNavigationInProgress(true);
+    console.log('🔄 Navigating to order details:', orderId);
+    
+    // Navigate to order details using dynamic route - Expo Router syntax
+    router.push(`/(tabs)/${orderId}`);
+    
+    // Reset navigation flag after a short delay
+    setTimeout(() => {
+      setNavigationInProgress(false);
+    }, 1000);
+  }, [navigationInProgress, router]);
+
+  // Activate order with tracking
   const activateOrderWithTracking = useCallback(async (order) => {
+    if (navigationInProgress) return; // Prevent during navigation
+    
     try {
-      // Validate order has a valid ID
       if (!order || !order.id) {
         throw new Error("Invalid order: missing ID");
       }
       
-      // Ensure order.id is a string
       const orderId = String(order.id);
-      
-      // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(orderId)) {
         throw new Error(`Invalid order ID format: ${orderId}`);
       }
       
-      // Validate user is authenticated
       if (!user || !user.id) {
         throw new Error("User not authenticated");
       }
       
-      // Check Supabase connection
+      console.log("🚀 Activating order:", {
+        orderNumber: order.order_number,
+        orderId: orderId,
+        currentStatus: order.status,
+        userId: user.id
+      });
+      
+      // Check if order exists
       const { data: testData, error: testError } = await supabase
         .from("orders")
         .select("id")
@@ -233,13 +775,6 @@ function DriverDashboard() {
         .limit(1);
       
       if (testError) {
-        console.error("❌ Supabase connection test failed:", {
-          error: testError,
-          message: testError.message,
-          details: testError.details,
-          hint: testError.hint,
-          code: testError.code
-        });
         throw new Error(`Database connection failed: ${testError.message}`);
       }
       
@@ -247,56 +782,35 @@ function DriverDashboard() {
         throw new Error(`Order not found: ${orderId}`);
       }
       
-      console.log("🚀 Activating order through load activation:", {
-        orderNumber: order.order_number,
-        orderId: orderId,
-        currentStatus: order.status,
-        userId: user.id
-      });
-      
-      // Check if order is already activated
-      if (order.status === "activated" || order.load_activated_at) {
-        console.log("Order already activated, proceeding to in_progress");
-        
-        // Move activated order to in_progress
-        const { data: updatedOrder, error: updateError } = await supabase
+      let updatedOrder = null;
+
+      if (['in_transit', 'arrived', 'loading', 'loaded', 'unloading'].includes(order.status) || order.actual_start_time) {
+        // Order already started, update to loading status
+        const { data: loadingOrder, error: updateError } = await supabase
           .from("orders")
           .update({
-            status: "in_progress",
-            actual_start_time: new Date().toISOString(),
-            tracking_active: true,
-            trip_start_time: new Date().toISOString()
+            status: "loading",
+            updated_at: new Date().toISOString()
           })
           .eq("id", orderId)
           .select()
           .single();
 
         if (updateError) {
-          console.error("Error updating to in_progress:", {
-            error: updateError,
-            message: updateError.message,
-            details: updateError.details,
-            hint: updateError.hint,
-            code: updateError.code
-          });
           throw updateError;
         }
 
-        // Create status update record
         await supabase.from("status_updates").insert({
           order_id: orderId,
           driver_id: user.id,
-          status: "in_progress",
-          notes: "Started trip from activated order",
+          status: "loading",
+          notes: "Started loading from dashboard",
           created_at: new Date().toISOString()
         });
 
-        setActiveOrder(updatedOrder);
+        updatedOrder = loadingOrder;
       } else {
-        // Order needs load activation first
-        console.log("Order needs load activation first");
-        
-        // Get current location
+        // Order needs load activation
         const { status } = await Location.requestForegroundPermissionsAsync();
         let currentLocation = null;
         
@@ -310,13 +824,11 @@ function DriverDashboard() {
           }
         }
 
-        // Prepare activation data for the edge function
         const activationData = {
           order_id: orderId,
           notes: 'Load activated automatically by driver from dashboard'
         };
 
-        // Add location if available
         if (currentLocation) {
           activationData.location = {
             latitude: currentLocation.coords.latitude,
@@ -324,91 +836,150 @@ function DriverDashboard() {
           };
         }
 
-        // Add device info
         activationData.device_info = {
           platform: Platform.OS,
           app_version: '1.0.0'
         };
 
-        console.log("📝 Calling activate-load edge function with data:", activationData);
+        try {
+          // Try Edge Function first
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Edge function timeout')), 8000)
+          );
+          
+          const edgeCallPromise = supabase.functions.invoke('activate-load', {
+            body: activationData
+          });
 
-        // Call the activate-load edge function
-        const { data: activationResponse, error: activationError } = await supabase.functions.invoke('activate-load', {
-          body: activationData
-        });
+          const { data: activationResponse, error: activationError } = await Promise.race([
+            edgeCallPromise,
+            timeoutPromise
+          ]);
 
-        if (activationError) {
-          console.error("❌ Edge function error:", activationError);
-          throw activationError;
+          if (activationError) {
+            throw activationError;
+          }
+
+          if (!activationResponse || !activationResponse.success) {
+            throw new Error(activationResponse?.message || 'Edge function returned unsuccessful');
+          }
+
+          updatedOrder = activationResponse.data?.order;
+        } catch (edgeError) {
+          console.warn("⚠️ Edge function failed, using fallback method:", edgeError.message);
+          
+          // Fallback: Direct database update
+          const now = new Date().toISOString();
+          const updateData = {
+            status: 'in_transit',
+            actual_start_time: now,
+            updated_at: now
+          };
+
+          const { data: fallbackOrder, error: updateError } = await supabase
+            .from('orders')
+            .update(updateData)
+            .eq('id', orderId)
+            .eq('assigned_driver_id', user.id)
+            .select()
+            .single();
+
+          if (updateError) {
+            throw updateError;
+          }
+
+          updatedOrder = fallbackOrder;
+
+          // Create status update record
+          try {
+            const statusInsert = {
+              order_id: orderId,
+              driver_id: user.id,
+              status: 'in_transit',
+              notes: 'Load activated from dashboard (fallback method)',
+              created_at: now
+            };
+
+            if (currentLocation) {
+              const locationPoint = `POINT(${currentLocation.coords.longitude} ${currentLocation.coords.latitude})`;
+              statusInsert.location = locationPoint;
+            }
+
+            await supabase.from('status_updates').insert(statusInsert);
+          } catch (logError) {
+            console.warn("⚠️ Failed to create status update:", logError);
+          }
+
+          // Create location updates
+          if (currentLocation) {
+            try {
+              const locationPoint = `POINT(${currentLocation.coords.longitude} ${currentLocation.coords.latitude})`;
+              
+              await supabase.from('location_updates').insert({
+                order_id: orderId,
+                driver_id: user.id,
+                location: locationPoint,
+                accuracy_meters: currentLocation.coords.accuracy,
+                speed_kmh: currentLocation.coords.speed ? currentLocation.coords.speed * 3.6 : null,
+                timestamp: now,
+                created_at: now
+              });
+
+              await supabase.from('driver_locations').insert({
+                order_id: orderId,
+                driver_id: user.id,
+                latitude: currentLocation.coords.latitude,
+                longitude: currentLocation.coords.longitude,
+                accuracy: currentLocation.coords.accuracy,
+                speed: currentLocation.coords.speed ? currentLocation.coords.speed * 3.6 : null,
+                heading: currentLocation.coords.heading,
+                timestamp: now,
+                created_at: now
+              });
+            } catch (locError) {
+              console.warn("⚠️ Failed to create location update:", locError);
+            }
+          }
         }
-
-        if (!activationResponse || !activationResponse.success) {
-          console.error("❌ Activation failed:", activationResponse);
-          throw new Error(activationResponse?.message || 'Failed to activate load');
-        }
-
-        console.log("✅ Load activated successfully via edge function:", activationResponse);
-
-        const updatedOrder = activationResponse.data?.order;
-
-        console.log("✅ Load activation successful:", {
-          orderId,
-          newStatus: updatedOrder.status,
-          loadActivatedAt: updatedOrder.load_activated_at
-        });
-
-        setActiveOrder(updatedOrder);
       }
       
-      // Set as active order
-      await storage.setItem("activeOrderId", orderId);
+      setActiveOrder(updatedOrder);
+      await AsyncStorage.setItem("activeOrderId", orderId);
       
       // Initialize and start location tracking
-      await locationService.initialize();
-      await locationService.setCurrentOrder(orderId);
-      await locationService.startTracking(orderId);
-      
-      // Update UI state
+      await locationServiceRef.current.initialize();
+      await locationServiceRef.current.setCurrentOrder(orderId);
+      await locationServiceRef.current.startTracking(orderId);
       setLocationTracking(true);
       
       console.log("🎉 Order activated with tracking:", order.order_number);
       
-      // Show success message
       Alert.alert(
         "Order Activated",
         `Order #${order.order_number} has been activated successfully.`,
         [{ text: "OK" }]
       );
     } catch (error) {
-      console.error("Error activating order:", {
-        error: error,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-        orderId: order?.id,
-        orderNumber: order?.order_number
-      });
+      console.error("Error activating order:", error);
       Alert.alert(
         "Activation Error",
         `Failed to activate order: ${error.message || error.toString()}. Please try again.`,
         [{ text: "OK" }]
       );
     }
-  }, [user]);
+  }, [user, navigationInProgress]);
 
+  // Load driver data with stable dependencies
   const loadDriverData = useCallback(async () => {
     try {
       setLoading(true);
-      if (!user || !isAuthenticated) return;
+      if (!user?.id || !isAuthenticated) return;
 
-      // Initialize LocationService to ensure it knows about current order
-      await locationService.initialize();
+      await locationServiceRef.current.initialize();
 
       let activeOrderData = null;
-      const activeOrderId = await storage.getItem("activeOrderId");
+      const activeOrderId = await AsyncStorage.getItem("activeOrderId");
       
-      // Validate activeOrderId - check if it's a valid UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const isValidUUID = activeOrderId && 
                           activeOrderId !== 'undefined' && 
@@ -425,8 +996,7 @@ function DriverDashboard() {
 
         if (activeError) {
           if (activeError.code === "PGRST116") {
-            await storage.removeItem("activeOrderId");
-            console.log("Removed invalid active order ID");
+            await AsyncStorage.removeItem("activeOrderId");
           } else {
             console.error("Error fetching active order:", activeError);
           }
@@ -434,121 +1004,34 @@ function DriverDashboard() {
           activeOrderData = data;
         }
       } else if (activeOrderId) {
-        // activeOrderId exists but is invalid - clean it up
         console.warn("Invalid activeOrderId found in storage:", activeOrderId);
-        await storage.removeItem("activeOrderId");
-        console.log("Cleaned up invalid activeOrderId");
+        await AsyncStorage.removeItem("activeOrderId");
       }
 
-      // If no active order, look for newly assigned orders and auto-activate them through load activation
+      // Look for assigned orders from dashboard
       if (!activeOrderData) {
         const { data: assignedOrders, error: assignedError } = await supabase
           .from("orders")
           .select("*")
           .eq("assigned_driver_id", user.id)
-          .eq("status", "assigned")
+          .in("status", ["assigned", "in_transit", "arrived", "loading", "loaded", "unloading"])
           .order("created_at", { ascending: false })
           .limit(1);
 
         if (!assignedError && assignedOrders && assignedOrders.length > 0) {
-          // Auto-activate the most recent assigned order through PROPER load activation
-          const orderToActivate = assignedOrders[0];
-          console.log("Auto-activating newly assigned order:", orderToActivate.order_number);
+          activeOrderData = assignedOrders[0];
+          await AsyncStorage.setItem("activeOrderId", String(activeOrderData.id));
           
           try {
-            // Get current location for activation
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            let currentLocation = null;
-            
-            if (status === 'granted') {
-              try {
-                currentLocation = await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.High,
-                });
-              } catch (locError) {
-                console.warn("Could not get location for auto-activation:", locError);
-              }
-            }
-
-            // Update order status through LOAD ACTIVATION (not directly to in_progress)
-            const updateData = {
-              load_activated_at: new Date().toISOString(),
-              status: "activated", // Proper load activation status
-              updated_at: new Date().toISOString(),
-            };
-
-            // Add GPS coordinates to proper latitude/longitude columns
-            if (currentLocation) {
-              updateData.loading_point_latitude = currentLocation.coords.latitude;
-              updateData.loading_point_longitude = currentLocation.coords.longitude;
-            }
-
-            const { data: updatedOrder, error: updateError } = await supabase
-              .from("orders")
-              .update(updateData)
-              .eq("id", orderToActivate.id)
-              .select()
-              .single();
-
-            if (updateError) {
-              console.error("Error updating order status:", {
-                error: updateError,
-                message: updateError.message,
-                details: updateError.details,
-                hint: updateError.hint,
-                code: updateError.code,
-                orderId: orderToActivate.id
-              });
-              throw updateError;
-            }
-
-            console.log("✅ Order load activated automatically:", updatedOrder);
-
-            // Create status update record for load activation
-            const { error: statusError } = await supabase
-              .from("status_updates")
-              .insert({
-                order_id: orderToActivate.id,
-                driver_id: user.id,
-                status: "activated",
-                notes: "Load auto-activated upon driver login",
-                created_at: new Date().toISOString()
-              });
-
-            if (statusError) {
-              console.warn("Status update insert failed:", statusError);
-            }
-
-            // Set as active order locally
-            await storage.setItem("activeOrderId", String(orderToActivate.id));
-            
-            // Initialize location service and start tracking (for activated status)
-            await locationService.initialize();
-            await locationService.setCurrentOrder(orderToActivate.id);
-            await locationService.startTracking(orderToActivate.id);
-            
-            // Use the updated order data
-            activeOrderData = updatedOrder;
-            
-            console.log("🚀 Order load activated with tracking:", orderToActivate.order_number);
-            
-          } catch (activationError) {
-            console.error("Error in auto-load-activation:", activationError);
-            // Fallback to basic activation without database update
-            try {
-              await storage.setItem("activeOrderId", String(orderToActivate.id));
-              await locationService.initialize();
-              await locationService.setCurrentOrder(orderToActivate.id);
-              activeOrderData = orderToActivate;
-              console.log("Fallback: Order set as active without status update");
-            } catch (fallbackError) {
-              console.error("Fallback activation also failed:", fallbackError);
-            }
+            await locationServiceRef.current.setCurrentOrder(activeOrderData.id);
+            await locationServiceRef.current.startTracking(activeOrderData.id);
+          } catch (trackError) {
+            console.warn("⚠️ Could not auto-start tracking:", trackError);
           }
         }
       }
 
-      // Load all assigned orders for display
+      // Load all assigned orders
       const { data: allAssignedOrders, error: allAssignedError } = await supabase
         .from("orders")
         .select("*")
@@ -562,12 +1045,12 @@ function DriverDashboard() {
 
       setActiveOrder(activeOrderData);
 
-      // Fetch scanned/in-progress orders (EXCLUDING completed and cancelled)
+      // Fetch recent orders
       const { data: scannedData, error: scannedError } = await supabase
         .from("orders")
         .select("*")
         .eq("assigned_driver_id", user.id)
-        .not("status", "in", '("pending","completed","cancelled")') // Exclude pending, completed, and cancelled
+        .not("status", "in", '("pending","completed","cancelled")')
         .order("updated_at", { ascending: false })
         .limit(5);
 
@@ -578,11 +1061,24 @@ function DriverDashboard() {
         setScannedOrders(scannedData || []);
       }
 
+      // Check tracking status
       try {
-        // Only check tracking status if we have an active order to avoid unnecessary location access
         if (activeOrderData) {
-          const trackingStatus = await locationService.isCurrentlyTracking();
-          setLocationTracking(trackingStatus);
+          await locationServiceRef.current.initialize();
+          const trackingStatus = await locationServiceRef.current.isCurrentlyTracking();
+          
+          if (!trackingStatus) {
+            try {
+              await locationServiceRef.current.setCurrentOrder(activeOrderData.id);
+              await locationServiceRef.current.startTracking(activeOrderData.id);
+              setLocationTracking(true);
+            } catch (startError) {
+              console.error("Failed to start tracking:", startError);
+              setLocationTracking(false);
+            }
+          } else {
+            setLocationTracking(trackingStatus);
+          }
         } else {
           setLocationTracking(false);
         }
@@ -596,31 +1092,42 @@ function DriverDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, isAuthenticated]); // Include all required dependencies
+  }, [user?.id, isAuthenticated]); // Stable dependencies
 
+  // Effects
   useEffect(() => {
     if (user?.id && isAuthenticated) {
-      // Initialize StatusUpdateService with current user
-      StatusUpdateService.initialize(user);
+      statusUpdateServiceInstance.initialize(user);
       loadDriverData();
     } else {
       setLoading(false);
     }
-  }, [user, isAuthenticated, loadDriverData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isAuthenticated, loadDriverData]);
 
-  // Auto-refresh to catch completed orders - but much less aggressive and optional
+  // Auto-refresh with reduced frequency
   useEffect(() => {
     if (!user?.id || !isAuthenticated || !autoRefresh) return;
     
-    // Reduced refresh to every 2 minutes instead of 5 seconds, and only if enabled
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing dashboard data (2min interval)');
       loadDriverData();
-    }, 120000); // 2 minutes instead of 5 seconds = 96% reduction in refreshes
+    }, 120000); // 2 minutes
 
     return () => clearInterval(interval);
   }, [user?.id, isAuthenticated, autoRefresh, loadDriverData]);
 
+  // Location tracking effect - simplified without map display
+  useEffect(() => {
+    if (!locationTracking || !activeOrder) return;
+
+    // Location tracking is handled by LocationService
+    // No need for separate location subscription here
+    return () => {
+      // Cleanup handled by LocationService
+    };
+  }, [locationTracking, activeOrder]);
+
+  // Handlers
   const onRefresh = () => {
     setRefreshing(true);
     loadDriverData();
@@ -628,7 +1135,7 @@ function DriverDashboard() {
 
   const stopLocationTracking = async () => {
     try {
-      await locationService.stopTracking();
+      await locationServiceRef.current.stopTracking();
       setLocationTracking(false);
       if (Platform.OS === 'web') {
         alert("Stopped tracking your location.");
@@ -644,7 +1151,6 @@ function DriverDashboard() {
     }
   };
 
-  // Navigation function to open maps with destination
   const openMaps = useCallback((destinationName) => {
     try {
       if (!destinationName) {
@@ -652,7 +1158,6 @@ function DriverDashboard() {
         return;
       }
       
-      // Use location name for search since we don't have coordinates here
       const query = encodeURIComponent(destinationName);
       const scheme = Platform.select({ 
         ios: 'maps:', 
@@ -666,7 +1171,6 @@ function DriverDashboard() {
       } else if (Platform.OS === 'android') {
         url = `${scheme}0,0?q=${query}`;
       } else {
-        // Web fallback
         url = `https://www.google.com/maps/search/${query}`;
       }
       
@@ -685,40 +1189,30 @@ function DriverDashboard() {
   }, []);
 
   const handleLogout = async () => {
-    console.log('🔘 Dashboard logout button pressed');
-    
     const performLogout = async () => {
-      console.log('✅ Performing logout...');
       try {
         if (locationTracking) {
-          console.log('🛑 Stopping location tracking...');
           try {
-            await locationService.stopTracking();
+            await locationServiceRef.current.stopTracking();
             setLocationTracking(false);
           } catch (locError) {
             console.warn('⚠️ Location stop error:', locError);
           }
         }
         
-        console.log('🗑️ Clearing active order...');
         try {
-          await storage.removeItem("activeOrderId");
+          await AsyncStorage.removeItem("activeOrderId");
           setActiveOrder(null);
         } catch (storageError) {
           console.warn('⚠️ Storage clear error:', storageError);
         }
         
-        console.log('🔐 Calling signOut...');
         const result = await signOut();
-        console.log('🔄 SignOut result:', result);
-        
         if (!result || !result.success) {
           console.error('❌ SignOut failed:', result?.error);
         }
         
-        console.log('🔄 Navigating to login...');
         router.replace('/(auth)/login');
-        
       } catch (error) {
         console.error("❌ Logout exception:", error);
         router.replace('/(auth)/login');
@@ -728,29 +1222,20 @@ function DriverDashboard() {
     if (Platform.OS === 'web') {
       if (window.confirm('Are you sure you want to sign out? This will stop location tracking and clear your active order.')) {
         await performLogout();
-      } else {
-        console.log('❌ Logout cancelled');
       }
     } else {
       Alert.alert(
         "Sign Out",
         "Are you sure you want to sign out? This will stop location tracking and clear your active order.",
         [
-          { 
-            text: "Cancel", 
-            style: "cancel",
-            onPress: () => console.log('❌ Logout cancelled')
-          },
-          {
-            text: "Sign Out",
-            style: "destructive",
-            onPress: performLogout,
-          },
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign Out", style: "destructive", onPress: performLogout },
         ]
       );
     }
   };
 
+  // Loading state
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -760,6 +1245,7 @@ function DriverDashboard() {
     );
   }
 
+  // Main render
   return (
     <View style={styles.container}>
       <ScrollView
@@ -768,11 +1254,12 @@ function DriverDashboard() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View style={[styles.header, responsiveStyles.header]}>
+        {/* Header */}
+        <View style={styles.header}>
           <View style={styles.headerContent}>
             <View>
-              <Text style={[styles.title, responsiveStyles.title]}>Driver Dashboard</Text>
-              <Text style={[styles.subtitle, responsiveStyles.subtitle]}>
+              <Text style={styles.title}>Driver Dashboard</Text>
+              <Text style={styles.subtitle}>
                 Welcome back, {user?.email?.split("@")[0]}
               </Text>
             </View>
@@ -790,10 +1277,7 @@ function DriverDashboard() {
                   Auto-refresh
                 </Text>
               </Pressable>
-              <Pressable 
-                style={styles.logoutButton} 
-                onPress={handleLogout}
-              >
+              <Pressable style={styles.logoutButton} onPress={handleLogout}>
                 <MaterialIcons name="logout" size={20} color={colors.danger} />
                 <Text style={styles.logoutText}>Logout</Text>
               </Pressable>
@@ -801,6 +1285,7 @@ function DriverDashboard() {
           </View>
         </View>
 
+        {/* Active Order Section */}
         {activeOrder ? (
           <View style={styles.activeOrderCard}>
             <View style={styles.cardHeader}>
@@ -861,57 +1346,19 @@ function DriverDashboard() {
               </Pressable>
             </View>
 
-            {/* Load Activation Section - Show if order needs activation */}
-            {activeOrder.status === "assigned" && !activeOrder.load_activated_at && (
-              <View style={styles.loadActivationSection}>
-                <View style={styles.activationPromptCard}>
-                  <MaterialIcons name="warning" size={24} color={colors.warning} />
-                  <Text style={styles.activationPromptTitle}>Load Activation Required</Text>
-                  <Text style={styles.activationPromptText}>
-                    This order needs to be activated before you can start delivery operations.
-                  </Text>
-                </View>
-                <Pressable 
-                  style={styles.activateLoadButton} 
-                  onPress={() => activateOrderWithTracking(activeOrder)}
-                >
-                  <MaterialIcons name="play-circle-filled" size={20} color={colors.white} />
-                  <Text style={styles.activateLoadButtonText}>Activate Load</Text>
-                </Pressable>
-              </View>
-            )}
-
-            {/* Primary Action Buttons */}
+            {/* ✅ SINGLE NAVIGATION BUTTONS */}
             <View style={styles.actionButtons}>
               <Pressable
                 style={styles.primaryButton}
-                onPress={() => router.push(`/(tabs)/${activeOrder.id}`)}
+                onPress={() => handleOrderNavigation(activeOrder.id)}
+                disabled={navigationInProgress}
               >
                 <MaterialIcons name="description" size={20} color={colors.white} />
                 <Text style={styles.buttonText}>Order Details</Text>
               </Pressable>
-
-              {/* Show different button based on status */}
-              {activeOrder.status === "activated" && activeOrder.load_activated_at ? (
-                <Pressable
-                  style={[styles.scanButton, { backgroundColor: colors.success }]}
-                  onPress={() => activateOrderWithTracking(activeOrder)}
-                >
-                  <MaterialIcons name="play-arrow" size={20} color={colors.white} />
-                  <Text style={styles.buttonText}>Start Trip</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={styles.scanButton}
-                  onPress={() => router.push(`/(tabs)/scanner?orderId=${activeOrder.id}`)}
-                >
-                  <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
-                  <Text style={styles.buttonText}>Scan QR</Text>
-                </Pressable>
-              )}
             </View>
 
-            {/* Tracking Control - Enhanced for Auto-Assigned Orders */}
+            {/* Tracking Control Section */}
             <View style={[
               styles.trackingControlSection,
               !locationTracking && styles.trackingPromptSection
@@ -925,7 +1372,7 @@ function DriverDashboard() {
                 <Text style={styles.trackingControlTitle}>Location Tracking</Text>
                 {!locationTracking && (
                   <View style={styles.promptBadge}>
-                    <Text style={styles.promptBadgeText}>Action Required</Text>
+                    <Text style={styles.promptBadgeText}>Checking...</Text>
                   </View>
                 )}
               </View>
@@ -949,49 +1396,40 @@ function DriverDashboard() {
               ) : (
                 <View style={styles.trackingInactiveContainer}>
                   <View style={styles.trackingPromptCard}>
-                    <MaterialIcons name="my-location" size={24} color={colors.warning} />
+                    <MaterialIcons name="my-location" size={24} color={colors.info} />
                     <Text style={styles.trackingPromptTitle}>
-                      Start Tracking Your Journey
+                      Location Tracking Starting...
                     </Text>
                     <Text style={styles.trackingPromptText}>
-                      Enable location tracking to monitor your route to the loading point and throughout delivery. This helps customers track their order progress.
+                      Your location will be tracked automatically for this order. This helps with real-time delivery updates and customer tracking.
                     </Text>
                   </View>
-                  <Pressable 
-                    style={styles.startTrackingButtonProminent} 
-                    onPress={() => activateOrderWithTracking(activeOrder)}
-                  >
-                    <MaterialIcons name="my-location" size={20} color={colors.white} />
-                    <Text style={styles.startTrackingButtonText}>Start Tracking</Text>
-                  </Pressable>
                 </View>
               )}
             </View>
 
-            {/* Status Update Section */}
+            {/* Status Update Buttons */}
             <StatusUpdateButtons 
               order={activeOrder}
               onStatusUpdate={(updatedOrder) => {
                 setActiveOrder(updatedOrder);
-                loadDriverData(); // Refresh data after status update
+                loadDriverData();
               }}
               disabled={loading}
             />
           </View>
         ) : (
+          /* No Active Order */
           <View style={styles.noActiveOrderCard}>
             <MaterialIcons name="inbox" size={48} color={colors.gray400} />
             <Text style={styles.noActiveText}>No Active Order</Text>
             <Text style={styles.noActiveSubtext}>
-              No assigned orders available. Check back later or scan a QR code to start tracking an order.
+              No assigned orders available. Check back later or contact dispatch for order assignment.
             </Text>
-            <Pressable style={styles.scanButton} onPress={() => router.push('scanner')}>
-              <MaterialIcons name="qr-code-scanner" size={20} color={colors.white} />
-              <Text style={styles.buttonText}>Scan QR Code</Text>
-            </Pressable>
           </View>
         )}
 
+        {/* Available Orders */}
         {assignedOrders.length > 0 && !activeOrder && (
           <View style={styles.assignedOrdersCard}>
             <View style={styles.cardHeader}>
@@ -1030,6 +1468,7 @@ function DriverDashboard() {
           </View>
         )}
 
+        {/* Recent Orders */}
         {scannedOrders.length > 0 && (
           <View style={styles.recentOrdersCard}>
             <View style={styles.cardHeader}>
@@ -1041,7 +1480,8 @@ function DriverDashboard() {
               <Pressable
                 key={order.id}
                 style={styles.recentOrderItem}
-                onPress={() => router.push(`/(tabs)/${order.id}`)}
+                onPress={() => handleOrderNavigation(order.id)}
+                disabled={navigationInProgress}
               >
                 <View>
                   <Text style={styles.recentOrderNumber}>
@@ -1071,6 +1511,7 @@ function DriverDashboard() {
           </View>
         )}
 
+        {/* Quick Actions */}
         <View style={styles.quickActionsCard}>
           <Text style={styles.cardTitle}>Quick Actions</Text>
 
@@ -1078,11 +1519,6 @@ function DriverDashboard() {
             <Pressable style={styles.quickActionButton} onPress={() => router.push('orders')}>
               <MaterialIcons name="list-alt" size={24} color={colors.primary} />
               <Text style={styles.quickActionText}>All Orders</Text>
-            </Pressable>
-
-            <Pressable style={styles.quickActionButton} onPress={() => router.push('scanner')}>
-              <MaterialIcons name="qr-code-scanner" size={24} color={colors.success} />
-              <Text style={styles.quickActionText}>Scan QR</Text>
             </Pressable>
 
             <Pressable style={styles.quickActionButton} onPress={() => router.push('profile')}>
@@ -1099,7 +1535,6 @@ function DriverDashboard() {
               style={[styles.quickActionButton, { backgroundColor: colors.info }]} 
               onPress={async () => {
                 try {
-                  // Test Supabase connection
                   const { data: testOrders, error: testError } = await supabase
                     .from("orders")
                     .select("id, order_number, status, assigned_driver_id")
@@ -1114,7 +1549,6 @@ function DriverDashboard() {
                     return;
                   }
                   
-                  // Test user authentication
                   const { data: { user: currentUser } } = await supabase.auth.getUser();
                   
                   Alert.alert(
@@ -1139,683 +1573,6 @@ function DriverDashboard() {
       </ScrollView>
     </View>
   );
-}
-
-const styles = StyleSheet.create({
-  // Main container with improved background
-  container: { 
-    flex: 1, 
-    backgroundColor: colors.background 
-  },
-  scrollView: { 
-    flex: 1 
-  },
-  
-  // Loading and centered states
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-    backgroundColor: colors.surface,
-  },
-  loadingText: { 
-    marginTop: 16, 
-    fontSize: 16, 
-    color: colors.primary,
-    fontWeight: '500'
-  },
-  
-  // Modern header design with better spacing
-  header: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  headerContent: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "flex-start",
-    gap: 16
-  },
-  
-  // Improved typography hierarchy
-  title: { 
-    fontSize: 28, 
-    fontWeight: "bold", 
-    color: colors.gray900,
-    letterSpacing: -0.5
-  },
-  subtitle: { 
-    fontSize: 16, 
-    color: colors.gray600, 
-    marginTop: 4,
-    fontWeight: '500'
-  },
-  
-  // Header actions with improved styling
-  headerActions: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 12 
-  },
-  // Auto refresh toggle with modern styling
-  autoRefreshToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.gray50,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  autoRefreshToggleActive: {
-    backgroundColor: colors.greenLight,
-    borderColor: colors.success,
-    shadowColor: colors.success,
-    shadowOpacity: 0.15,
-  },
-  autoRefreshText: {
-    fontSize: 12,
-    color: colors.gray600,
-    marginLeft: 4,
-    fontWeight: "600",
-  },
-  autoRefreshTextActive: {
-    color: colors.successDark,
-  },
-  // Modern logout button styling
-  logoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.redLight,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.redBorder,
-    shadowColor: colors.danger,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  logoutText: { 
-    color: colors.danger, 
-    fontSize: 12, 
-    fontWeight: "600", 
-    marginLeft: 4 
-  },
-  // Modern order card styling with enhanced mobile UX
-  activeOrderCard: {
-    backgroundColor: colors.white,
-    padding: 24,
-    marginTop: 16,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  noActiveOrderCard: {
-    backgroundColor: colors.white,
-    padding: 32,
-    marginTop: 16,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    alignItems: "center",
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  noActiveText: { 
-    fontSize: 20, 
-    fontWeight: "700", 
-    color: colors.gray900, 
-    marginTop: 12,
-    letterSpacing: -0.3
-  },
-  noActiveSubtext: { 
-    fontSize: 15, 
-    color: colors.gray600, 
-    marginTop: 8, 
-    textAlign: "center",
-    lineHeight: 22
-  },
-  // Enhanced card header styling
-  cardHeader: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray100
-  },
-  cardHeaderLeft: { 
-    flexDirection: "row", 
-    alignItems: "center" 
-  },
-  cardTitle: { 
-    fontSize: 19, 
-    fontWeight: "700", 
-    color: colors.gray900, 
-    marginLeft: 8,
-    letterSpacing: -0.3
-  },
-  // Modern tracking indicator
-  trackingIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.greenLight,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.successLight,
-  },
-  trackingText: { 
-    fontSize: 12, 
-    color: colors.successDark, 
-    marginLeft: 4, 
-    fontWeight: "700" 
-  },
-  
-  // Enhanced order info section
-  orderInfo: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    marginBottom: 16,
-    paddingVertical: 4
-  },
-  orderNumber: { 
-    fontSize: 17, 
-    fontWeight: "700", 
-    color: colors.gray900,
-    letterSpacing: -0.2
-  },
-  statusBadge: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 8, 
-    borderRadius: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statusText: { 
-    color: colors.white, 
-    fontSize: 12, 
-    fontWeight: "700",
-    letterSpacing: 0.5
-  },
-  // Route information section with navigation
-  routeInfo: { 
-    marginBottom: 20,
-    paddingTop: 4
-  },
-  navigationRow: {
-    flexDirection: "row", 
-    alignItems: "center", 
-    marginVertical: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: colors.gray50,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  routeArrow: {
-    alignSelf: 'center', 
-    marginVertical: 8
-  },
-  locationText: { 
-    fontSize: 15, 
-    color: colors.gray700, 
-    marginLeft: 12, 
-    flex: 1,
-    lineHeight: 20,
-    fontWeight: '500'
-  },
-  
-  // Modern action buttons with enhanced mobile UX
-  actionButtons: { 
-    flexDirection: "row", 
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: 8,
-    marginBottom: 16
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  
-  // Tracking Control Section
-  trackingControlSection: {
-    marginTop: 20,
-    padding: 16,
-    backgroundColor: colors.gray50,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  // Enhanced Tracking Control Styles
-  trackingPromptSection: {
-    borderColor: colors.warning,
-    borderWidth: 2,
-    backgroundColor: colors.warningBackground,
-  },
-  trackingControlHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  trackingControlTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.gray900,
-    marginLeft: 8,
-    flex: 1,
-    letterSpacing: -0.2,
-  },
-  promptBadge: {
-    backgroundColor: colors.warning,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  promptBadgeText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  trackingPromptCard: {
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: colors.white,
-    borderRadius: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  trackingPromptTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.gray900,
-    marginTop: 8,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  trackingPromptText: {
-    fontSize: 14,
-    color: colors.gray600,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  startTrackingButtonProminent: {
-    backgroundColor: colors.warning,
-    paddingVertical: 16,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.warning,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  trackingActiveContainer: {
-    alignItems: 'stretch',
-  },
-  trackingStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  trackingStatusText: {
-    fontSize: 14,
-    color: colors.success,
-    marginLeft: 8,
-    fontWeight: '600',
-  },
-  stopTrackingButton: {
-    backgroundColor: colors.danger,
-    paddingVertical: 14,
-    borderRadius: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.danger,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  stopTrackingButtonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  trackingInactiveContainer: {
-    alignItems: 'stretch',
-  },
-  startTrackingButtonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  
-  // Scan button with modern styling
-  scanButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  
-  // Enhanced button text styling
-  buttonText: { 
-    color: colors.white, 
-    fontSize: 15, 
-    fontWeight: "700", 
-    marginLeft: 8,
-    letterSpacing: 0.2
-  },
-  // Enhanced recent orders card
-  recentOrdersCard: {
-    backgroundColor: colors.white,
-    padding: 24,
-    marginTop: 16,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  
-  // Modern order list item styling
-  recentOrderItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray100,
-    borderRadius: 8,
-    marginVertical: 2,
-  },
-  recentOrderNumber: { 
-    fontSize: 16, 
-    fontWeight: "700", 
-    color: colors.gray900,
-    letterSpacing: -0.2
-  },
-  recentOrderDate: { 
-    fontSize: 13, 
-    color: colors.gray600, 
-    marginTop: 4,
-    fontWeight: '500'
-  },
-  miniStatusBadge: { 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 12,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  miniStatusText: { 
-    color: colors.white, 
-    fontSize: 11, 
-    fontWeight: "700",
-    letterSpacing: 0.3
-  },
-  
-  // View all button enhancement
-  viewAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    marginTop: 12,
-    backgroundColor: colors.gray50,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  viewAllText: { 
-    fontSize: 14, 
-    color: colors.primary, 
-    fontWeight: "700", 
-    marginRight: 4 
-  },
-  // Modern quick actions card
-  quickActionsCard: {
-    backgroundColor: colors.white,
-    padding: 24,
-    marginTop: 16,
-    marginBottom: 24,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  // Enhanced quick action grid
-  quickActionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginTop: 16,
-    gap: 12,
-  },
-  quickActionButton: {
-    width: "48%",
-    backgroundColor: colors.gray50,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  quickActionText: { 
-    fontSize: 14, 
-    fontWeight: "700", 
-    color: colors.gray700, 
-    marginTop: 8,
-    textAlign: 'center'
-  },
-  
-  // Enhanced assigned orders card
-  assignedOrdersCard: {
-    backgroundColor: colors.white,
-    padding: 24,
-    marginTop: 16,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  cardSubtitle: {
-    fontSize: 15,
-    color: colors.gray600,
-    marginBottom: 20,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  assignedOrderItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: colors.gray50,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  // Enhanced assigned order text styling
-  assignedOrderNumber: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: colors.primary,
-    letterSpacing: -0.2,
-  },
-  assignedOrderDetails: {
-    fontSize: 14,
-    color: colors.gray700,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  assignedOrderDate: {
-    fontSize: 12,
-    color: colors.gray600,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  
-  // Modern activate button
-  activateButton: {
-    backgroundColor: colors.success,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.success,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  
-  // Load Activation Section Styles
-  loadActivationSection: {
-    marginTop: 16,
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: colors.warningBackground,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: colors.warning,
-  },
-  activationPromptCard: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  activationPromptTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.gray900,
-    marginTop: 8,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  activationPromptText: {
-    fontSize: 14,
-    color: colors.gray600,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  activateLoadButton: {
-    backgroundColor: colors.warning,
-    paddingVertical: 14,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.warning,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  activateLoadButtonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-});
+};
 
 export default DriverDashboard;

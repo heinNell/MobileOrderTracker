@@ -1,146 +1,96 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+#  Mobile Order Tracker — Web-only deployment script
+#  Usage: ./deploy-complete.sh [--force]
+# ---------------------------------------------------------------------------
+set -euo pipefail
 
-# Complete Deployment Script for Mobile Order Tracker
-# This script deploys both web and mobile versions
+# Colors
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-set -e  # Exit on any error
+info()  { echo -e "${BLUE}[INFO]${NC}  $*"; }
+ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+err()   { echo -e "${RED}[ERR]${NC}  $*" >&2; }
 
-echo "🚀 Starting deployment of Mobile Order Tracker..."
-echo "================================================"
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Function to print colored output
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check if we're in the right directory
-if [ ! -f "package.json" ] || [ ! -f "app.json" ]; then
-    print_error "Please run this script from the MyApp directory"
-    exit 1
+# npm flag default
+NPM_FLAG="--legacy-peer-deps"
+if [[ "${1:-}" == "--force" ]]; then
+  NPM_FLAG="--force"
 fi
 
-# Verify dependencies
-print_status "Checking dependencies..."
-if ! command -v npm &> /dev/null; then
-    print_error "npm is not installed"
-    exit 1
+# Debugging: print current working directory and Vercel project info
+info "Current directory: $(pwd)"
+info "Vercel project info:"
+npx vercel project ls || true
+
+# Sanity checks
+if [[ ! -f "package.json" ]]; then
+  err "package.json not found. Run this from your project root."
+  exit 1
 fi
 
-if ! command -v npx &> /dev/null; then
-    print_error "npx is not installed"
-    exit 1
-fi
+info "Starting web-only deployment"
+info "npm install flag: ${NPM_FLAG}"
+echo "------------------------------------------------------------"
 
-# Install dependencies if needed
-print_status "Installing dependencies..."
-npm install
+command -v npm >/dev/null || { err "npm not installed"; exit 1; }
+command -v npx >/dev/null || { err "npx not installed"; exit 1; }
 
-# Run code quality checks
-print_status "Running code quality checks..."
-npm run lint:fix || true
-npm run type-check || true
-
-# Web deployment
-echo -e "\n${BLUE}🌐 WEB DEPLOYMENT${NC}"
-echo "================================"
-
-print_status "Building web version..."
-npm run web:build
-
-if [ $? -eq 0 ]; then
-    print_success "Web build completed successfully"
-    
-    # Check if vercel is available
-    if command -v vercel &> /dev/null; then
-        print_status "Deploying to Vercel..."
-        npx vercel --prod --yes
-        print_success "Web deployment completed!"
-        print_status "Your web app should be available at your Vercel domain"
-    else
-        print_warning "Vercel CLI not found. Install with: npm install -g vercel"
-        print_status "Web build is ready in the 'dist' directory"
-        print_status "You can deploy manually by uploading the 'dist' folder to Vercel"
-    fi
+# Install deps
+info "Installing dependencies (npm install ${NPM_FLAG})..."
+if npm install ${NPM_FLAG}; then
+  ok "Dependencies installed"
 else
-    print_error "Web build failed"
-    exit 1
+  err "npm install failed with flag ${NPM_FLAG}. Try ./deploy-complete.sh --force"
+  exit 1
 fi
 
-# Mobile deployment
-echo -e "\n${BLUE}📱 MOBILE DEPLOYMENT${NC}"
-echo "================================="
+# Non-fatal code checks
+info "Running lint and type checks (non-fatal)..."
+npm run lint:fix 2>/dev/null || warn "Lint step failed or not defined"
+npm run type-check 2>/dev/null || warn "Type-check step failed or not defined"
 
-# Check if EAS CLI is available
-if command -v eas &> /dev/null; then
-    print_status "EAS CLI detected. Proceeding with mobile build..."
-    
-    # Check EAS login status
-    if eas whoami &> /dev/null; then
-        print_success "Already logged into EAS"
-    else
-        print_warning "Not logged into EAS. Please run 'eas login' first"
-        print_status "Skipping mobile build for now"
-        SKIP_MOBILE=true
-    fi
-    
-    if [ "${SKIP_MOBILE}" != "true" ]; then
-        print_status "Building Android APK..."
-        eas build --platform android --profile production --non-interactive
-        
-        if [ $? -eq 0 ]; then
-            print_success "Mobile build submitted successfully!"
-            print_status "Check your EAS dashboard for build progress"
-            print_status "You can download the APK when the build completes"
-        else
-            print_error "Mobile build failed"
-        fi
-    fi
+# Web build
+info "Building web version (npm run web:build)..."
+if npm run web:build; then
+  ok "Web build completed"
 else
-    print_warning "EAS CLI not found. Install with: npm install -g @expo/eas-cli"
-    print_status "Mobile build skipped. You can build manually with:"
-    print_status "  1. npm install -g @expo/eas-cli"
-    print_status "  2. eas login"
-    print_status "  3. eas build --platform android --profile production"
+  err "Web build failed — check build logs and fix errors"
+  exit 1
 fi
 
-# Summary
-echo -e "\n${GREEN}✅ DEPLOYMENT SUMMARY${NC}"
-echo "=================================="
-print_success "Web deployment: Completed (or ready for manual upload)"
-print_status "Mobile deployment: ${SKIP_MOBILE:+Skipped - requires EAS login}${SKIP_MOBILE:-Submitted to EAS Build}"
+# Determine build output directory 
+BUILD_DIR="./dist"
+if [[ -d "./web-build" ]]; then
+  BUILD_DIR="./web-build"
+elif [[ -d "./out" ]]; then
+  BUILD_DIR="./out"
+fi
 
-echo -e "\n${BLUE}📋 NEXT STEPS${NC}"
-echo "=============="
-print_status "1. Check your Vercel dashboard for web deployment status"
-print_status "2. Monitor EAS Build dashboard for mobile app progress"
-print_status "3. Test both platforms thoroughly before production use"
-print_status "4. Set up monitoring and analytics"
+info "Build output directory: ${BUILD_DIR}"
 
-echo -e "\n${BLUE}🔗 IMPORTANT LINKS${NC}"
-echo "=================="
-print_status "• Vercel Dashboard: https://vercel.com/dashboard"
-print_status "• EAS Build Dashboard: https://expo.dev/builds"
-print_status "• Supabase Dashboard: https://supabase.com/dashboard"
-print_status "• Google Cloud Console: https://console.cloud.google.com"
+# Vercel deployment
+if command -v vercel >/dev/null 2>&1; then
+  info "Vercel CLI found — preparing to deploy"
+  
+  # Directly deploy to production. Vercel CLI will handle linking if needed (via vercel.json or environment variables).
+  info "Running Vercel production deployment..."
+  if npx vercel --prod --yes; then
+    ok "Deployed to Vercel successfully"
+  else
+    err "Vercel production deployment failed. Please check Vercel CLI configuration."
+    info "Troubleshooting steps:"
+    info "1. Ensure you're logged in: npx vercel login"
+    info "2. Check project settings at https://vercel.com/dashboard"
+    info "3. Ensure the project is linked (e.g., via a 'vercel.json' file or environment variables like VERCEL_ORG_ID, VERCEL_PROJECT_ID)."
+    exit 1
+  fi
+else
+  warn "Vercel CLI not found. Install with: npm i -g vercel"
+  info "You can manually deploy the build output folder (${BUILD_DIR}) to Vercel or another host."
+fi
 
-echo -e "\n${GREEN}🎉 Deployment script completed!${NC}"
-echo "Your Mobile Order Tracker is ready for production use."
+echo
+ok "Web-only deployment finished"
+info "Next steps: test the deployed site, check logs on your hosting provider."

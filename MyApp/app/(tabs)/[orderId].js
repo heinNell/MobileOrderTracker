@@ -21,6 +21,8 @@ import
 import GeocodingService from "@/services/GeocodingService";
 import { startBackgroundLocation, stopBackgroundLocation } from "@/services/LocationService";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "../components/map/MapView";
+import OrderProgressTimeline from "../components/order/OrderProgressTimeline";
+import StatusUpdateButtons from "../components/order/StatusUpdateButtons";
 import { supabase } from "../lib/supabase";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -129,7 +131,8 @@ const InfoRow = ({ icon, iconColor, label, value, isLast = false }) => (
   </View>
 );
 
-const TimelineItem = ({ icon, color, label, value, isCompleted, isLast }) => (
+// TimelineItem component - kept for potential future use with order history
+const _TimelineItem = ({ icon, color, label, value, isCompleted, isLast }) => (
   <View style={[styles.timelineItem, isLast && styles.timelineItemLast]}>
     <View style={styles.timelineIconSection}>
       <View style={[styles.timelineIconWrapper, { backgroundColor: isCompleted ? color : colors.gray300 }]}>
@@ -184,6 +187,26 @@ export default function OrderDetailsScreen() {
 
   // Get current user from Supabase auth
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Suppress Google Maps font loading timeout errors (harmless)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const originalError = console.error;
+      console.error = (...args) => {
+        const errorMsg = args[0]?.toString() || '';
+        // Suppress Google Maps font loading timeout errors
+        if (errorMsg.includes('timeout exceeded') || 
+            errorMsg.includes('FontFaceObserver') ||
+            errorMsg.includes('fontfaceobserver')) {
+          return; // Suppress this error
+        }
+        originalError.apply(console, args);
+      };
+      return () => {
+        console.error = originalError;
+      };
+    }
+  }, []);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -419,32 +442,91 @@ export default function OrderDetailsScreen() {
     };
   }, [order, isDriver, orderId]);
 
-  // Fetch directions
+  // Fetch directions - disabled for web due to CORS restrictions
   useEffect(() => {
     if (loadingCoord && unloadingCoord && !directions) {
       const fetchDirections = async () => {
         setDirectionsLoading(true);
         setDirectionsError(null);
+        
         try {
-          const apiKey = Constants.expoConfig.extra.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+          // For web deployment, skip directions API due to CORS and API key exposure
+          if (Platform.OS === 'web') {
+            console.log("ℹ️ Directions API skipped on web platform (CORS restrictions)");
+            setDirectionsError("Directions unavailable on web. Map shows direct route between locations.");
+            return;
+          }
+
+          const apiKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 
+                         process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+          
+          if (!apiKey) {
+            console.warn("Google Maps API key not configured. Skipping directions.");
+            setDirectionsError("Directions unavailable: API key not configured");
+            return;
+          }
+
           let originCoord = loadingCoord;
           if (isDriver && userLocation) {
             originCoord = userLocation;
           } else if (!isDriver && driverLocation) {
             originCoord = driverLocation;
           }
+          
           const origin = `${originCoord.latitude},${originCoord.longitude}`;
           const destination = `${unloadingCoord.latitude},${unloadingCoord.longitude}`;
+          
+          // Add timeout for the fetch request
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&mode=driving&key=${apiKey}`;
-          const response = await fetch(url);
-          const data = await response.json();
-          if (data.status !== "OK") {
-            throw new Error(data.error_message || "Failed to fetch directions.");
+          
+          const response = await fetch(url, { 
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+            }
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
-          setDirections(data.routes[0]);
+          
+          const data = await response.json();
+          
+          if (data.status !== "OK") {
+            const errorMsg = data.error_message || data.status || "Failed to fetch directions";
+            console.warn("Directions API returned non-OK status:", data.status, errorMsg);
+            throw new Error(errorMsg);
+          }
+          
+          if (data.routes && data.routes.length > 0) {
+            setDirections(data.routes[0]);
+            console.log("✅ Directions fetched successfully");
+          } else {
+            throw new Error("No routes found");
+          }
         } catch (err) {
-          console.error("Directions error:", err);
-          setDirectionsError("Unable to fetch driving directions. Please check locations or API key.");
+          console.warn("Directions fetch failed:", err.message);
+          
+          // Provide user-friendly error messages
+          let userMessage = "Directions unavailable.";
+          if (err.name === 'AbortError') {
+            userMessage = "Directions request timed out.";
+          } else if (err.message?.includes('REQUEST_DENIED')) {
+            userMessage = "API key issue. Directions unavailable.";
+          } else if (err.message?.includes('ZERO_RESULTS')) {
+            userMessage = "No route found between locations.";
+          } else if (err.message?.includes('INVALID_REQUEST')) {
+            userMessage = "Invalid locations for route calculation.";
+          } else if (err.message?.includes('CORS') || err.message?.includes('Failed to fetch')) {
+            userMessage = "Network error. Directions unavailable.";
+          }
+          
+          setDirectionsError(userMessage + " Map will show direct route between locations.");
         } finally {
           setDirectionsLoading(false);
         }
@@ -453,8 +535,8 @@ export default function OrderDetailsScreen() {
     }
   }, [loadingCoord, unloadingCoord, userLocation, driverLocation, currentUser, order, directions, isDriver]);
 
-  // Memoized data
-  const timelineData = useMemo(() => {
+  // Memoized timeline data - kept for potential future timeline display
+  const _timelineData = useMemo(() => {
     if (!order) return [];
     return [
       {
@@ -506,11 +588,21 @@ export default function OrderDetailsScreen() {
   }, [order]);
 
   const mapRegion = useMemo(() => {
+    // Helper function to validate coordinates
+    const isValidCoord = (coord) => {
+      return coord && 
+             Number.isFinite(coord.latitude) && 
+             Number.isFinite(coord.longitude) &&
+             coord.latitude >= -90 && coord.latitude <= 90 &&
+             coord.longitude >= -180 && coord.longitude <= 180;
+    };
+
+    // Filter out invalid coordinates
     const coords = [];
-    if (loadingCoord) coords.push(loadingCoord);
-    if (unloadingCoord) coords.push(unloadingCoord);
-    if (isDriver && userLocation) coords.push(userLocation);
-    if (!isDriver && driverLocation) coords.push(driverLocation);
+    if (isValidCoord(loadingCoord)) coords.push(loadingCoord);
+    if (isValidCoord(unloadingCoord)) coords.push(unloadingCoord);
+    if (isDriver && isValidCoord(userLocation)) coords.push(userLocation);
+    if (!isDriver && isValidCoord(driverLocation)) coords.push(driverLocation);
 
     if (Platform.OS === 'web') {
       if (coords.length > 0) {
@@ -520,45 +612,84 @@ export default function OrderDetailsScreen() {
         const maxLat = Math.max(...latitudes);
         const minLng = Math.min(...longitudes);
         const maxLng = Math.max(...longitudes);
-        return {
-          center: {
-            lat: (minLat + maxLat) / 2,
-            lng: (minLng + maxLng) / 2,
-          },
-          bounds: {
-            north: maxLat + 0.05,
-            south: minLat - 0.05,
-            east: maxLng + 0.05,
-            west: minLng - 0.05,
-          },
-        };
+        
+        const centerLat = (minLat + maxLat) / 2;
+        const centerLng = (minLng + maxLng) / 2;
+        
+        // Validate calculated center coordinates
+        if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) {
+          return {
+            center: {
+              lat: centerLat,
+              lng: centerLng,
+            },
+            bounds: {
+              north: maxLat + 0.05,
+              south: minLat - 0.05,
+              east: maxLng + 0.05,
+              west: minLng - 0.05,
+            },
+          };
+        }
       }
-      return null;
+      
+      // Return default region for web (London, UK)
+      return {
+        center: { lat: 51.5074, lng: -0.1278 },
+        bounds: {
+          north: 51.5574,
+          south: 51.4574,
+          east: -0.0778,
+          west: -0.1778,
+        },
+      };
     }
 
-    if (directions) {
+    if (directions && directions.bounds) {
       const bounds = directions.bounds;
-      return {
-        latitude: (bounds.northeast.lat + bounds.southwest.lat) / 2,
-        longitude: (bounds.northeast.lng + bounds.southwest.lng) / 2,
-        latitudeDelta: (bounds.northeast.lat - bounds.southwest.lat) * 1.2,
-        longitudeDelta: (bounds.northeast.lng - bounds.southwest.lng) * 1.2,
-      };
-    } else if (coords.length > 0) {
+      const centerLat = (bounds.northeast.lat + bounds.southwest.lat) / 2;
+      const centerLng = (bounds.northeast.lng + bounds.southwest.lng) / 2;
+      
+      // Validate directions bounds
+      if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) {
+        return {
+          latitude: centerLat,
+          longitude: centerLng,
+          latitudeDelta: (bounds.northeast.lat - bounds.southwest.lat) * 1.2,
+          longitudeDelta: (bounds.northeast.lng - bounds.southwest.lng) * 1.2,
+        };
+      }
+    }
+    
+    if (coords.length > 0) {
       const latitudes = coords.map(c => c.latitude);
       const longitudes = coords.map(c => c.longitude);
       const minLat = Math.min(...latitudes);
       const maxLat = Math.max(...latitudes);
       const minLng = Math.min(...longitudes);
       const maxLng = Math.max(...longitudes);
-      return {
-        latitude: (minLat + maxLat) / 2,
-        longitude: (minLng + maxLng) / 2,
-        latitudeDelta: Math.max((maxLat - minLat) * 1.5, 0.1),
-        longitudeDelta: Math.max((maxLng - minLng) * 1.5, 0.1),
-      };
+      
+      const centerLat = (minLat + maxLat) / 2;
+      const centerLng = (minLng + maxLng) / 2;
+      
+      // Validate calculated coordinates
+      if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) {
+        return {
+          latitude: centerLat,
+          longitude: centerLng,
+          latitudeDelta: Math.max((maxLat - minLat) * 1.5, 0.1),
+          longitudeDelta: Math.max((maxLng - minLng) * 1.5, 0.1),
+        };
+      }
     }
-    return null;
+    
+    // Return default region for native (San Francisco)
+    return {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      latitudeDelta: 0.1,
+      longitudeDelta: 0.1,
+    };
   }, [loadingCoord, unloadingCoord, userLocation, driverLocation, directions, isDriver]);
 
   useEffect(() => {
@@ -847,22 +978,13 @@ export default function OrderDetailsScreen() {
         </View>
       </View>
 
-      {/* Timeline Section */}
+      {/* Enhanced Order Progress Timeline */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order Timeline</Text>
-        <View style={styles.card}>
-          {timelineData.map((item, index) => (
-            <TimelineItem
-              key={item.key}
-              icon={item.icon}
-              color={item.color}
-              label={item.label}
-              value={item.value}
-              isCompleted={item.isCompleted}
-              isLast={index === timelineData.length - 1}
-            />
-          ))}
-        </View>
+        <OrderProgressTimeline 
+          currentStatus={order.status}
+          orderHistory={[]} // TODO: Fetch order history from status_updates table
+          compact={false}
+        />
       </View>
 
       {/* Action Buttons Section */}
@@ -874,45 +996,59 @@ export default function OrderDetailsScreen() {
               pressed && styles.primaryButtonPressed,
               loading && styles.primaryButtonDisabled,
             ]}
-            onPress={() =>
+            onPress={() => {
+              // Validate order data before navigation
+              if (!order || !order.id) {
+                console.error('❌ Cannot activate load: Order ID is missing');
+                alert('Error: Order information is incomplete. Please refresh and try again.');
+                return;
+              }
+              
+              if (!order.order_number) {
+                console.error('❌ Cannot activate load: Order number is missing');
+                alert('Error: Order information is incomplete. Please refresh and try again.');
+                return;
+              }
+              
+              console.log('✅ Navigating to LoadActivationScreen with:', {
+                orderId: order.id,
+                orderNumber: order.order_number
+              });
+              
               router.push({
                 pathname: "/(tabs)/LoadActivationScreen",
                 params: { orderId: order.id, orderNumber: order.order_number },
-              })
-            }
+              });
+            }}
             disabled={loading}
           >
             <MaterialIcons name="play-circle-filled" size={24} color={colors.white} />
             <Text style={styles.primaryButtonText}>Activate Load</Text>
           </Pressable>
         )}
-        {actionButtons.showManage && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              styles.successButton,
-              pressed && styles.primaryButtonPressed,
-              loading && styles.primaryButtonDisabled,
-            ]}
-            onPress={() =>
-              router.push(`/(tabs)/scanner?orderId=${order.id}&orderNumber=${order.order_number}`)
-            }
+        
+        {/* Status Update Buttons - matches your screenshots */}
+        {actionButtons.showManage && currentUser && order.assigned_driver?.id === currentUser.id && (
+          <StatusUpdateButtons 
+            order={order}
+            onStatusUpdate={(updatedOrder) => {
+              setOrder(updatedOrder);
+              // Refresh order details to get latest data
+              loadOrderDetails();
+            }}
             disabled={loading}
-          >
-            <MaterialIcons name="qr-code-scanner" size={24} color={colors.white} />
-            <Text style={styles.primaryButtonText}>
-              {order.status === "activated" ? "Start Order" : "Manage Order"}
-            </Text>
-          </Pressable>
+          />
         )}
+        
         {actionButtons.showInfo && (
           <View style={styles.infoAlert}>
             <MaterialIcons name="check-circle" size={22} color={colors.success} />
             <Text style={styles.infoAlertText}>
-              Load is activated! You can now scan QR codes to start the order.
+              Load is activated! Update the status above as you progress through the delivery.
             </Text>
           </View>
         )}
+        
         <Pressable
           style={({ pressed }) => [
             styles.secondaryButton,
@@ -1332,9 +1468,6 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
     }),
-  },
-  successButton: {
-    backgroundColor: colors.success,
   },
   primaryButtonPressed: {
     opacity: 0.85,

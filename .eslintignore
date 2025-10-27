@@ -1,2 +1,11 @@
-# Ignore all files in the mobile-app directory
-/mobile-app/*
+# Ignore entire directories that cause problems
+supabase/
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+.turbo/
+*.min.js
+*.bundle.js

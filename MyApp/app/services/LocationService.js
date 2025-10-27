@@ -7,6 +7,7 @@ import { getDistance } from 'geolib';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import GeocodingService from './GeocodingService';
+import webLocationServiceInstance from './WebLocationService';
 
 // Task name for background location updates
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
@@ -49,6 +50,9 @@ if (Platform.OS !== 'web') {
 
       if (orderError || !order) {
         console.error('Error fetching order for proximity check:', orderError);
+        // Order doesn't exist - clear the invalid order ID
+        await AsyncStorage.removeItem('trackingOrderId');
+        console.log('❌ Cleared invalid order ID from storage:', orderId);
         return;
       }
 
@@ -81,21 +85,36 @@ if (Platform.OS !== 'web') {
         }
       }
 
-      // Insert location into map_locations
-      const { error: insertError } = await supabase
-        .from('map_locations')
+      // Insert location to driver_locations (primary table for dashboard tracking)
+      const { error: driverError } = await supabase
+        .from('driver_locations')
         .insert({
           order_id: orderId,
-          user_id: user.id, // Include user_id
+          driver_id: user.id,
           latitude,
           longitude,
+          timestamp,
           created_at: timestamp,
         });
 
-      if (insertError) {
-        console.error('Supabase insert error (map_locations):', insertError);
+      if (driverError) {
+        console.error('Supabase insert error (driver_locations):', driverError);
       } else {
         console.log('📍 Background location inserted:', { orderId, latitude, longitude });
+      }
+      
+      // Optional: Also try map_locations for backward compatibility (ignore errors)
+      const { error: mapError } = await supabase.from('map_locations').insert({
+        order_id: orderId,
+        user_id: user.id,
+        latitude,
+        longitude,
+        created_at: timestamp,
+      });
+      
+      // Silently ignore map_locations errors - it's optional
+      if (mapError) {
+        console.log('map_locations insert skipped (optional table)');
       }
     } catch (err) {
       console.error('Background task error:', err);
@@ -140,6 +159,9 @@ class LocationService {
         if (status !== 'granted') {
           console.warn('Notification permission not granted');
         }
+      } else {
+        // Initialize WebLocationService from storage for web platform
+        await webLocationServiceInstance.initializeFromStorage();
       }
 
       // Check for actively tracking order
@@ -175,11 +197,25 @@ class LocationService {
       await this.ensureInitialized();
 
       if (Platform.OS === 'web') {
-        console.warn('⚠️ Background location tracking not supported on web');
+        console.log('🌐 Using web location tracking for order:', orderId);
+        
+        // Get current user for driver ID
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+        
+        // Delegate to WebLocationService for robust web tracking
+        const result = await webLocationServiceInstance.startTracking(orderId, user.id);
         this.currentOrderId = orderId;
+        this.isTracking = result; // Only set tracking to true if location actually works
         await storage.setItem('activeOrderId', orderId);
-        await this.updateLocation(orderId); // Foreground update
-        return true;
+        
+        if (!result) {
+          console.log('⚠️ Web location tracking failed, but app will continue normally');
+        }
+        
+        return true; // Always return true - app should continue working
       }
 
       if (this.isTracking && this.currentOrderId === orderId) {
@@ -235,6 +271,11 @@ class LocationService {
     try {
       console.log('🛑 Stopping tracking...');
 
+      // For web, delegate to WebLocationService
+      if (Platform.OS === 'web') {
+        webLocationServiceInstance.stopTracking();
+      }
+
       if (this.trackingInterval) {
         clearInterval(this.trackingInterval);
         this.trackingInterval = null;
@@ -259,6 +300,13 @@ class LocationService {
   // Get current location
   async getCurrentLocation() {
     try {
+      // For web, use WebLocationService
+      if (Platform.OS === 'web') {
+        const location = await webLocationServiceInstance.getCurrentPosition();
+        this.lastLocation = location;
+        return location;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         throw new Error('Foreground location permission not granted');
@@ -289,6 +337,12 @@ class LocationService {
     try {
       await this.ensureInitialized();
 
+      // For web, delegate to WebLocationService if actively tracking
+      if (Platform.OS === 'web' && webLocationServiceInstance.isCurrentlyTracking()) {
+        await webLocationServiceInstance.sendImmediateUpdate();
+        return;
+      }
+
       if (!location) {
         location = await this.getCurrentLocation();
       }
@@ -314,22 +368,39 @@ class LocationService {
         }
       }
 
-      const { latitude, longitude, timestamp } = location;
+      const { latitude, longitude, timestamp, accuracy } = location;
 
-      const { error } = await supabase
-        .from('map_locations')
+      // Insert to driver_locations (primary table for dashboard tracking)
+      const { error: driverError } = await supabase
+        .from('driver_locations')
         .insert({
           order_id: orderId,
-          user_id: user.id, // Include user_id
+          driver_id: user.id,
           latitude,
           longitude,
+          accuracy_meters: accuracy,
+          timestamp: timestamp || new Date().toISOString(),
           created_at: timestamp || new Date().toISOString(),
         });
 
-      if (error) {
-        console.error('Error inserting location into map_locations:', error);
+      if (driverError) {
+        console.error('Error inserting location into driver_locations:', driverError);
       } else {
         console.log('📍 Location updated:', { orderId, latitude, longitude });
+      }
+
+      // Optional: Also try map_locations for backward compatibility (ignore errors)
+      const { error: mapError } = await supabase.from('map_locations').insert({
+        order_id: orderId,
+        user_id: user.id,
+        latitude,
+        longitude,
+        created_at: timestamp || new Date().toISOString(),
+      });
+      
+      // Silently ignore - map_locations is optional
+      if (mapError) {
+        console.log('map_locations insert skipped (optional table)');
       }
     } catch (error) {
       console.error('Error updating location:', error);
@@ -363,17 +434,36 @@ class LocationService {
 
       const { latitude, longitude, timestamp } = location;
 
-      const { error } = await supabase
-        .from('map_locations')
+      // Insert to driver_locations (primary table for dashboard tracking)
+      const { error: driverError } = await supabase
+        .from('driver_locations')
         .insert({
           order_id: validatedOrderId,
-          user_id: user.id, // Include user_id
+          driver_id: user.id,
           latitude,
           longitude,
+          timestamp,
           created_at: timestamp,
         });
 
-      if (error) throw error;
+      if (driverError) {
+        console.error('Error in driver_locations:', driverError);
+        throw driverError;
+      }
+
+      // Optional: Also try map_locations for backward compatibility (ignore errors)
+      const { error: mapError } = await supabase.from('map_locations').insert({
+        order_id: validatedOrderId,
+        user_id: user.id,
+        latitude,
+        longitude,
+        created_at: timestamp,
+      });
+      
+      // Silently ignore - map_locations is optional
+      if (mapError) {
+        console.log('map_locations insert skipped (optional table)');
+      }
 
       console.log('📍 Immediate location update sent:', { orderId: validatedOrderId, latitude, longitude });
       return { latitude, longitude };
@@ -383,10 +473,74 @@ class LocationService {
     }
   }
 
+  // Get current order ID
+  async getCurrentOrderId() {
+    await this.ensureInitialized();
+    if (this.currentOrderId) {
+      return this.currentOrderId;
+    }
+    
+    // Check storage for active order
+    const trackingOrderId = await storage.getItem('trackingOrderId');
+    const activeOrderId = await storage.getItem('activeOrderId');
+    return trackingOrderId || activeOrderId;
+  }
+
+  // Get starting point for current order
+  async getStartingPoint() {
+    try {
+      const storedPoint = await storage.getItem('orderStartingPoint');
+      if (storedPoint) {
+        return JSON.parse(storedPoint);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting starting point:', error);
+      return null;
+    }
+  }
+
+  // Set current location as starting point
+  async setCurrentLocationAsStartingPoint() {
+    try {
+      const location = await this.getCurrentLocation();
+      const startingPoint = {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timestamp: location.timestamp
+      };
+      
+      await storage.setItem('orderStartingPoint', JSON.stringify(startingPoint));
+      this.startingPoint = startingPoint;
+      console.log('📍 Starting point set:', startingPoint);
+      return startingPoint;
+    } catch (error) {
+      console.error('Error setting starting point:', error);
+      throw error;
+    }
+  }
+
+  // Clear starting point
+  async clearStartingPoint() {
+    try {
+      await storage.removeItem('orderStartingPoint');
+      this.startingPoint = null;
+      console.log('📍 Starting point cleared');
+    } catch (error) {
+      console.error('Error clearing starting point:', error);
+    }
+  }
+
   // Cleanup for logout
   async cleanup() {
     try {
       await this.stopTracking();
+      
+      // For web, also cleanup WebLocationService
+      if (Platform.OS === 'web') {
+        webLocationServiceInstance.cleanup();
+      }
+      
       await storage.multiRemove(['trackingOrderId', 'activeOrderId', 'orderStartingPoint']);
       this.currentOrderId = null;
       this.isTracking = false;
@@ -410,6 +564,24 @@ class LocationService {
       console.error('Error setting current order:', error);
       throw error;
     }
+  }
+
+  // Check if currently tracking (alias for isTrackingActive for backward compatibility)
+  async isCurrentlyTracking() {
+    await this.ensureInitialized();
+    return this.isTracking;
+  }
+
+  // Check if tracking is active
+  async isTrackingActive() {
+    await this.ensureInitialized();
+    
+    // For web, check WebLocationService as well
+    if (Platform.OS === 'web') {
+      return this.isTracking || webLocationServiceInstance.isCurrentlyTracking();
+    }
+    
+    return this.isTracking;
   }
 }
 
@@ -435,6 +607,26 @@ export const updateLocation = (orderId, location) => {
 
 export const isTrackingActive = () => {
   return locationServiceInstance.isTrackingActive();
+};
+
+export const isCurrentlyTracking = () => {
+  return locationServiceInstance.isCurrentlyTracking();
+};
+
+export const getCurrentOrderId = () => {
+  return locationServiceInstance.getCurrentOrderId();
+};
+
+export const getStartingPoint = () => {
+  return locationServiceInstance.getStartingPoint();
+};
+
+export const setCurrentLocationAsStartingPoint = () => {
+  return locationServiceInstance.setCurrentLocationAsStartingPoint();
+};
+
+export const clearStartingPoint = () => {
+  return locationServiceInstance.clearStartingPoint();
 };
 
 export default LocationService;

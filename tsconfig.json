@@ -2,7 +2,9 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": false,
@@ -15,6 +17,16 @@
     "jsx": "preserve"
   },
   "include": [],
-  "exclude": ["node_modules"],
-  "references": [{ "path": "./MyApp" }, { "path": "./dashboard" }]
+  "exclude": [
+    "node_modules"
+  ],
+  "references": [
+    {
+      "path": "./MyApp"
+    },
+    {
+      "path": "./dashboard"
+    }
+  ],
+  "extends": "expo/tsconfig.base"
 }

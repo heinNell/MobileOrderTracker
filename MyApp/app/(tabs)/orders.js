@@ -1,3 +1,4 @@
+import LocationService from '@/services/LocationService';
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
@@ -17,7 +18,6 @@ import
 import LogoutButton from "../components/auth/LogoutButton";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import LocationService from '@/services/LocationService';
 
 const locationService = new LocationService();
 
@@ -259,8 +259,7 @@ export default function OrdersScreen() {
       await AsyncStorage.setItem('activeOrderId', order.id.toString());
       
       // Initialize LocationService and start tracking (same as QR scan)
-      const LocationService = require("../../services/LocationService").default;
-      const locationService = new LocationService();
+      // Use the existing locationService instance
       
       // Initialize the service to detect current order
       await locationService.initialize();
@@ -490,13 +489,13 @@ export default function OrdersScreen() {
                 <Text style={styles.startingPointTitle}>Starting Point</Text>
               </View>
 
-              {startingPoint ? (
+              {startingPoint && startingPoint.latitude != null && startingPoint.longitude != null ? (
                 <View style={styles.startingPointInfo}>
                   <Text style={styles.locationText}>
-                    📍 Lat: {startingPoint.latitude.toFixed(6)}, Lng: {startingPoint.longitude.toFixed(6)}
+                    📍 Lat: {Number(startingPoint.latitude).toFixed(6)}, Lng: {Number(startingPoint.longitude).toFixed(6)}
                   </Text>
                   <Text style={styles.locationTime}>
-                    Set: {new Date(startingPoint.timestamp).toLocaleString()}
+                    Set: {startingPoint.timestamp ? new Date(startingPoint.timestamp).toLocaleString() : 'Unknown time'}
                   </Text>
                   <View style={styles.buttonRow}>
                     <TouchableOpacity 

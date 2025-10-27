@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform, Dimensions, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo } from 'react';
+import { Dimensions, Platform, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Get screen width for responsive sizing
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -89,16 +89,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="scanner"
-          options={{
-            title: 'QR Scanner',
-            tabBarIcon: ({ color }) => (
-              <MaterialIcons name="qr-code-scanner" size={ICON_SIZE} color={color} />
-            ),
-            tabBarAccessibilityLabel: 'QR Scanner',
-          }}
-        />
-        <Tabs.Screen
           name="profile"
           options={{
             title: 'Profile',
@@ -119,6 +109,13 @@ export default function TabLayout() {
           name="DriverDashboard"
           options={{
             href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="LoadActivationScreen"
+          options={{
+            href: null,
+            title: 'Load Activation',
           }}
         />
       </Tabs>

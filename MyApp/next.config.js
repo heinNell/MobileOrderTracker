@@ -7,7 +7,7 @@ module.exports = {
     {
       source: '/api/locations',
       headers: [
-        { key: 'Access-Control-Allow-Origin', value: 'https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app' },
+        { key: 'Access-Control-Allow-Origin', value: 'https://dash-fgm6ig5jt-matanuskatransport.vercel.app/orders' },
       ],
     },
   ],

@@ -1092,7 +1092,7 @@ export default function EnhancedOrdersPage() {
                     onClick={() => handleSort("created_at")}
                   >
                     <div className="flex items-center">
-                      Created
+                      Expected Loading
                       {sortBy === "created_at" && (
                         <span className="ml-1">
                           {sortOrder === "asc" ? "↑" : "↓"}
@@ -1167,7 +1167,20 @@ export default function EnhancedOrdersPage() {
                         </div>
                       </td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(order.created_at).toLocaleDateString()}
+                        {order.expected_loading_date 
+                          ? new Date(order.expected_loading_date).toLocaleDateString()
+                          : new Date(order.created_at).toLocaleDateString()
+                        }
+                        {order.expected_loading_date && (
+                          <div className="text-xs text-gray-400">
+                            Expected
+                          </div>
+                        )}
+                        {!order.expected_loading_date && (
+                          <div className="text-xs text-gray-400">
+                            Created: {new Date(order.created_at).toLocaleDateString()}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">

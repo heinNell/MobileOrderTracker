@@ -7,15 +7,13 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "scheme": "ordertracker",
+    "scheme": "myapp",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.logistics.ordertracker",
@@ -26,22 +24,17 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app requires camera access to scan QR codes",
-        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show your position on the map.",
-        "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background",
-        "UIBackgroundModes": [
-          "location",
-          "fetch",
-          "background-processing"
-        ],
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show your position on the map and track deliveries.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Mobile Order Tracker to track your delivery location for accurate ETA calculations.",
+        "NSLocationAlwaysUsageDescription": "This app requires location access to track deliveries in the background for accurate ETA calculations.",
+        "UIBackgroundModes": ["location", "fetch", "background-processing"],
         "NSLocationTemporaryUsageDescriptionDictionary": {
-          "DeliveryTracking": "Required for live ETA calculations"
+          "DeliveryTracking": "Required for live ETA calculations and delivery tracking"
         },
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "com.logistics.ordertracker",
-            "CFBundleURLSchemes": [
-              "ordertracker"
-            ]
+            "CFBundleURLSchemes": ["ordertracker"]
           }
         ]
       },
@@ -66,16 +59,13 @@
             },
             {
               "scheme": "https",
-              "host": "dashboard-mhr537fbo-matanuskatransport.vercel.app"
+              "host": "dash-fgm6ig5jt-matanuskatransport.vercel.app"
             },
             {
               "scheme": "ordertracker"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
       "permissions": [
@@ -83,7 +73,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ],
       "config": {
         "googleMaps": {
@@ -97,9 +88,7 @@
       "output": "static",
       "build": {
         "babel": {
-          "include": [
-            "@expo/vector-icons"
-          ]
+          "include": ["@expo/vector-icons"]
         }
       },
       "lang": "en",
@@ -135,7 +124,11 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Mobile Order Tracker to track your delivery location."
+          "locationAlwaysAndWhenInUsePermission": "Allow Mobile Order Tracker to track your delivery location for accurate ETA calculations.",
+          "locationWhenInUsePermission": "Allow Mobile Order Tracker to access your location while using the app to track deliveries.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "expo-router",
@@ -158,14 +151,15 @@
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9zZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
       "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_Pq1VxPdweGyCsDA5NW6-pg_TnWOkBjK",
       "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
+      "GOOGLE_MAPS_API_KEY": "AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg",
       "EXPO_PUBLIC_GOOGLE_MAPS_EMBED_URL": "https://maps.googleapis.com/maps/api/js?key=AIzaSyAhoyKz_MWD2hoesNvhP1ofEP4SZl3dxtg&libraries=places&callback=initMap",
       "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "liagltqpeilbswuqcahp",
       "EXPO_PUBLIC_QR_CODE_SECRET": "bzFdB2JEy25lf6pDzHPvh7ePSVDIIW0nES6l+zvOmIo=",
-      "mobileDomain": "https://dashboard-mhr537fbo-matanuskatransport.vercel.app",
+      "mobileDomain": "https://dash-fgm6ig5jt-matanuskatransport.vercel.app",
       "dashboardUrl": "https://dashboard-a9hqbvmqx-matanuskatransport.vercel.app/",
       "SUPABASE_URL": "https://liagltqpeilbswuqcahp.supabase.co",
       "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9zZSI6ImFub24iLCJpYXQiOjE3NTgzNTcxODUsImV4cCI6MjA3MzkzMzE4NX0.71jtSKXQsCb2Olxzxf6CCX9zl5Hqtgp9k--gsvCw11s",
-      "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM1NzE4NSwiZXhwIjoyMDczOTMzMTg1fQ.dtEl-YMJZ-YmEaS9B7Loy7I3bRcf-2sHjpHRF8sCD8o",
+      "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYWdsdHFwZWlsYnN3dXFjYWhwIiwicm9zZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM1NzE4NSwiZXhwIjoyMDczOTMzMTg1fQ.dtEl-YMJZ-YmEaS9B7Loy7I3bRcf-2sHjpHRF8sCD8o",
       "SUPABASE_JWT_SECRET": "oB9p8WiuJgDayPWf/fpHrqk5w8cmNvxwQYZynRV+D5cisYQ+O64Ve7kXEq1UTxQHbQ5kjddd+OjwmmOfgHUeqA==",
       "SUPABASE_SECRET_KEY": "sb_secret_qlosxpfAH-Z6oUxF_zn6-w_M4rF05A7",
       "SUPABASE_ACCESS_TOKEN": "sbp_a9002a89a88009fc9632fe2f7dfbcc959b05d72e",
@@ -178,6 +172,6 @@
         "projectId": "48aa7af2-042e-484a-a1bf-947ef35eaba4"
       }
     },
-    "runtimeVersion": "exposdk:54.0.6"
+    "runtimeVersion": "exposdk:51.0.0"
   }
 }

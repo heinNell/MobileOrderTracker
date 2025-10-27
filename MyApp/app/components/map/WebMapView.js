@@ -1,8 +1,9 @@
 // Web MapView using MapLibre GL JS
-import React, { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Map, { Marker } from 'react-map-gl/maplibre';
-import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { MAPTILER_API_KEY, MAPTILER_STYLE_URL } from '../../constants';
+import { DEFAULT_COORDINATES, validateAndSanitizeCoords } from '../../utils/coordinateValidation';
 import CenteredView from './CenteredView';
 
 // Define color constants
@@ -21,6 +22,9 @@ export default function WebMapView({ initialCoords, title }) {
     }
   }, [mapRef]);
 
+  // Validate and sanitize coordinates
+  const validCoords = validateAndSanitizeCoords(initialCoords) || DEFAULT_COORDINATES;
+
   if (!initialCoords || !title) {
     return <Text>Error: Missing coordinates or title.</Text>;
   }
@@ -35,8 +39,8 @@ export default function WebMapView({ initialCoords, title }) {
       <Map
         ref={mapRef}
         initialViewState={{
-          latitude: initialCoords.latitude,
-          longitude: initialCoords.longitude,
+          latitude: validCoords.latitude,
+          longitude: validCoords.longitude,
           zoom: 12,
         }}
         style={styles.map}
@@ -44,8 +48,8 @@ export default function WebMapView({ initialCoords, title }) {
         mapLib={import('maplibre-gl')}
       >
         <Marker
-          longitude={initialCoords.longitude}
-          latitude={initialCoords.latitude}
+          longitude={validCoords.longitude}
+          latitude={validCoords.latitude}
           anchor={{ x: 0.5, y: 1 }}
         >
           <Text>{title}</Text>

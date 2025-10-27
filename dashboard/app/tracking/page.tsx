@@ -27,6 +27,18 @@ import
 import { supabase } from "../../lib/supabase";
 import type { LocationUpdate, Order } from "../../shared/types";
 
+// Suppress Google Maps "Element already defined" warnings (harmless during dev hot-reload)
+if (typeof window !== 'undefined') {
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    const msg = args[0]?.toString() || '';
+    if (msg.includes('Element with name "gmp-') || msg.includes('already defined')) {
+      return; // Suppress these specific warnings
+    }
+    originalWarn.apply(console, args);
+  };
+}
+
 // Type overrides for Google Maps components
 const GoogleMapTyped = GoogleMap as any;
 const LoadScriptTyped = LoadScript as any;
@@ -39,8 +51,9 @@ export default function TrackingPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [mapCenter, setMapCenter] = useState<LatLngLiteral>({ lat: 0, lng: 0 });
-  const [mapZoom, setMapZoom] = useState(2);
+  // Default center: Pretoria, South Africa (valid coordinates)
+  const [mapCenter, setMapCenter] = useState<LatLngLiteral>({ lat: -25.7479, lng: 28.2293 });
+  const [mapZoom, setMapZoom] = useState(6);
   const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
   const [plannedRoutes, setPlannedRoutes] = useState<Record<string, LatLngLiteral[]>>({});
   const [enhancedRoutes, setEnhancedRoutes] = useState<Record<string, EnhancedRouteData>>({});
@@ -203,7 +216,13 @@ export default function TrackingPage() {
   const fetchPlannedRoute = useCallback(
     async (origin: LatLngLiteral, destination: LatLngLiteral): Promise<LatLngLiteral[]> => {
       if (!directionsServiceRef.current) {
-        console.warn("DirectionsService not available");
+        console.warn("DirectionsService not available yet");
+        return [];
+      }
+
+      // Validate coordinates before making API call
+      if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
+        console.warn("Invalid origin or destination coordinates:", { origin, destination });
         return [];
       }
 
@@ -222,7 +241,7 @@ export default function TrackingPage() {
               if (status === google.maps.DirectionsStatus.OK && result) {
                 resolve(result);
               } else {
-                reject(new Error(`Directions API failed: ${status}`));
+                reject(new Error(`Directions API status: ${status}`));
               }
             }
           );
@@ -237,7 +256,12 @@ export default function TrackingPage() {
           return path;
         }
       } catch (error) {
-        console.error("Error fetching planned route:", error);
+        // Suppress "Failed to fetch" noise - this is usually CORS or network timing
+        if (error instanceof Error && error.message.includes('Failed to fetch')) {
+          console.warn("Directions API temporarily unavailable (network/CORS)");
+        } else {
+          console.error("Error fetching planned route:", error);
+        }
       }
 
       return [];
@@ -275,6 +299,8 @@ export default function TrackingPage() {
   const getOrderLocations = useCallback(() => {
     const orderLocations: Record<string, LocationUpdate> = {};
 
+    console.log("Processing location updates:", locationUpdates.length);
+    
     locationUpdates.forEach((update) => {
       const existingLocation = orderLocations[update.order_id];
       if (
@@ -285,6 +311,9 @@ export default function TrackingPage() {
       }
     });
 
+    console.log("Order locations mapped:", Object.keys(orderLocations).length, "orders with locations");
+    console.log("Order IDs with locations:", Object.keys(orderLocations));
+    
     return orderLocations;
   }, [locationUpdates]);
 
@@ -294,10 +323,16 @@ export default function TrackingPage() {
       return locationUpdates
         .filter((update) => update.order_id === orderId)
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-        .map((update) => ({
-          lat: update.latitude || update.location?.latitude || 0,
-          lng: update.longitude || update.location?.longitude || 0,
-        }))
+        .map((update) => {
+          // Parse latitude/longitude - they come as strings from DB
+          const lat = typeof update.latitude === 'string' ? parseFloat(update.latitude) : update.latitude;
+          const lng = typeof update.longitude === 'string' ? parseFloat(update.longitude) : update.longitude;
+          
+          return {
+            lat: lat || update.location?.latitude || 0,
+            lng: lng || update.location?.longitude || 0,
+          };
+        })
         .filter((point) => point.lat !== 0 && point.lng !== 0);
     },
     [locationUpdates]
@@ -436,10 +471,13 @@ export default function TrackingPage() {
           "activated",
           "in_progress",
           "in_transit",
-          "loaded",
-          "unloading",
-          "loading",
           "arrived",
+          "arrived_at_loading_point",
+          "loading",
+          "loaded",
+          "arrived_at_unloading_point",
+          "unloading",
+          "delivered",
         ])
         .order("created_at", { ascending: false });
 
@@ -454,8 +492,17 @@ export default function TrackingPage() {
             const firstOrder = data[0];
             const { loadingPoint } = getOrderCoordinates(firstOrder);
             if (isValidCoordinate(loadingPoint)) {
-              setMapCenter(loadingPoint);
-              setMapZoom(10);
+              // Ensure coordinates are valid finite numbers
+              const lat = typeof loadingPoint.lat === 'number' ? loadingPoint.lat : parseFloat(String(loadingPoint.lat));
+              const lng = typeof loadingPoint.lng === 'number' ? loadingPoint.lng : parseFloat(String(loadingPoint.lng));
+              
+              if (!isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
+                setMapCenter({ lat, lng });
+                setMapZoom(10);
+                console.log("Map centered at:", { lat, lng });
+              } else {
+                console.warn("Invalid coordinates parsed:", { lat, lng });
+              }
             }
           } catch (err) {
             console.error("Failed to set map center:", err);
@@ -472,39 +519,88 @@ export default function TrackingPage() {
     }
   }, [getOrderCoordinates]);
 
-  // Fetch driver locations
+  // Fetch driver locations using optimized function
   const fetchDriverLocations = useCallback(async () => {
     try {
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      console.log("🔍 Fetching driver locations...");
 
-      const { data, error } = await supabase
-        .from("driver_locations")
-        .select(
-          `
-          *,
-          driver:users!driver_locations_driver_id_fkey(
+      // First, try using the optimized function
+      let { data, error } = await supabase.rpc('get_latest_driver_locations');
+
+      if (error) {
+        console.warn("Function call failed, falling back to direct query:", error);
+        
+        // Fallback to direct query with updated schema
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        
+        const fallbackResult = await supabase
+          .from("driver_locations")
+          .select(`
             id,
-            full_name,
-            email
-          ),
-          order:orders!driver_locations_order_id_fkey(
-            id,
-            order_number,
-            status
-          )
-        `
-        )
-        .gte("created_at", twentyFourHoursAgo)
-        .order("created_at", { ascending: false });
+            driver_id,
+            order_id,
+            latitude,
+            longitude,
+            accuracy,
+            speed,
+            heading,
+            timestamp,
+            created_at,
+            location_source
+          `)
+          .gte("created_at", twentyFourHoursAgo)
+          .not("latitude", "is", null)
+          .not("longitude", "is", null)
+          .order("created_at", { ascending: false });
+        
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+      }
 
       if (error) throw error;
 
       if (isMountedRef.current) {
-        setLocationUpdates(data || []);
-        console.log("Fetched driver locations:", data?.length || 0);
+        // Parse and validate location data
+        const parsedData = (data || []).map(location => {
+          // Handle both numeric and string coordinates
+          const lat = typeof location.latitude === 'string' ? parseFloat(location.latitude) : location.latitude;
+          const lng = typeof location.longitude === 'string' ? parseFloat(location.longitude) : location.longitude;
+          
+          return {
+            ...location,
+            latitude: lat,
+            longitude: lng,
+            // Use timestamp if available, fallback to created_at
+            timestamp: location.timestamp || location.created_at
+          };
+        }).filter(location => {
+          // Filter out invalid coordinates
+          return location.latitude && location.longitude && 
+                 !isNaN(location.latitude) && !isNaN(location.longitude) &&
+                 location.latitude !== 0 && location.longitude !== 0;
+        });
+        
+        setLocationUpdates(parsedData);
+        console.log("✅ Fetched driver locations:", parsedData?.length || 0);
+        
+        // Debug: Show the location data
+        if (parsedData && parsedData.length > 0) {
+          console.log("📍 Sample location:", parsedData[0]);
+          console.log("🎯 Sample coordinates:", { lat: parsedData[0].latitude, lng: parsedData[0].longitude });
+          console.log("📋 Order IDs with locations:", [...new Set(parsedData.map(d => d.order_id))]);
+          console.log("👥 Driver IDs with locations:", [...new Set(parsedData.map(d => d.driver_id))]);
+        } else {
+          console.warn("⚠️ No valid driver locations found in last 24 hours");
+          
+          // Additional debugging - check if table has any data at all
+          const { data: totalCheck } = await supabase
+            .from("driver_locations")
+            .select("count", { count: 'exact' });
+          console.log("📊 Total driver_locations records:", totalCheck);
+        }
       }
     } catch (error) {
-      console.error("Error fetching driver locations:", error);
+      console.error("❌ Error fetching driver locations:", error);
     }
   }, []);
 
@@ -522,7 +618,14 @@ export default function TrackingPage() {
           },
           (payload) => {
             console.log("New driver location received:", payload.new);
-            const newLocation = payload.new as LocationUpdate;
+            const rawLocation = payload.new as LocationUpdate;
+            
+            // Parse latitude/longitude strings to numbers
+            const newLocation = {
+              ...rawLocation,
+              latitude: typeof rawLocation.latitude === 'string' ? parseFloat(rawLocation.latitude) : rawLocation.latitude,
+              longitude: typeof rawLocation.longitude === 'string' ? parseFloat(rawLocation.longitude) : rawLocation.longitude,
+            };
 
             if (isMountedRef.current) {
               setLocationUpdates((prev) => {
@@ -732,7 +835,7 @@ export default function TrackingPage() {
           </div>
 
           <LoadScriptTyped googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-            {orders.length > 0 && (
+            {orders.length > 0 && isFinite(mapCenter.lat) && isFinite(mapCenter.lng) && (
               <GoogleMapTyped
                 mapContainerStyle={mapContainerStyle}
                 center={mapCenter}
@@ -796,20 +899,22 @@ export default function TrackingPage() {
                       )}
 
                       {/* Current position marker */}
-                      <MarkerTyped
-                        position={enhanced.currentPosition}
-                        icon={{
-                          path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                          scale: isHighlighted ? 15 : 10,
-                          fillColor: isHighlighted ? "#3B82F6" : "#10B981",
-                          fillOpacity: 1,
-                          strokeColor: "#FFFFFF",
-                          strokeWeight: isHighlighted ? 3 : 2,
-                          zIndex: 3,
-                        }}
-                        title={`Order: ${order.order_number}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}\nProgress: ${enhanced.progressPercentage.toFixed(1)}%`}
-                        onClick={() => setSelectedOrder(order)}
-                      />
+                      {isValidCoordinate(enhanced.currentPosition) && (
+                        <MarkerTyped
+                          position={enhanced.currentPosition}
+                          icon={{
+                            path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
+                            scale: isHighlighted ? 15 : 10,
+                            fillColor: isHighlighted ? "#3B82F6" : "#10B981",
+                            fillOpacity: 1,
+                            strokeColor: "#FFFFFF",
+                            strokeWeight: isHighlighted ? 3 : 2,
+                            zIndex: 3,
+                          }}
+                          title={`Order: ${order.order_number}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}\nProgress: ${enhanced.progressPercentage.toFixed(1)}%`}
+                          onClick={() => setSelectedOrder(order)}
+                        />
+                      )}
                     </React.Fragment>
                   );
                 } catch (error) {
@@ -835,7 +940,7 @@ export default function TrackingPage() {
                       <MarkerTyped
                         position={loadingPoint}
                         icon={{
-                          path: google.maps.SymbolPath.CIRCLE,
+                          path: (typeof google !== 'undefined' && google.maps?.SymbolPath?.CIRCLE) || "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
                           scale: isHighlighted ? 12 : 8,
                           fillColor: "#EF4444",
                           fillOpacity: 1,
@@ -855,7 +960,7 @@ export default function TrackingPage() {
                       <MarkerTyped
                         position={unloadingPoint}
                         icon={{
-                          path: google.maps.SymbolPath.CIRCLE,
+                          path: (typeof google !== 'undefined' && google.maps?.SymbolPath?.CIRCLE) || "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
                           scale: isHighlighted ? 12 : 8,
                           fillColor: "#3B82F6",
                           fillOpacity: 1,

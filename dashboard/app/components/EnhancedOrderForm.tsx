@@ -112,34 +112,59 @@ export default function EnhancedOrderForm({
   // Initialize form data when order prop changes (for editing)
   useEffect(() => {
     if (order && isEditing) {
-      console.log("Initializing form with order data:", order);
+      console.log("🔧 Initializing form with order data:", order);
       
-      // Parse coordinates from PostGIS format if needed
+      // Parse coordinates from multiple sources (new columns have priority)
       let loadingLat = "";
       let loadingLng = "";
       let unloadingLat = "";
       let unloadingLng = "";
 
       try {
-        if (typeof order.loading_point_location === "string") {
+        // PRIORITY 1: Check if new latitude/longitude columns exist and have values
+        if (order.loading_point_latitude && order.loading_point_longitude) {
+          loadingLat = order.loading_point_latitude.toString();
+          loadingLng = order.loading_point_longitude.toString();
+          console.log("✅ Using new loading coordinates:", { loadingLat, loadingLng });
+        } 
+        // FALLBACK 1: Parse from PostGIS format
+        else if (typeof order.loading_point_location === "string") {
           const match = order.loading_point_location.match(/POINT\(([^)]+)\)/);
           if (match) {
             const [lng, lat] = match[1].split(" ").map(Number);
-            loadingLat = lat.toString();
-            loadingLng = lng.toString();
+            if (!isNaN(lat) && !isNaN(lng)) {
+              loadingLat = lat.toString();
+              loadingLng = lng.toString();
+              console.log("✅ Parsed loading coordinates from PostGIS:", { loadingLat, loadingLng });
+            }
           }
         }
 
-        if (typeof order.unloading_point_location === "string") {
+        // PRIORITY 1: Check if new latitude/longitude columns exist and have values
+        if (order.unloading_point_latitude && order.unloading_point_longitude) {
+          unloadingLat = order.unloading_point_latitude.toString();
+          unloadingLng = order.unloading_point_longitude.toString();
+          console.log("✅ Using new unloading coordinates:", { unloadingLat, unloadingLng });
+        }
+        // FALLBACK 1: Parse from PostGIS format  
+        else if (typeof order.unloading_point_location === "string") {
           const match = order.unloading_point_location.match(/POINT\(([^)]+)\)/);
           if (match) {
             const [lng, lat] = match[1].split(" ").map(Number);
-            unloadingLat = lat.toString();
-            unloadingLng = lng.toString();
+            if (!isNaN(lat) && !isNaN(lng)) {
+              unloadingLat = lat.toString();
+              unloadingLng = lng.toString();
+              console.log("✅ Parsed unloading coordinates from PostGIS:", { unloadingLat, unloadingLng });
+            }
           }
         }
+
+        console.log("📍 Final coordinates:", {
+          loading: { lat: loadingLat, lng: loadingLng },
+          unloading: { lat: unloadingLat, lng: unloadingLng }
+        });
       } catch (error) {
-        console.warn("Failed to parse coordinates:", error);
+        console.error("❌ Failed to parse coordinates:", error);
       }
 
       // Set all form fields from order data

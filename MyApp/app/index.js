@@ -1,7 +1,7 @@
 // app/index.js
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useAuth } from './context/AuthContext';
 import { Redirect } from 'expo-router';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from './context/AuthContext';
 
 const colors = {
   background: '#ffffff',
@@ -27,7 +27,7 @@ export default function HomeScreen() {
   if (isAuthenticated && user) {
     return <Redirect href="/(tabs)" />;
   } else {
-    return <Redirect href="/(auth)/LoginScreen" />;
+    return <Redirect href="/(auth)/login" />;
   }
 }
 

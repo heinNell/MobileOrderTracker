@@ -32,6 +32,12 @@ CREATE INDEX IF NOT EXISTS idx_driver_locations_lat_lng ON public.driver_locatio
 -- Enable Row Level Security
 ALTER TABLE public.driver_locations ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (to avoid duplicate errors)
+DROP POLICY IF EXISTS "Drivers can insert own location updates" ON public.driver_locations;
+DROP POLICY IF EXISTS "Drivers can read own location updates" ON public.driver_locations;
+DROP POLICY IF EXISTS "Admins can read tenant location updates" ON public.driver_locations;
+DROP POLICY IF EXISTS "Users can read tenant driver locations" ON public.driver_locations;
+
 -- RLS Policies for driver_locations table
 -- Policy 1: Drivers can insert their own location updates
 CREATE POLICY "Drivers can insert own location updates" 
@@ -89,14 +95,32 @@ USING (
 CREATE OR REPLACE FUNCTION update_user_last_location()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Update user's last location timestamp (simplified without PostGIS dependency)
-  UPDATE public.users 
-  SET last_location_update = NEW.created_at
-  WHERE id = NEW.driver_id;
+  -- Update user's last location timestamp and geometry location
+  -- Using ST_SetSRID and ST_MakePoint for PostGIS geometry
+  -- Wrapped in exception handler to prevent failures if PostGIS is not available
+  BEGIN
+    UPDATE public.users 
+    SET 
+      last_location_update = NEW.created_at,
+      last_driver_location = ST_SetSRID(ST_MakePoint(NEW.longitude, NEW.latitude), 4326)
+    WHERE id = NEW.driver_id;
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- If PostGIS geometry update fails, at least update the timestamp
+      UPDATE public.users 
+      SET last_location_update = NEW.created_at
+      WHERE id = NEW.driver_id;
+      
+      -- Log the error but don't fail the insert
+      RAISE WARNING 'Failed to update geometry location for user %: %', NEW.driver_id, SQLERRM;
+  END;
   
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop and recreate trigger to ensure clean state
+DROP TRIGGER IF EXISTS update_user_last_location_trigger ON public.driver_locations;
 
 -- Create trigger to automatically update user's last location
 CREATE TRIGGER update_user_last_location_trigger

@@ -508,6 +508,9 @@ export default function LoadActivationScreen() {
         }
       }
 
+      // Log activation result for debugging
+      console.log("✅ Activation result:", activationResult?.success ? "Success" : "Failed");
+
       // Store as active order
       try {
         const storage = Platform.OS === 'web' 
@@ -551,8 +554,8 @@ export default function LoadActivationScreen() {
         : `Order ${orderNumber} has been activated successfully.\n\nYou can now scan QR codes for pickup and delivery.`;
 
       if (isAuto) {
-        // On auto-activation, take user directly to scanner for speed
-        router.push({ pathname: "/(tabs)/scanner", params: { orderId, orderNumber } });
+        // On auto-activation, take user directly to order details
+        router.push({ pathname: `/(tabs)/${orderId}`, params: { orderId, orderNumber } });
       } else {
         Alert.alert(
           "Load Activated!",
@@ -610,12 +613,25 @@ export default function LoadActivationScreen() {
         <MaterialIcons name="error-outline" size={64} color={colors.red[500]} />
         <Text style={styles.errorTitle}>Invalid Parameters</Text>
         <Text style={styles.errorText}>{paramError}</Text>
-        <TouchableOpacity
-          style={styles.errorButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.errorButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorHint}>
+          This usually happens when trying to access this screen without selecting an order first.
+        </Text>
+        <View style={styles.errorButtonContainer}>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => router.back()}
+          >
+            <MaterialIcons name="arrow-back" size={20} color={colors.white} />
+            <Text style={styles.errorButtonText}>Go Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.errorButton, styles.primaryErrorButton]}
+            onPress={() => router.push('/(tabs)/orders')}
+          >
+            <MaterialIcons name="list" size={20} color={colors.white} />
+            <Text style={styles.errorButtonText}>View Orders</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -845,15 +861,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.gray[600],
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: 12,
     paddingHorizontal: 20,
     lineHeight: 22,
   },
+  errorHint: {
+    fontSize: 14,
+    color: colors.gray[500],
+    textAlign: "center",
+    marginBottom: 24,
+    paddingHorizontal: 20,
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  errorButtonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+  },
   errorButton: {
-    backgroundColor: colors.primary,
+    flex: 1,
+    backgroundColor: colors.gray[600],
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  primaryErrorButton: {
+    backgroundColor: colors.primary,
   },
   errorButtonText: {
     color: colors.white,

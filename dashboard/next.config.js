@@ -6,11 +6,28 @@ const nextConfig = {
   },
 
   // Configure for codespace environment
-  webpack: (config, { dev }) => {
+  webpack: (config, { dev, isServer }) => {
     if (dev) {
       // Prevent automatic browser opening
       process.env.BROWSER = "none";
     }
+    
+    // Exclude MyApp directory and react-native packages from webpack resolution
+    config.resolve = config.resolve || {};
+    config.resolve.alias = config.resolve.alias || {};
+    
+    // Prevent webpack from resolving react-native packages
+    config.resolve.alias['react-native$'] = 'react-native-web';
+    config.resolve.alias['react-native-maps'] = false;
+    
+    // Exclude MyApp from module resolution
+    if (config.module && config.module.rules) {
+      config.module.rules.push({
+        test: /\.(js|jsx|ts|tsx)$/,
+        exclude: /MyApp/,
+      });
+    }
+    
     return config;
   },
 

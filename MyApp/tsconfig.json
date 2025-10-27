@@ -25,6 +25,6 @@
       "@types/*": ["./app/types/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+  "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "../supabase/functions/activate-load-edge-function-updated.ts", "../supabase/functions/supabase-edge-function-cors-fix.ts"],
   "exclude": ["node_modules"]
 }

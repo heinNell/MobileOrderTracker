@@ -38,9 +38,9 @@ echo "========================"
 [ -f "vercel.json" ] && check_status 0 "vercel.json exists" || check_status 1 "vercel.json missing"
 
 # Check service files
-[ -f "services/StatusUpdateService.js" ] && check_status 0 "StatusUpdateService exists" || check_status 1 "StatusUpdateService missing"
-[ -f "components/StatusUpdateButtons.js" ] && check_status 0 "StatusUpdateButtons exists" || check_status 1 "StatusUpdateButtons missing"
-[ -f "services/GeocodingService.js" ] && check_status 0 "GeocodingService exists" || check_status 1 "GeocodingService missing"
+[ -f "app/services/StatusUpdateService.js" ] && check_status 0 "StatusUpdateService exists" || check_status 1 "StatusUpdateService missing"
+[ -f "app/components/order/StatusUpdateButtons.js" ] && check_status 0 "StatusUpdateButtons exists" || check_status 1 "StatusUpdateButtons missing"
+[ -f "app/services/GeocodingService.js" ] && check_status 0 "GeocodingService exists" || check_status 1 "GeocodingService missing"
 
 echo -e "\n${BLUE}🔧 Configuration Checks${NC}"
 echo "======================="

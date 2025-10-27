@@ -32,8 +32,17 @@ const flatColors = {
   gray800: Colors.gray[800],
   gray900: Colors.gray[900],
   
-  // Add transparent color
+  // Additional colors for EnhancedStatusPicker
+  white: Colors.surface || "#ffffff",
+  green50: "#f0fdf4",
+  green100: "#dcfce7",
+  blue50: "#eff6ff",
+  orange50: "#fff7ed",
+  red50: "#fef2f2",
+  
+  // Add transparent and overlay colors
   transparent: Colors.transparent || 'transparent',
+  overlayDark: 'rgba(0, 0, 0, 0.5)',
 };
 
 const GlobalStyles = StyleSheet.create({
@@ -403,6 +412,189 @@ const GlobalStyles = StyleSheet.create({
   successLabel: {
     color: Colors.success,
     fontSize: 14,
+  },
+
+  // ENHANCED STATUS PICKER SPECIFIC STYLES
+  pickerButton: {
+    backgroundColor: flatColors.white,
+    borderWidth: 2,
+    borderColor: flatColors.gray200,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: flatColors.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  
+  disabledButton: {
+    backgroundColor: flatColors.gray100,
+    borderColor: flatColors.gray300,
+  },
+  
+  updatingButton: {
+    backgroundColor: flatColors.blue50,
+    borderColor: flatColors.primary,
+  },
+  
+  pickerButtonContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  
+  currentStatusDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  
+  currentStatusText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: flatColors.overlayDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  
+  modalContent: {
+    backgroundColor: flatColors.white,
+    borderRadius: 16,
+    width: '100%',
+    maxHeight: '80%',
+    shadowColor: flatColors.gray900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: flatColors.gray200,
+  },
+  
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: flatColors.gray900,
+  },
+  
+  closeButton: {
+    padding: 4,
+  },
+  
+  modalSubtitle: {
+    fontSize: 14,
+    color: flatColors.gray600,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+
+  selectNextStatusText: {
+    marginTop: 0,
+    marginBottom: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: flatColors.gray200,
+  },
+
+  currentStatusModalDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: flatColors.gray50,
+    borderColor: flatColors.gray200,
+    borderWidth: 1,
+  },
+  
+  currentStatusModalValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  
+  statusList: {
+    maxHeight: 400,
+    paddingBottom: 8,
+  },
+
+  emptyListText: {
+    textAlign: 'center',
+    padding: 20,
+    fontSize: 14,
+    color: flatColors.gray500,
+    fontStyle: 'italic',
+  },
+  
+  statusOption: {
+    marginHorizontal: 20,
+    marginVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: flatColors.gray200,
+  },
+  
+  statusOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  
+  statusIconContainer: {
+    marginRight: 12,
+  },
+  
+  statusTextContainer: {
+    flex: 1,
+  },
+  
+  statusLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  
+  statusDescription: {
+    fontSize: 13,
+    color: flatColors.gray600,
+    lineHeight: 18,
+  },
+  
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: flatColors.gray200,
+  },
+  
+  footerNote: {
+    fontSize: 12,
+    color: flatColors.gray500,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
