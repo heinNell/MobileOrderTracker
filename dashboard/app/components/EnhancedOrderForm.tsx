@@ -53,6 +53,8 @@ export default function EnhancedOrderForm({
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [availableGeofences, setAvailableGeofences] = useState<GeofenceOption[]>([]);
   const [loadingGeofences, setLoadingGeofences] = useState(false);
+  const [selectedLoadingGeofenceId, setSelectedLoadingGeofenceId] = useState<string>("");
+  const [selectedUnloadingGeofenceId, setSelectedUnloadingGeofenceId] = useState<string>("");
   const [formData, setFormData] = useState({
     // Basic order info
     assigned_driver_id: order?.assigned_driver_id || "",
@@ -268,6 +270,47 @@ export default function EnhancedOrderForm({
     }
   }, [order, isEditing]);
 
+  // Match geofences with order locations when editing
+  useEffect(() => {
+    if (!isEditing || !order || availableGeofences.length === 0) {
+      return;
+    }
+
+    // Try to find matching loading location
+    if (formData.loading_lat && formData.loading_lng) {
+      const loadingLat = parseFloat(formData.loading_lat);
+      const loadingLng = parseFloat(formData.loading_lng);
+      
+      // Find geofence with matching coordinates (within 0.0001 degrees ~11 meters)
+      const matchingLoadingGeofence = availableGeofences.find(g => 
+        Math.abs(g.latitude - loadingLat) < 0.0001 && 
+        Math.abs(g.longitude - loadingLng) < 0.0001
+      );
+
+      if (matchingLoadingGeofence) {
+        setSelectedLoadingGeofenceId(matchingLoadingGeofence.id);
+        console.log(`📍 Matched loading location to geofence: ${matchingLoadingGeofence.name}`);
+      }
+    }
+
+    // Try to find matching unloading location
+    if (formData.unloading_lat && formData.unloading_lng) {
+      const unloadingLat = parseFloat(formData.unloading_lat);
+      const unloadingLng = parseFloat(formData.unloading_lng);
+      
+      // Find geofence with matching coordinates (within 0.0001 degrees ~11 meters)
+      const matchingUnloadingGeofence = availableGeofences.find(g => 
+        Math.abs(g.latitude - unloadingLat) < 0.0001 && 
+        Math.abs(g.longitude - unloadingLng) < 0.0001
+      );
+
+      if (matchingUnloadingGeofence) {
+        setSelectedUnloadingGeofenceId(matchingUnloadingGeofence.id);
+        console.log(`📍 Matched unloading location to geofence: ${matchingUnloadingGeofence.name}`);
+      }
+    }
+  }, [availableGeofences, isEditing, order, formData.loading_lat, formData.loading_lng, formData.unloading_lat, formData.unloading_lng]);
+
   const fetchGeofences = async () => {
     try {
       setLoadingGeofences(true);
@@ -414,6 +457,8 @@ export default function EnhancedOrderForm({
   };
 
   const handleLoadingGeofenceSelect = (geofenceId: string) => {
+    setSelectedLoadingGeofenceId(geofenceId);
+    
     if (!geofenceId) {
       // Clear selection - allow manual entry
       return;
@@ -428,10 +473,13 @@ export default function EnhancedOrderForm({
         loading_lat: geofence.latitude.toString(),
         loading_lng: geofence.longitude.toString(),
       }));
+      console.log(`📍 Selected loading location: ${geofence.name}`);
     }
   };
 
   const handleUnloadingGeofenceSelect = (geofenceId: string) => {
+    setSelectedUnloadingGeofenceId(geofenceId);
+    
     if (!geofenceId) {
       // Clear selection - allow manual entry
       return;
@@ -446,6 +494,7 @@ export default function EnhancedOrderForm({
         unloading_lat: geofence.latitude.toString(),
         unloading_lng: geofence.longitude.toString(),
       }));
+      console.log(`📍 Selected unloading location: ${geofence.name}`);
     }
   };
 
@@ -1152,6 +1201,7 @@ export default function EnhancedOrderForm({
                         Quick Select from Saved Locations
                       </label>
                       <select
+                        value={selectedLoadingGeofenceId}
                         onChange={(e) => handleLoadingGeofenceSelect(e.target.value)}
                         className="w-full px-4 py-3 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-base"
                       >
@@ -1263,6 +1313,7 @@ export default function EnhancedOrderForm({
                         Quick Select from Saved Locations
                       </label>
                       <select
+                        value={selectedUnloadingGeofenceId}
                         onChange={(e) => handleUnloadingGeofenceSelect(e.target.value)}
                         className="w-full px-4 py-3 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white text-base"
                       >
