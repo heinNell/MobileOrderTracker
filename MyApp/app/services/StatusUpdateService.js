@@ -426,18 +426,32 @@ class StatusUpdateService {
     const fromInfo = STATUS_INFO[currentStatus];
     const toInfo = STATUS_INFO[newStatus];
     
+    console.log('🔔 Showing confirmation alert:', {
+      from: fromInfo?.label || currentStatus,
+      to: toInfo?.label || newStatus,
+      hasCallback: !!onConfirm
+    });
+    
     Alert.alert(
       'Update Order Status',
       `Change status from "${fromInfo?.label || currentStatus}" to "${toInfo?.label || newStatus}"?`,
       [
         {
           text: 'Cancel',
-          style: 'cancel'
+          style: 'cancel',
+          onPress: () => console.log('❌ User cancelled status update')
         },
         {
           text: 'Update',
           style: 'default',
-          onPress: onConfirm
+          onPress: () => {
+            console.log('✅ User confirmed status update, calling callback...');
+            if (onConfirm) {
+              onConfirm();
+            } else {
+              console.error('❌ No callback provided to confirmation dialog!');
+            }
+          }
         }
       ]
     );

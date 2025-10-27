@@ -96,6 +96,9 @@ const StatusUpdateButtons = ({
     return true;
   });
 
+  console.log('✨ Filtered transitions:', filteredTransitions);
+  console.log('📊 Total buttons to render:', filteredTransitions.length);
+
   // Handle status update
   const handleStatusUpdate = async (newStatus, note = null) => {
     console.log('🎯 Handling status update:', { orderId: order?.id, newStatus, note });
