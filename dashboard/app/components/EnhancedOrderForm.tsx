@@ -114,6 +114,40 @@ export default function EnhancedOrderForm({
     if (order && isEditing) {
       console.log("🔧 Initializing form with order data:", order);
       
+      // Helper function to format dates for HTML date inputs (YYYY-MM-DD)
+      const formatDateForInput = (dateString: string | undefined): string => {
+        if (!dateString) return "";
+        try {
+          // Handle both ISO format and PostgreSQL timestamp format
+          // "2025-10-20 00:00:00+00" or "2025-10-20T00:00:00.000Z"
+          const date = new Date(dateString);
+          if (isNaN(date.getTime())) return "";
+          
+          // Format as YYYY-MM-DD
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const formatted = `${year}-${month}-${day}`;
+          console.log(`📅 Formatted date: "${dateString}" → "${formatted}"`);
+          return formatted;
+        } catch (error) {
+          console.error("Failed to format date:", dateString, error);
+          return "";
+        }
+      };
+      
+      // Parse transporter_supplier if it's a JSON string
+      let transporterData: TransporterSupplier | undefined = order.transporter_supplier;
+      if (typeof order.transporter_supplier === 'string') {
+        try {
+          transporterData = JSON.parse(order.transporter_supplier);
+          console.log("✅ Parsed transporter_supplier from string:", transporterData);
+        } catch (error) {
+          console.error("❌ Failed to parse transporter_supplier:", error);
+          transporterData = undefined;
+        }
+      }
+      
       // Parse coordinates from multiple sources (new columns have priority)
       let loadingLat = "";
       let loadingLng = "";
@@ -185,29 +219,29 @@ export default function EnhancedOrderForm({
         special_handling_instructions: order.special_handling_instructions || "",
         contact_name: order.contact_name || "",
         contact_phone: order.contact_phone || "",
-        expected_loading_date: order.expected_loading_date || "",
-        expected_unloading_date: order.expected_unloading_date || "",
+        expected_loading_date: formatDateForInput(order.expected_loading_date),
+        expected_unloading_date: formatDateForInput(order.expected_unloading_date),
         truck_registration: order.truck_registration || "",
         trailer_registration: order.trailer_registration || "",
-        transporter_name: order.transporter_supplier?.name || "",
-        transporter_phone: order.transporter_supplier?.contact_phone || "",
-        transporter_email: order.transporter_supplier?.contact_email || "",
-        transporter_cost: order.transporter_supplier?.cost_amount?.toString() || "",
-        transporter_currency: order.transporter_supplier?.cost_currency || "USD",
-        transporter_notes: order.transporter_supplier?.notes || "",
+        transporter_name: transporterData?.name || "",
+        transporter_phone: transporterData?.contact_phone || "",
+        transporter_email: transporterData?.contact_email || "",
+        transporter_cost: transporterData?.cost_amount?.toString() || "",
+        transporter_currency: transporterData?.cost_currency || "USD",
+        transporter_notes: transporterData?.notes || "",
       });
 
       // IMPORTANT: Restore selected transporter and contact state if they exist
       // This ensures the UI shows the selected items instead of just the manual entry fields
-      if (order.transporter_supplier?.name) {
+      if (transporterData?.name) {
         // Create a minimal transporter object from the order data for display
         // Note: We don't have full transporter details, but we can show what we have
         const mockTransporter: EnhancedTransporter = {
           id: "", // Unknown - would need to fetch from DB
           tenant_id: order.tenant_id,
-          name: order.transporter_supplier.name,
-          primary_contact_phone: order.transporter_supplier.contact_phone,
-          primary_contact_email: order.transporter_supplier.contact_email,
+          name: transporterData.name,
+          primary_contact_phone: transporterData.contact_phone,
+          primary_contact_email: transporterData.contact_email,
           created_at: "",
           updated_at: "",
           is_active: true,
