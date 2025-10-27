@@ -1,7 +1,7 @@
 // StatusUpdateService.js
 // Comprehensive status update service for Mobile Order Tracker
 
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 import { supabase } from '../lib/supabase';
 
@@ -429,9 +429,30 @@ class StatusUpdateService {
     console.log('🔔 Showing confirmation alert:', {
       from: fromInfo?.label || currentStatus,
       to: toInfo?.label || newStatus,
-      hasCallback: !!onConfirm
+      hasCallback: !!onConfirm,
+      platform: Platform.OS
     });
     
+    // Web fallback using native confirm dialog
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `Update Order Status\n\nChange status from "${fromInfo?.label || currentStatus}" to "${toInfo?.label || newStatus}"?`
+      );
+      
+      if (confirmed) {
+        console.log('✅ User confirmed status update (web), calling callback...');
+        if (onConfirm) {
+          onConfirm();
+        } else {
+          console.error('❌ No callback provided to confirmation dialog!');
+        }
+      } else {
+        console.log('❌ User cancelled status update (web)');
+      }
+      return;
+    }
+    
+    // Native mobile Alert.alert
     Alert.alert(
       'Update Order Status',
       `Change status from "${fromInfo?.label || currentStatus}" to "${toInfo?.label || newStatus}"?`,
