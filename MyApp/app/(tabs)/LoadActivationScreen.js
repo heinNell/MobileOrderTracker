@@ -550,8 +550,8 @@ export default function LoadActivationScreen() {
       await loadOrderDetails();
 
       const successMessage = usedFallback 
-        ? `Order ${orderNumber} has been activated successfully using backup method.\n\nYou can now scan QR codes for pickup and delivery.`
-        : `Order ${orderNumber} has been activated successfully.\n\nYou can now scan QR codes for pickup and delivery.`;
+        ? `Order ${orderNumber} has been activated successfully using backup method.\n\nLocation tracking has been started.`
+        : `Order ${orderNumber} has been activated successfully.\n\nLocation tracking has been started.`;
 
       if (isAuto) {
         // On auto-activation, take user directly to order details
@@ -565,15 +565,6 @@ export default function LoadActivationScreen() {
               text: "OK",
               onPress: () => {
                 router.back();
-              },
-            },
-            {
-              text: "Scan QR Code",
-              onPress: () => {
-                router.push({
-                  pathname: "/(tabs)/scanner",
-                  params: { orderId, orderNumber },
-                });
               },
             },
           ]

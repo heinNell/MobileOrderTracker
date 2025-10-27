@@ -9,17 +9,16 @@ import type { Order } from "../../../shared/types";
 interface StatusUpdate {
   id: string;
   order_id: string;
-  old_status: string;
-  new_status: string;
-  updated_by: string;
-  updated_at: string;
+  status: string;  // Actual column name in schema
+  driver_id: string;  // Actual column name in schema
+  created_at: string;  // Actual column name in schema
   notes?: string;
   location?: {
     latitude: number;
     longitude: number;
   };
   metadata?: any;
-  updated_by_user?: {
+  driver?: {  // Joined from users table
     full_name: string;
     email: string;
   };
@@ -139,20 +138,19 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
         .select(`
           id,
           order_id,
-          old_status,
-          new_status,
-          updated_by,
-          updated_at,
+          status,
           notes,
           location,
           metadata,
-          updated_by_user:users!status_updates_updated_by_fkey(
+          created_at,
+          driver_id,
+          driver:users!status_updates_driver_id_fkey(
             full_name,
             email
           )
         `)
         .eq("order_id", orderId)
-        .order("updated_at", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error && error.code !== "42P01") { // Ignore table doesn't exist error
         throw error;
@@ -190,14 +188,13 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
         const transformedUpdates = (historyUpdates || []).map(update => ({
           id: update.id,
           order_id: update.order_id,
-          old_status: update.previous_status,
-          new_status: update.new_status,
-          updated_by: update.changed_by,
-          updated_at: update.changed_at,
+          status: update.new_status,  // Map to status column
+          driver_id: update.changed_by,  // Map to driver_id column
+          created_at: update.changed_at,  // Map to created_at column
           notes: update.notes,
           location: update.driver_location,
           metadata: update.metadata,
-          updated_by_user: Array.isArray(update.changed_by_user) 
+          driver: Array.isArray(update.changed_by_user) 
             ? update.changed_by_user[0] 
             : update.changed_by_user
         }));
@@ -208,9 +205,9 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
 
       const fixedUpdates = (updates || []).map(update => ({
         ...update,
-        updated_by_user: Array.isArray(update.updated_by_user) 
-          ? update.updated_by_user[0] 
-          : update.updated_by_user
+        driver: Array.isArray(update.driver) 
+          ? update.driver[0] 
+          : update.driver
       }));
 
       setStatusUpdates(fixedUpdates);
@@ -253,9 +250,10 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
           table: "status_updates",
           filter: `order_id=eq.${orderId}`,
         },
-        () => {
-          console.log("Status update received, refreshing...");
+        (payload) => {
+          console.log("✅ Status update INSERT received:", payload.new);
           fetchStatusUpdates();
+          fetchOrderDetails(); // Also refresh order details
         }
       )
       .subscribe();
@@ -312,6 +310,26 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
       date: date.toLocaleDateString(),
       time: date.toLocaleTimeString(),
     };
+  };
+
+  const formatStatusLabel = (status: string): string => {
+    const statusLabels: Record<string, string> = {
+      pending: "Pending Assignment",
+      assigned: "Assigned to Driver",
+      activated: "Load Activated",
+      in_progress: "Trip Started",
+      in_transit: "In Transit",
+      arrived: "Arrived at Location",
+      arrived_at_loading_point: "Arrived at Loading Point",
+      loading: "Loading Cargo",
+      loaded: "Cargo Loaded",
+      arrived_at_unloading_point: "Arrived at Unloading Point",
+      unloading: "Unloading Cargo",
+      delivered: "Delivered",
+      completed: "Order Completed",
+      cancelled: "Cancelled",
+    };
+    return statusLabels[status] || status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   };
 
   const parseCoordinates = (order: Order) => {
@@ -566,7 +584,7 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
                 <div className="flow-root">
                   <ul className="-mb-8">
                     {statusUpdates.map((update, updateIdx) => {
-                      const { date, time } = formatDateTime(update.updated_at);
+                      const { date, time } = formatDateTime(update.created_at);
                       return (
                         <li key={update.id}>
                           <div className="relative pb-8">
@@ -579,7 +597,7 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
                             <div className="relative flex space-x-3">
                               <div>
                                 <span
-                                  className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white ${getStatusColor(update.new_status)}`}
+                                  className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white ${getStatusColor(update.status)}`}
                                 >
                                   <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -590,15 +608,15 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
                                 <div>
                                   <div className="text-sm">
                                     <span className="font-medium text-gray-900">
-                                      {update.old_status} → {update.new_status}
+                                      {formatStatusLabel(update.status)}
                                     </span>
                                   </div>
                                   <p className="mt-0.5 text-xs text-gray-500">
                                     {date} at {time}
                                   </p>
-                                  {update.updated_by_user?.full_name && (
+                                  {update.driver?.full_name && (
                                     <p className="text-xs text-gray-400">
-                                      by {update.updated_by_user.full_name}
+                                      by {update.driver.full_name}
                                     </p>
                                   )}
                                 </div>

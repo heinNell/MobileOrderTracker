@@ -294,9 +294,9 @@ export default function OrdersScreen() {
           router.push(`/(tabs)/${order.id}`);
           break;
         default:
-          // For other statuses, might need QR scanning or different flow
-          console.log('📦 Order status requires special handling:', order.status);
-          router.push(`/scanner?orderId=${order.id}`);
+          // For all other statuses, go to details view
+          console.log('📦 Opening order details for status:', order.status);
+          router.push(`/(tabs)/${order.id}`);
           break;
       }
     } catch (error) {

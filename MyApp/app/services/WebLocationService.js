@@ -33,8 +33,8 @@ export class WebLocationService {
       
       const result = await new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
-          reject(new Error('Permission request timeout'));
-        }, 10000);
+          reject(new Error('Permission request timeout - device took too long to respond'));
+        }, 30000); // Increased from 10s to 30s
 
         navigator.geolocation.getCurrentPosition(
           () => {
@@ -46,15 +46,17 @@ export class WebLocationService {
             if (error.code === error.PERMISSION_DENIED) {
               reject(new Error('Location permission denied by user'));
             } else if (error.code === error.TIMEOUT) {
-              reject(new Error('Location request timed out - please ensure GPS is enabled'));
+              reject(new Error('Location request timed out - please ensure GPS is enabled and try again'));
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              reject(new Error('Location unavailable - check GPS/network connection'));
             } else {
               reject(new Error(`Location error: ${error.message}`));
             }
           },
           { 
-            timeout: 8000,
-            enableHighAccuracy: false,
-            maximumAge: 60000
+            timeout: 25000, // Increased from 8s to 25s (slightly less than outer timeout)
+            enableHighAccuracy: false, // Start with low accuracy for permission check
+            maximumAge: 60000 // Allow cached position
           }
         );
       });
@@ -120,7 +122,19 @@ export class WebLocationService {
     } catch (error) {
       this.consecutiveErrors++;
       
-      console.warn(`⚠️ Location update failed (attempt ${retryCount + 1}/${this.maxRetries}):`, error.message);
+      // Completely silent for timeout errors - they're expected and handled
+      if (error.code === 3) {
+        // Don't log anything for timeouts - totally silent
+      } else if (error.code === 1) {
+        // Permission denied - log once as error
+        console.error(`❌ Location permission denied`);
+      } else if (error.code === 2) {
+        // Position unavailable
+        console.warn(`⚠️ Location unavailable - GPS signal may be weak`);
+      } else {
+        // Unknown error
+        console.warn(`⚠️ Location update failed:`, error.message || 'Unknown error');
+      }
 
       if (this.lastKnownPosition && this.consecutiveErrors < 5) {
         console.log('📍 Using last known position as fallback');
@@ -145,8 +159,8 @@ export class WebLocationService {
     return new Promise((resolve, reject) => {
       const options = {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 30000
+        timeout: 45000, // Increased from 30s to 45s for slow GPS
+        maximumAge: 30000 // Allow 30s old positions to reduce timeout frequency
       };
 
       navigator.geolocation.getCurrentPosition(
@@ -160,37 +174,42 @@ export class WebLocationService {
           }
         },
         async (error) => {
-          console.error('🔴 Geolocation error:', {
-            code: error.code,
-            message: error.message,
-            PERMISSION_DENIED: error.code === 1,
-            POSITION_UNAVAILABLE: error.code === 2,
-            TIMEOUT: error.code === 3
-          });
-
+          // For timeout errors, try with low accuracy mode as fallback (silently)
           if (error.code === 3 && options.enableHighAccuracy) {
-            console.log('⚡ Timeout with high accuracy, trying low accuracy...');
+            // Don't log timeout - it's expected, just try low accuracy fallback
             
             navigator.geolocation.getCurrentPosition(
               async (position) => {
                 try {
+                  // Low accuracy succeeded - save silently
                   this.lastKnownPosition = position;
                   await this.saveLocationToDatabase(driverId, position, false);
                   resolve();
-                } catch (err) {
-                  reject(err);
+                } catch {
+                  // Silent failure - will retry next interval
+                  resolve();
                 }
               },
-              (lowAccError) => {
-                reject(new Error(`Location timeout: ${lowAccError.message}`));
+              (_lowAccError) => {
+                // Low accuracy also timed out - silent retry
+                if (this.lastKnownPosition) {
+                  resolve(); // Use cached position silently
+                } else {
+                  resolve(); // Will retry next interval
+                }
               },
               {
                 enableHighAccuracy: false,
-                timeout: 10000,
-                maximumAge: 60000
+                timeout: 20000, // Increased from 15s to 20s
+                maximumAge: 120000 // Allow up to 2 minutes old cached position as fallback
               }
             );
+          } else if (error.code === 3) {
+            // Timeout on already low accuracy - silent resolve
+            resolve(); // Will retry next interval automatically
           } else {
+            // For non-timeout errors (permission denied, position unavailable)
+            console.error(`Geolocation error (code ${error.code}):`, error.message);
             reject(error);
           }
         },

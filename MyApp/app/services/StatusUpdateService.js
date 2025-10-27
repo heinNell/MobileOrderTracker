@@ -23,18 +23,18 @@ export const ORDER_STATUSES = {
   CANCELLED: 'cancelled'
 };
 
-// Status transition rules
+// Status transition rules - Forward-only workflow (no backwards transitions)
 export const STATUS_TRANSITIONS = {
   [ORDER_STATUSES.PENDING]: [ORDER_STATUSES.ASSIGNED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ASSIGNED]: [ORDER_STATUSES.ACTIVATED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ACTIVATED]: [ORDER_STATUSES.IN_PROGRESS, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.IN_PROGRESS]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.IN_TRANSIT]: [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, ORDER_STATUSES.ARRIVED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ARRIVED]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.LOADING]: [ORDER_STATUSES.LOADED, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.LOADED]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, ORDER_STATUSES.CANCELLED],
-  [ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT]: [ORDER_STATUSES.UNLOADING, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ASSIGNED]: [ORDER_STATUSES.ACTIVATED, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ACTIVATED]: [ORDER_STATUSES.IN_PROGRESS, ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.LOADING, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.IN_PROGRESS]: [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT, ORDER_STATUSES.LOADING, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.IN_TRANSIT]: [ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ARRIVED]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.LOADED, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ARRIVED_AT_LOADING_POINT]: [ORDER_STATUSES.LOADING, ORDER_STATUSES.LOADED, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.LOADING]: [ORDER_STATUSES.LOADED, ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.LOADED]: [ORDER_STATUSES.IN_TRANSIT, ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT, ORDER_STATUSES.UNLOADING, ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
+  [ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT]: [ORDER_STATUSES.UNLOADING, ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
   [ORDER_STATUSES.UNLOADING]: [ORDER_STATUSES.DELIVERED, ORDER_STATUSES.CANCELLED],
   [ORDER_STATUSES.DELIVERED]: [ORDER_STATUSES.COMPLETED],
   [ORDER_STATUSES.COMPLETED]: [], // Final state
@@ -153,16 +153,27 @@ class StatusUpdateService {
   // Update order status with comprehensive logging
   async updateOrderStatus(orderId, newStatus, note = null, skipValidation = false) {
     try {
+      console.log('🔄 Status Update Request:', {
+        orderId,
+        newStatus,
+        note: note?.substring(0, 50),
+        skipValidation
+      });
+
       // Get current user if not already set
       if (!this.currentUser) {
+        console.log('📱 Fetching current user...');
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
+          console.error('❌ User not authenticated');
           throw new Error('User not authenticated');
         }
         this.currentUser = user;
+        console.log('✅ User authenticated:', user.id);
       }
 
       // Get current order status
+      console.log('📦 Fetching order data...');
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select('status, assigned_driver_id')
@@ -170,20 +181,38 @@ class StatusUpdateService {
         .single();
 
       if (orderError) {
+        console.error('❌ Failed to fetch order:', orderError);
         throw new Error(`Failed to fetch order: ${orderError.message}`);
       }
 
+      console.log('📦 Order data:', {
+        currentStatus: orderData.status,
+        assignedDriverId: orderData.assigned_driver_id,
+        currentUserId: this.currentUser.id
+      });
+
       // Validate transition unless skipped
       if (!skipValidation && !StatusUpdateService.isValidTransition(orderData.status, newStatus)) {
+        console.error('❌ Invalid transition:', {
+          from: orderData.status,
+          to: newStatus,
+          allowed: STATUS_TRANSITIONS[orderData.status]
+        });
         throw new Error(`Invalid status transition from ${orderData.status} to ${newStatus}`);
       }
 
       // Verify driver permission
       if (orderData.assigned_driver_id !== this.currentUser.id) {
+        console.error('❌ Driver not authorized:', {
+          orderId,
+          assignedDriverId: orderData.assigned_driver_id,
+          currentUserId: this.currentUser.id
+        });
         throw new Error('Driver not authorized to update this order');
       }
 
       // Update order status directly and create status history record
+      console.log('💾 Updating order status in database...');
       const { data: updateResult, error: updateError } = await supabase
         .from('orders')
         .update({ 
@@ -195,8 +224,11 @@ class StatusUpdateService {
         .single();
 
       if (updateError) {
+        console.error('❌ Order update failed:', updateError);
         throw new Error(`Status update failed: ${updateError.message}`);
       }
+
+      console.log('✅ Order status updated successfully');
 
       // Create status history record for dashboard synchronization
       const statusHistoryData = {
@@ -215,38 +247,47 @@ class StatusUpdateService {
       };
 
       // Try to insert into order_status_history table (dashboard compatibility)
+      console.log('💾 Creating status history record...');
       const { error: historyError } = await supabase
         .from('order_status_history')
         .insert(statusHistoryData);
 
       if (historyError) {
-        console.warn('Failed to create status history record:', historyError.message);
+        console.warn('⚠️ Failed to create status history record:', historyError.message);
+        console.warn('⚠️ History data attempted:', statusHistoryData);
         // Don't fail the status update if history insert fails
+      } else {
+        console.log('✅ Status history record created');
       }
 
       // Also try to insert into status_updates table if it exists (dashboard compatibility)
       // IMPORTANT: status_updates table uses different column names:
       // - 'status' instead of 'new_status'
       // - 'user_id' and 'driver_id' instead of 'updated_by'
+      console.log('💾 Creating status update record...');
       const statusUpdateData = {
         order_id: orderId,
-        driver_id: this.currentUser.id, // Match actual schema
-        user_id: this.currentUser.id,   // Match actual schema
-        status: newStatus,               // Match actual schema (not 'new_status')
+        driver_id: this.currentUser.id,  // Foreign key to users table
+        status: newStatus,                // The new status value
         notes: note || `Status updated to ${STATUS_INFO[newStatus]?.label || newStatus}`
-        // updated_at is auto-generated by database DEFAULT NOW()
         // created_at is auto-generated by database DEFAULT NOW()
       };
+
+      console.log('💾 Inserting status update:', statusUpdateData);
 
       const { error: statusUpdatesError } = await supabase
         .from('status_updates')
         .insert(statusUpdateData);
 
       if (statusUpdatesError) {
-        console.warn('Failed to create status update record:', statusUpdatesError.message);
+        console.error('❌ Failed to create status update record:', statusUpdatesError);
+        console.error('❌ Status update data attempted:', statusUpdateData);
         // Don't fail the status update if status_updates insert fails
+      } else {
+        console.log('✅ Status update record created successfully');
       }
 
+      console.log('🎉 Status update completed successfully!');
       return {
         success: true,
         order: updateResult,

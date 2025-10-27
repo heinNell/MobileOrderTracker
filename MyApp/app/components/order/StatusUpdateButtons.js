@@ -14,7 +14,7 @@ import
     TextInput,
     View
   } from 'react-native';
-import statusUpdateServiceInstance, { StatusUpdateService, ORDER_STATUSES, STATUS_INFO } from '../../services/StatusUpdateService';
+import statusUpdateServiceInstance, { ORDER_STATUSES, STATUS_INFO, StatusUpdateService } from '../../services/StatusUpdateService';
 
 // Color constants to avoid ESLint warnings
 const colors = {
@@ -71,6 +71,15 @@ const StatusUpdateButtons = ({
     ? Object.keys(ORDER_STATUSES).map(key => ORDER_STATUSES[key])
     : StatusUpdateService.getAvailableTransitions(order?.status);
 
+  console.log('🔄 StatusUpdateButtons render:', {
+    orderExists: !!order,
+    orderId: order?.id,
+    currentStatus: order?.status,
+    showAllTransitions,
+    availableTransitions,
+    filteredCount: 'calculating...'
+  });
+
   // Filter out current status and restrict admin-only operations
   const filteredTransitions = availableTransitions.filter(status => {
     // Always exclude current status
@@ -89,16 +98,25 @@ const StatusUpdateButtons = ({
 
   // Handle status update
   const handleStatusUpdate = async (newStatus, note = null) => {
+    console.log('🎯 Handling status update:', { orderId: order?.id, newStatus, note });
     setIsUpdating(true);
     
     try {
+      if (!order || !order.id) {
+        throw new Error('No order provided or order missing ID');
+      }
+
+      console.log('📞 Calling statusUpdateServiceInstance.updateOrderStatus...');
       const result = await statusUpdateServiceInstance.updateOrderStatus(
         order.id, 
         newStatus, 
         note
       );
 
+      console.log('📊 Status update result:', result);
+
       if (result.success) {
+        console.log('✅ Status updated successfully');
         Alert.alert(
           'Status Updated',
           result.message,
@@ -107,9 +125,11 @@ const StatusUpdateButtons = ({
         
         // Notify parent component
         if (onStatusUpdate) {
+          console.log('📢 Notifying parent component of update');
           onStatusUpdate(result.order);
         }
       } else {
+        console.error('❌ Status update failed:', result.message);
         Alert.alert(
           'Update Failed',
           result.message || 'Failed to update order status',
@@ -117,6 +137,7 @@ const StatusUpdateButtons = ({
         );
       }
     } catch (error) {
+      console.error('❌ Error in handleStatusUpdate:', error);
       Alert.alert(
         'Error',
         `Failed to update status: ${error.message}`,
@@ -129,21 +150,29 @@ const StatusUpdateButtons = ({
 
   // Handle status button press
   const handleStatusPress = (newStatus) => {
+    console.log('👆 Button pressed for status:', newStatus);
+    console.log('📦 Current order:', order?.id, 'Status:', order?.status);
+    
     // For certain status updates, show note input
     if (newStatus === ORDER_STATUSES.CANCELLED || 
         newStatus === ORDER_STATUSES.DELIVERED ||
         newStatus === ORDER_STATUSES.ARRIVED ||
         newStatus === ORDER_STATUSES.ARRIVED_AT_LOADING_POINT ||
         newStatus === ORDER_STATUSES.ARRIVED_AT_UNLOADING_POINT) {
+      console.log('📝 Showing note modal for:', newStatus);
       setPendingStatus(newStatus);
       setNoteText('');
       setShowNoteModal(true);
     } else {
+      console.log('⚠️ Showing confirmation dialog for:', newStatus);
       // Show confirmation dialog
       StatusUpdateService.showStatusUpdateConfirmation(
         order?.status,
         newStatus,
-        () => handleStatusUpdate(newStatus)
+        () => {
+          console.log('✅ Confirmation accepted, updating status');
+          handleStatusUpdate(newStatus);
+        }
       );
     }
   };
@@ -155,6 +184,8 @@ const StatusUpdateButtons = ({
     setPendingStatus(null);
     setNoteText('');
   };
+
+  console.log('✨ Filtered transitions:', filteredTransitions);
 
   // Get button style based on status
   const getButtonStyle = (status) => {

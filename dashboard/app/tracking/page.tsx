@@ -640,8 +640,42 @@ export default function TrackingPage() {
         });
 
       locationChannelRef.current = locationChannel;
+
+      // Also subscribe to order status changes to keep tracking page updated
+      const ordersChannel = supabase
+        .channel("tracking_orders_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+          },
+          (payload) => {
+            console.log("Order status updated:", payload.new);
+            if (isMountedRef.current) {
+              setOrders((prev) =>
+                prev.map((order) =>
+                  order.id === payload.new.id
+                    ? { ...order, ...payload.new }
+                    : order
+                )
+              );
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log("Orders subscription status:", status);
+        });
+
+      return () => {
+        if (locationChannelRef.current) {
+          supabase.removeChannel(locationChannelRef.current);
+        }
+        supabase.removeChannel(ordersChannel);
+      };
     } catch (error) {
-      console.error("Error setting up location subscription:", error);
+      console.error("Error setting up subscriptions:", error);
     }
   }, []);
 

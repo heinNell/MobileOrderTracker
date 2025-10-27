@@ -14,7 +14,7 @@ export const LogoutTestSuite = {
     const testScenarios = [
       'profile_screen',
       'orders_screen', 
-      'scanner_screen'
+      'dashboard_screen'
     ];
     
     for (const scenario of testScenarios) {

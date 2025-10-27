@@ -22,7 +22,6 @@ import GeocodingService from "@/services/GeocodingService";
 import { startBackgroundLocation, stopBackgroundLocation } from "@/services/LocationService";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "../components/map/MapView";
 import OrderProgressTimeline from "../components/order/OrderProgressTimeline";
-import StatusUpdateButtons from "../components/order/StatusUpdateButtons";
 import { supabase } from "../lib/supabase";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -184,9 +183,18 @@ export default function OrderDetailsScreen() {
   const [locationPermission, setLocationPermission] = useState(null);
   const [locationError, setLocationError] = useState(null);
   const [backgroundLocationStarted, setBackgroundLocationStarted] = useState(false);
+  const [orderHistory, setOrderHistory] = useState([]);
 
   // Get current user from Supabase auth
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Debug: Log when orderHistory changes
+  useEffect(() => {
+    console.log('📊 orderHistory state updated:', orderHistory.length, 'records');
+    if (orderHistory.length > 0) {
+      console.log('📊 History statuses:', orderHistory.map(h => h.new_status).join(' → '));
+    }
+  }, [orderHistory]);
 
   // Suppress Google Maps font loading timeout errors (harmless)
   useEffect(() => {
@@ -224,6 +232,8 @@ export default function OrderDetailsScreen() {
       if (!uuidRegex.test(orderId)) {
         throw new Error(`Invalid order ID format: ${orderId}`);
       }
+      
+      // Fetch order details
       const { data, error } = await supabase
         .from("orders")
         .select(`
@@ -234,6 +244,36 @@ export default function OrderDetailsScreen() {
         .single();
       if (error) throw error;
       setOrder(data);
+      
+      // Fetch order status history
+      console.log('📜 Fetching order history for order:', orderId);
+      const { data: historyData, error: historyError } = await supabase
+        .from("status_updates")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: true });
+      
+      if (historyError) {
+        console.error("❌ Error loading order history:", historyError);
+        setOrderHistory([]);
+      } else {
+        console.log('📜 Raw history data received:', historyData?.length || 0, 'records');
+        console.log('📜 History statuses:', historyData?.map(h => h.status).join(' → '));
+        
+        // Map the status_updates to match what OrderProgressTimeline expects
+        const mappedHistory = historyData.map(update => ({
+          new_status: update.status,
+          updated_at: update.created_at,
+          changed_at: update.created_at,
+          notes: update.notes,
+          driver_id: update.driver_id
+        }));
+        
+        console.log('📜 Mapped history for timeline:', mappedHistory.length, 'records');
+        console.log('📜 Timeline will show:', mappedHistory.map(h => h.new_status).join(' → '));
+        setOrderHistory(mappedHistory);
+      }
+      
       setLoadingCoord(null);
       setUnloadingCoord(null);
       setMapError(null);
@@ -277,24 +317,55 @@ export default function OrderDetailsScreen() {
   // Start background location tracking for drivers
   useEffect(() => {
     if (
-      Platform.OS !== 'web' &&
       order &&
       currentUser &&
       order.assigned_driver?.id === currentUser.id &&
       ["activated", "in_progress", "in_transit", "arrived", "loading", "loaded", "unloading"].includes(order.status) &&
       !backgroundLocationStarted
     ) {
-      startBackgroundLocation(order.id).then((success) => {
-        if (success) {
-          setBackgroundLocationStarted(true);
-        } else {
-          setLocationError("Failed to start background location tracking. Check permissions.");
-        }
-      });
+      console.log('🚀 Starting location tracking for driver:', currentUser.id);
+      console.log('🚀 Order status:', order.status);
+      console.log('🚀 Platform:', Platform.OS);
+      
+      if (Platform.OS === 'web') {
+        // Use WebLocationService for web platform
+        import('../services/WebLocationService').then(({ default: webLocationService }) => {
+          webLocationService.startTracking(order.id, currentUser.id)
+            .then(() => {
+              console.log('✅ Web location tracking started');
+              setBackgroundLocationStarted(true);
+            })
+            .catch((error) => {
+              console.error('❌ Failed to start web location tracking:', error);
+              setLocationError(`Failed to start location tracking: ${error.message}`);
+            });
+        });
+      } else {
+        // Use native location service for mobile
+        startBackgroundLocation(order.id).then((success) => {
+          if (success) {
+            console.log('✅ Native location tracking started');
+            setBackgroundLocationStarted(true);
+          } else {
+            console.error('❌ Failed to start native location tracking');
+            setLocationError("Failed to start background location tracking. Check permissions.");
+          }
+        });
+      }
     }
     return () => {
-      if (backgroundLocationStarted && Platform.OS !== 'web') {
-        stopBackgroundLocation();
+      if (backgroundLocationStarted) {
+        if (Platform.OS === 'web') {
+          // Stop web location tracking
+          import('../services/WebLocationService').then(({ default: webLocationService }) => {
+            webLocationService.stopTracking();
+            console.log('🛑 Web location tracking stopped');
+          });
+        } else {
+          // Stop native location tracking
+          stopBackgroundLocation();
+          console.log('🛑 Native location tracking stopped');
+        }
       }
     };
   }, [order, currentUser, backgroundLocationStarted]);
@@ -314,10 +385,29 @@ export default function OrderDetailsScreen() {
           setLocationError(null);
         },
         (err) => {
-          console.error("Web location tracking error:", err);
-          setLocationError("Failed to track location. Check browser settings.");
+          // Handle different error types more gracefully
+          if (err.code === 1) {
+            // PERMISSION_DENIED
+            console.error("Web location tracking error - Permission denied:", err);
+            setLocationError("Location permission denied. Enable location access in browser settings.");
+          } else if (err.code === 2) {
+            // POSITION_UNAVAILABLE
+            console.warn("Web location tracking error - Position unavailable:", err.message);
+            setLocationError("Location unavailable. Check device GPS or network connection.");
+          } else if (err.code === 3) {
+            // TIMEOUT - Silent retry, don't log error or show to user
+            console.debug("Location request timed out, will retry automatically");
+            // Don't set location error for timeouts - the map will still work with last known position
+          } else {
+            console.warn("Web location tracking error:", err);
+            setLocationError("Failed to track location. Check browser settings.");
+          }
         },
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+        { 
+          enableHighAccuracy: true, 
+          maximumAge: 30000, // Increased from 5s to 30s - allow cached positions
+          timeout: 45000 // Increased from 30s to 45s - match WebLocationService
+        }
       );
     } else if (locationPermission === "granted") {
       (async () => {
@@ -403,6 +493,9 @@ export default function OrderDetailsScreen() {
           filter: `id=eq.${orderId}`,
         },
         (payload) => {
+          console.log('🔔 Order updated via realtime:', payload.new.status);
+          console.log('🔔 Previous order status:', order?.status);
+          console.log('🔔 New order status:', payload.new.status);
           setOrder((prevOrder) => ({
             ...prevOrder,
             ...payload.new,
@@ -410,12 +503,27 @@ export default function OrderDetailsScreen() {
           }));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'status_updates',
+          filter: `order_id=eq.${orderId}`,
+        },
+        (payload) => {
+          console.log('🔔 New status update detected via realtime:', payload.new.status);
+          console.log('🔔 Triggering loadOrderDetails to refetch history...');
+          // Refetch order history when new status update is inserted
+          loadOrderDetails();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(orderSubscription);
     };
-  }, [orderId]);
+  }, [orderId, loadOrderDetails, order?.status]);
 
   useEffect(() => {
     if (!order || isDriver) return;
@@ -581,7 +689,10 @@ export default function OrderDetailsScreen() {
         "arrived",
         "loading",
         "loaded",
+        "arrived_at_loading_point",
+        "arrived_at_unloading_point",
         "unloading",
+        "delivered",
       ].includes(order.status),
       showInfo: order.status === "assigned" && order.load_activated_at,
     };
@@ -696,7 +807,7 @@ export default function OrderDetailsScreen() {
     if (orderId) {
       loadOrderDetails();
     }
-  }, [orderId, loadOrderDetails]);
+  }, [orderId, loadOrderDetails, order?.status]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -982,7 +1093,7 @@ export default function OrderDetailsScreen() {
       <View style={styles.section}>
         <OrderProgressTimeline 
           currentStatus={order.status}
-          orderHistory={[]} // TODO: Fetch order history from status_updates table
+          orderHistory={orderHistory}
           compact={false}
         />
       </View>
@@ -1027,24 +1138,11 @@ export default function OrderDetailsScreen() {
           </Pressable>
         )}
         
-        {/* Status Update Buttons - matches your screenshots */}
-        {actionButtons.showManage && currentUser && order.assigned_driver?.id === currentUser.id && (
-          <StatusUpdateButtons 
-            order={order}
-            onStatusUpdate={(updatedOrder) => {
-              setOrder(updatedOrder);
-              // Refresh order details to get latest data
-              loadOrderDetails();
-            }}
-            disabled={loading}
-          />
-        )}
-        
         {actionButtons.showInfo && (
           <View style={styles.infoAlert}>
             <MaterialIcons name="check-circle" size={22} color={colors.success} />
             <Text style={styles.infoAlertText}>
-              Load is activated! Update the status above as you progress through the delivery.
+              Load is activated! Update the status using the buttons above as you progress through the delivery.
             </Text>
           </View>
         )}

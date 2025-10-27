@@ -376,7 +376,7 @@ export default function PublicOrderTracking() {
     fetchTrackingData();
     fetchRoute();
 
-    // Real-time subscription
+    // Real-time subscriptions
     const locationChannel = supabase
       .channel(`public_tracking_${orderId}`)
       .on(
@@ -391,6 +391,19 @@ export default function PublicOrderTracking() {
           console.log("New location update received");
           fetchTrackingData();
           fetchRoute();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${orderId}`,
+        },
+        () => {
+          console.log("Order status update received");
+          fetchTrackingData();
         }
       )
       .subscribe();
