@@ -80,23 +80,29 @@ const StatusUpdateButtons = ({
     filteredCount: 'calculating...'
   });
 
-  // Filter out current status and restrict admin-only operations
+  // Filter transitions based on visibility rules and current status
   const filteredTransitions = availableTransitions.filter(status => {
-    // Always exclude current status
+    // Don't show a button for the current status
     if (status === order?.status) return false;
     
-    // If not showing all transitions (normal user mode), filter appropriately
+    // If not showing all transitions, apply additional business rules
     if (!showAllTransitions) {
-      // Allow completed only if current status is delivered
+      // Only show COMPLETED if the order is delivered
       if (status === ORDER_STATUSES.COMPLETED && order?.status !== ORDER_STATUSES.DELIVERED) {
+        console.log('🔍 Blocking COMPLETED button:', {
+          currentStatus: order?.status,
+          statusType: typeof order?.status,
+          DELIVERED_constant: ORDER_STATUSES.DELIVERED,
+          constantType: typeof ORDER_STATUSES.DELIVERED,
+          matches: order?.status === ORDER_STATUSES.DELIVERED,
+          strictMatch: order?.status === 'delivered'
+        });
         return false;
       }
     }
     
     return true;
-  });
-
-  console.log('✨ Filtered transitions:', filteredTransitions);
+  });  console.log('✨ Filtered transitions:', filteredTransitions);
   console.log('📊 Total buttons to render:', filteredTransitions.length);
 
   // Handle status update

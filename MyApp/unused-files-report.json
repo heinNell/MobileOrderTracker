@@ -1,0 +1,230 @@
+{
+  "generatedAt": "2025-10-28T11:06:31.905Z",
+  "totalUnused": 56,
+  "files": [
+    {
+      "path": "test-location-fix.js",
+      "size": 3993
+    },
+    {
+      "path": "react-native.config.js",
+      "size": 297
+    },
+    {
+      "path": "next.config.js",
+      "size": 384
+    },
+    {
+      "path": "fix-build.js",
+      "size": 1362
+    },
+    {
+      "path": "find-unused.js",
+      "size": 6788
+    },
+    {
+      "path": "debug-test.js",
+      "size": 1910
+    },
+    {
+      "path": "LocationService-LiveMap-Fix.js",
+      "size": 5054
+    },
+    {
+      "path": "stubs/react-native-maps.web.js",
+      "size": 380
+    },
+    {
+      "path": "stubs/empty-module.js",
+      "size": 170
+    },
+    {
+      "path": "scripts/validate-all.js",
+      "size": 1248
+    },
+    {
+      "path": "scripts/quick-fix.js",
+      "size": 1028
+    },
+    {
+      "path": "scripts/check-unused-files.js",
+      "size": 6789
+    },
+    {
+      "path": "scripts/check-styles.js",
+      "size": 2672
+    },
+    {
+      "path": "scripts/check-styles-advanced.js",
+      "size": 3254
+    },
+    {
+      "path": "scripts/check-deps.js",
+      "size": 685
+    },
+    {
+      "path": "app/index.js",
+      "size": 1131
+    },
+    {
+      "path": "app/_layout.js",
+      "size": 1977
+    },
+    {
+      "path": "app/utils/suppressWarnings.js",
+      "size": 1704
+    },
+    {
+      "path": "app/utils/qrUtils.js",
+      "size": 2903
+    },
+    {
+      "path": "app/utils/arrayUtils.js",
+      "size": 3181
+    },
+    {
+      "path": "app/shared/types.js",
+      "size": 8127
+    },
+    {
+      "path": "app/shared/locationUtils.js",
+      "size": 1062
+    },
+    {
+      "path": "app/services/notificationService.web.js",
+      "size": 518
+    },
+    {
+      "path": "app/services/notificationService.js",
+      "size": 1068
+    },
+    {
+      "path": "app/services/GoogleMapsProxy.js",
+      "size": 4017
+    },
+    {
+      "path": "app/screens/LocationDiagnosticScreen.js",
+      "size": 9059
+    },
+    {
+      "path": "app/lib/storage.js",
+      "size": 1450
+    },
+    {
+      "path": "app/hooks/useLocation.js",
+      "size": 5024
+    },
+    {
+      "path": "app/components/ui/StatusIndicators.js",
+      "size": 3623
+    },
+    {
+      "path": "app/components/ui/SafeText.js",
+      "size": 539
+    },
+    {
+      "path": "app/components/ui/QuickStatCard.js",
+      "size": 1205
+    },
+    {
+      "path": "app/components/ui/ErrorBoundary.js",
+      "size": 4850
+    },
+    {
+      "path": "app/components/order/TimelineSection.js",
+      "size": 995
+    },
+    {
+      "path": "app/components/order/OrderInfoSection.js",
+      "size": 1114
+    },
+    {
+      "path": "app/components/order/LocationDetailsSection.js",
+      "size": 1158
+    },
+    {
+      "path": "app/components/order/EnhancedStatusPicker.js",
+      "size": 14006
+    },
+    {
+      "path": "app/components/map/colors.js",
+      "size": 103
+    },
+    {
+      "path": "app/components/map/WebMapView.js",
+      "size": 2191
+    },
+    {
+      "path": "app/components/map/MapView.web.js",
+      "size": 5873
+    },
+    {
+      "path": "app/components/map/MapView.native.js",
+      "size": 779
+    },
+    {
+      "path": "app/components/map/MapComponentLoader.js",
+      "size": 6100
+    },
+    {
+      "path": "app/components/map/MapComponent.web.js",
+      "size": 3641
+    },
+    {
+      "path": "app/components/map/MapComponent.native.js",
+      "size": 884
+    },
+    {
+      "path": "app/components/map/MapComponent.js",
+      "size": 463
+    },
+    {
+      "path": "app/components/auth/LogoutTestSuite.js",
+      "size": 3076
+    },
+    {
+      "path": "app/components/auth/LoginScreen.js",
+      "size": 6475
+    },
+    {
+      "path": "app/_constants/GlobalStyles.js",
+      "size": 0
+    },
+    {
+      "path": "app/(tabs)/profile.js",
+      "size": 7516
+    },
+    {
+      "path": "app/(tabs)/orders.js",
+      "size": 28936
+    },
+    {
+      "path": "app/(tabs)/index.js",
+      "size": 82
+    },
+    {
+      "path": "app/(tabs)/_layout.js",
+      "size": 3503
+    },
+    {
+      "path": "app/(tabs)/[orderId].js",
+      "size": 52292
+    },
+    {
+      "path": "app/(tabs)/LoadActivationScreen.js",
+      "size": 32710
+    },
+    {
+      "path": "app/(auth)/register.js",
+      "size": 5491
+    },
+    {
+      "path": "app/(auth)/login.js",
+      "size": 4252
+    },
+    {
+      "path": "app/(auth)/_layout.js",
+      "size": 528
+    }
+  ]
+}

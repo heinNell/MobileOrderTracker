@@ -1,0 +1,452 @@
+{
+  "summary": {
+    "totalFiles": 84,
+    "entryPoints": 17,
+    "reachable": 28,
+    "unreachable": 57
+  },
+  "entryPoints": [
+    "react-native.config.js",
+    "next.config.js",
+    "metro.config.js",
+    "babel.config.js",
+    "app.config.js",
+    "app/index.js",
+    "app/_layout.js",
+    "app/(tabs)/profile.js",
+    "app/(tabs)/orders.js",
+    "app/(tabs)/index.js",
+    "app/(tabs)/_layout.js",
+    "app/(tabs)/[orderId].js",
+    "app/(tabs)/LoadActivationScreen.js",
+    "app/(tabs)/DriverDashboard.js",
+    "app/(auth)/register.js",
+    "app/(auth)/login.js",
+    "app/(auth)/_layout.js"
+  ],
+  "unreachableFiles": [
+    {
+      "path": "test-location-fix.js",
+      "size": 3993,
+      "importedBy": [],
+      "imports": [
+        "app/lib/supabase.js"
+      ]
+    },
+    {
+      "path": "fix-build.js",
+      "size": 1362,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "find-unused.js",
+      "size": 6788,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "find-unused-expo.js",
+      "size": 3910,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "debug-test.js",
+      "size": 1910,
+      "importedBy": [],
+      "imports": [
+        "app/lib/supabase.js",
+        "app/context/AuthContext.js"
+      ]
+    },
+    {
+      "path": "analyze-imports.js",
+      "size": 7062,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "LocationService-LiveMap-Fix.js",
+      "size": 5054,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "stubs/react-native-maps.web.js",
+      "size": 380,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "stubs/empty-module.js",
+      "size": 170,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "scripts/validate-all.js",
+      "size": 1248,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "scripts/quick-fix.js",
+      "size": 1028,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "scripts/check-unused-files.js",
+      "size": 6789,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "scripts/check-styles.js",
+      "size": 2672,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "scripts/check-styles-advanced.js",
+      "size": 3254,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "scripts/check-deps.js",
+      "size": 685,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "public/service-worker.js",
+      "size": 431,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/constants.js",
+      "size": 465,
+      "importedBy": [
+        "app/components/map/WebMapView.js"
+      ],
+      "imports": []
+    },
+    {
+      "path": "app/_styles.js",
+      "size": 11621,
+      "importedBy": [
+        "app/components/ui/QuickStatCard.js",
+        "app/components/ui/InfoRow.js",
+        "app/components/order/TimelineSection.js",
+        "app/components/order/TimelineItem.js",
+        "app/components/order/OrderInfoSection.js",
+        "app/components/order/LocationDetailsSection.js"
+      ],
+      "imports": [
+        "app/_constants/Colors.js"
+      ]
+    },
+    {
+      "path": "app/utils/suppressWarnings.js",
+      "size": 1704,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/utils/responsive.js",
+      "size": 8546,
+      "importedBy": [
+        "app/utils/responsive.js"
+      ],
+      "imports": [
+        "app/utils/responsive.js"
+      ]
+    },
+    {
+      "path": "app/utils/qrUtils.js",
+      "size": 2903,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/utils/coordinateValidation.js",
+      "size": 2058,
+      "importedBy": [
+        "app/components/map/WebMapView.js"
+      ],
+      "imports": []
+    },
+    {
+      "path": "app/utils/arrayUtils.js",
+      "size": 3181,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/shared/types.js",
+      "size": 8127,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/shared/locationUtils.js",
+      "size": 1062,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/services/notificationService.web.js",
+      "size": 518,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/services/notificationService.native.js",
+      "size": 761,
+      "importedBy": [
+        "app/services/notificationService.native.js"
+      ],
+      "imports": [
+        "app/services/notificationService.native.js"
+      ]
+    },
+    {
+      "path": "app/services/notificationService.js",
+      "size": 1068,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/services/LocationDiagnostics.js",
+      "size": 3876,
+      "importedBy": [
+        "app/screens/LocationDiagnosticScreen.js"
+      ],
+      "imports": [
+        "app/lib/supabase.js",
+        "app/services/LocationService.js"
+      ]
+    },
+    {
+      "path": "app/services/GoogleMapsProxy.js",
+      "size": 4017,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/services/BackgroundLocationTask.js",
+      "size": 2872,
+      "importedBy": [
+        "app/hooks/useLocation.js"
+      ],
+      "imports": [
+        "app/lib/supabase.js"
+      ]
+    },
+    {
+      "path": "app/screens/LocationDiagnosticScreen.js",
+      "size": 9059,
+      "importedBy": [],
+      "imports": [
+        "app/services/LocationDiagnostics.js"
+      ]
+    },
+    {
+      "path": "app/lib/storage.js",
+      "size": 1450,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/hooks/useLocation.js",
+      "size": 5024,
+      "importedBy": [],
+      "imports": [
+        "app/services/BackgroundLocationTask.js",
+        "app/services/WebLocationService.js"
+      ]
+    },
+    {
+      "path": "app/components/ui/StatusIndicators.js",
+      "size": 3623,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/ui/SafeText.js",
+      "size": 539,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/ui/QuickStatCard.js",
+      "size": 1205,
+      "importedBy": [],
+      "imports": [
+        "app/_styles.js"
+      ]
+    },
+    {
+      "path": "app/components/ui/InfoRow.js",
+      "size": 1414,
+      "importedBy": [
+        "app/components/order/OrderInfoSection.js",
+        "app/components/order/LocationDetailsSection.js"
+      ],
+      "imports": [
+        "app/_styles.js"
+      ]
+    },
+    {
+      "path": "app/components/ui/ErrorBoundary.js",
+      "size": 4850,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/order/TimelineSection.js",
+      "size": 995,
+      "importedBy": [],
+      "imports": [
+        "app/_styles.js",
+        "app/components/order/TimelineItem.js"
+      ]
+    },
+    {
+      "path": "app/components/order/TimelineItem.js",
+      "size": 1891,
+      "importedBy": [
+        "app/components/order/TimelineSection.js"
+      ],
+      "imports": [
+        "app/_styles.js"
+      ]
+    },
+    {
+      "path": "app/components/order/OrderInfoSection.js",
+      "size": 1114,
+      "importedBy": [],
+      "imports": [
+        "app/_styles.js",
+        "app/components/ui/InfoRow.js"
+      ]
+    },
+    {
+      "path": "app/components/order/LocationDetailsSection.js",
+      "size": 1158,
+      "importedBy": [],
+      "imports": [
+        "app/_styles.js",
+        "app/components/ui/InfoRow.js"
+      ]
+    },
+    {
+      "path": "app/components/order/EnhancedStatusPicker.js",
+      "size": 14006,
+      "importedBy": [],
+      "imports": [
+        "app/services/StatusUpdateService.js"
+      ]
+    },
+    {
+      "path": "app/components/map/colors.js",
+      "size": 103,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/map/WebMapView.js",
+      "size": 2191,
+      "importedBy": [],
+      "imports": [
+        "app/constants.js",
+        "app/utils/coordinateValidation.js",
+        "app/components/map/CenteredView.js"
+      ]
+    },
+    {
+      "path": "app/components/map/MapView.web.js",
+      "size": 5873,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/map/MapView.native.js",
+      "size": 779,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/map/MapComponentLoader.js",
+      "size": 6100,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/map/MapComponent.web.js",
+      "size": 3641,
+      "importedBy": [],
+      "imports": [
+        "app/components/map/CenteredView.js"
+      ]
+    },
+    {
+      "path": "app/components/map/MapComponent.native.js",
+      "size": 884,
+      "importedBy": [],
+      "imports": [
+        "app/components/map/CenteredView.js"
+      ]
+    },
+    {
+      "path": "app/components/map/MapComponent.js",
+      "size": 463,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/components/map/CenteredView.js",
+      "size": 375,
+      "importedBy": [
+        "app/components/map/WebMapView.js",
+        "app/components/map/MapComponent.web.js",
+        "app/components/map/MapComponent.native.js"
+      ],
+      "imports": []
+    },
+    {
+      "path": "app/components/auth/LogoutTestSuite.js",
+      "size": 3076,
+      "importedBy": [],
+      "imports": [
+        "app/context/AuthContext.js",
+        "app/components/auth/LogoutButton.js"
+      ]
+    },
+    {
+      "path": "app/components/auth/LoginScreen.js",
+      "size": 6475,
+      "importedBy": [],
+      "imports": [
+        "app/context/AuthContext.js"
+      ]
+    },
+    {
+      "path": "app/_constants/GlobalStyles.js",
+      "size": 0,
+      "importedBy": [],
+      "imports": []
+    },
+    {
+      "path": "app/_constants/Colors.js",
+      "size": 663,
+      "importedBy": [
+        "app/_styles.js"
+      ],
+      "imports": []
+    }
+  ]
+}

@@ -370,7 +370,16 @@ export default function EnhancedOrdersPage() {
         throw new Error(`Failed to fetch orders: ${error.message}`);
       }
 
-      setOrders(data || []);
+      // Transform data to ensure JSONB fields are properly parsed
+      const transformedData = (data || []).map(order => ({
+        ...order,
+        // Parse transporter_supplier if it's a string
+        transporter_supplier: typeof order.transporter_supplier === 'string' 
+          ? JSON.parse(order.transporter_supplier)
+          : order.transporter_supplier,
+      }));
+
+      setOrders(transformedData);
 
       // Update debug info
       setDebugInfo((prev) => ({
