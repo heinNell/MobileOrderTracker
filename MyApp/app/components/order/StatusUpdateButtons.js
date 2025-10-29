@@ -75,10 +75,17 @@ const StatusUpdateButtons = ({
     orderExists: !!order,
     orderId: order?.id,
     currentStatus: order?.status,
+    statusType: typeof order?.status,
     showAllTransitions,
     availableTransitions,
-    filteredCount: 'calculating...'
+    availableCount: availableTransitions?.length || 0
   });
+
+  // Early return if no order
+  if (!order || !order.status) {
+    console.log('⚠️ StatusUpdateButtons: No order or order.status, not rendering');
+    return null;
+  }
 
   // Filter transitions based on visibility rules and current status
   const filteredTransitions = availableTransitions.filter(status => {

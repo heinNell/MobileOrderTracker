@@ -4,6 +4,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
+import StatusManagement from "../../components/StatusManagement";
 import { exportOrderDetailToExcel, exportOrdersToExcel } from "../../lib/excel-export";
 import { exportOrderToPDF } from "../../lib/pdf-export";
 import
@@ -21,7 +22,6 @@ import
 import type { Order, OrderStatus } from "../../shared/types";
 import EnhancedOrderForm from "../components/EnhancedOrderForm";
 import QRDebugger from "../components/QRDebugger";
-import StatusManagement from "../../components/StatusManagement";
 
 interface DebugInfo {
   userStatus: string;
@@ -1077,11 +1077,11 @@ export default function EnhancedOrdersPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th
-                    className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("order_number")}
                   >
                     <div className="flex items-center">
-                      Order Number
+                      Order
                       {sortBy === "order_number" && (
                         <span className="ml-1">
                           {sortOrder === "asc" ? "↑" : "↓"}
@@ -1090,7 +1090,7 @@ export default function EnhancedOrdersPage() {
                     </div>
                   </th>
                   <th
-                    className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("status")}
                   >
                     <div className="flex items-center">
@@ -1102,21 +1102,21 @@ export default function EnhancedOrdersPage() {
                       )}
                     </div>
                   </th>
-                  <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Driver
                   </th>
-                  <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Loading Point
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Transporter
                   </th>
-                  <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unloading Point
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Route
                   </th>
                   <th
-                    className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("created_at")}
                   >
                     <div className="flex items-center">
-                      Expected Loading
+                      Dates
                       {sortBy === "created_at" && (
                         <span className="ml-1">
                           {sortOrder === "asc" ? "↑" : "↓"}
@@ -1124,7 +1124,7 @@ export default function EnhancedOrdersPage() {
                       )}
                     </div>
                   </th>
-                  <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -1132,7 +1132,7 @@ export default function EnhancedOrdersPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 md:px-6 py-8 text-center">
+                    <td colSpan={7} className="px-6 py-8 text-center">
                       <div className="text-gray-500">
                         {orders.length === 0 ? (
                           <div>
@@ -1154,145 +1154,220 @@ export default function EnhancedOrdersPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="px-4 md:px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {order.order_number}
-                        </div>
-                        {order.sku && (
-                          <div className="text-xs text-gray-500">
-                            SKU: {order.sku}
+                  filteredOrders.map((order) => {
+                    // Parse transporter data
+                    let transporterName = 'N/A';
+                    try {
+                      if (order.transporter_supplier) {
+                        const transporter = typeof order.transporter_supplier === 'string' 
+                          ? JSON.parse(order.transporter_supplier) 
+                          : order.transporter_supplier;
+                        transporterName = transporter?.name || 'N/A';
+                      }
+                    } catch (e) {
+                      console.error('Error parsing transporter:', e);
+                    }
+
+                    return (
+                      <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                        {/* Order Number & SKU */}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-gray-900">
+                              #{order.order_number}
+                            </span>
+                            {order.sku && (
+                              <span className="text-xs text-gray-500 mt-0.5">
+                                SKU: {order.sku}
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 md:px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded-full text-white ${getStatusColor(
-                            order.status
-                          )}`}
-                        >
-                          {order.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="max-w-[100px] md:max-w-[150px] truncate">
-                          {order.assigned_driver?.full_name || "Unassigned"}
-                        </div>
-                      </td>
-                      <td className="px-4 md:px-6 py-4 text-sm text-gray-900">
-                        <div className="max-w-[100px] md:max-w-[150px] truncate">
-                          {order.loading_point_name}
-                        </div>
-                      </td>
-                      <td className="px-4 md:px-6 py-4 text-sm text-gray-900">
-                        <div className="max-w-[100px] md:max-w-[150px] truncate">
-                          {order.unloading_point_name}
-                        </div>
-                      </td>
-                      <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.expected_loading_date 
-                          ? new Date(order.expected_loading_date).toLocaleDateString()
-                          : new Date(order.created_at).toLocaleDateString()
-                        }
-                        {order.expected_loading_date && (
-                          <div className="text-xs text-gray-400">
-                            Expected
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full text-white ${getStatusColor(
+                              order.status
+                            )}`}
+                          >
+                            {order.status.replace(/_/g, ' ').toUpperCase()}
+                          </span>
+                        </td>
+
+                        {/* Driver */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
+                              <span className="text-xs font-medium text-gray-600">
+                                {order.assigned_driver?.full_name?.charAt(0).toUpperCase() || '?'}
+                              </span>
+                            </div>
+                            <div className="ml-3">
+                              <p className="text-sm font-medium text-gray-900">
+                                {order.assigned_driver?.full_name || 'Unassigned'}
+                              </p>
+                            </div>
                           </div>
-                        )}
-                        {!order.expected_loading_date && (
-                          <div className="text-xs text-gray-400">
-                            Created: {new Date(order.created_at).toLocaleDateString()}
+                        </td>
+
+                        {/* Transporter */}
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900 font-medium">
+                            {transporterName}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleGenerateQR(order.id)}
-                            className="text-blue-600 hover:text-blue-900"
-                            title="Generate QR Code"
-                          >
-                            QR
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDebugOrderId(order.id);
-                              setShowQRDebugger(true);
-                            }}
-                            className="text-yellow-600 hover:text-yellow-900"
-                            title="Debug QR Code"
-                          >
-                            🧪
-                          </button>
-                          <button
-                            onClick={() => handleEditOrder(order)}
-                            className="text-green-600 hover:text-green-900"
-                            title="Edit Order"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleManageStatus(order)}
-                            className="text-indigo-600 hover:text-indigo-900 font-semibold"
-                            title="Manage Order Status"
-                          >
-                            ⚡ Status
-                          </button>
-                          {(order.status === 'assigned' || order.status === 'activated' || order.status === 'in_progress' || order.status === 'in_transit' || order.status === 'loaded' || order.status === 'unloading' || order.status === 'completed') && (
-                            <>
+                        </td>
+
+                        {/* Route - Loading & Unloading Points */}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col space-y-1.5">
+                            <div className="flex items-start">
+                              <span className="text-green-600 mr-1.5 flex-shrink-0 mt-0.5">📍</span>
+                              <span className="text-xs text-gray-900 line-clamp-1" title={order.loading_point_name}>
+                                {order.loading_point_name}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-center">
+                              <span className="text-gray-400 text-xs">↓</span>
+                            </div>
+                            <div className="flex items-start">
+                              <span className="text-red-600 mr-1.5 flex-shrink-0 mt-0.5">📍</span>
+                              <span className="text-xs text-gray-900 line-clamp-1" title={order.unloading_point_name}>
+                                {order.unloading_point_name}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Dates */}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col space-y-1">
+                            {order.expected_loading_date && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">Load:</span>
+                                <span className="text-gray-900 ml-1 font-medium">
+                                  {new Date(order.expected_loading_date).toLocaleDateString()}
+                                </span>
+                              </div>
+                            )}
+                            {order.expected_unloading_date && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">Unload:</span>
+                                <span className="text-gray-900 ml-1 font-medium">
+                                  {new Date(order.expected_unloading_date).toLocaleDateString()}
+                                </span>
+                              </div>
+                            )}
+                            {!order.expected_loading_date && !order.expected_unloading_date && (
+                              <div className="text-xs text-gray-400">
+                                Created: {new Date(order.created_at).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            {/* Primary Actions Dropdown */}
+                            <div className="relative inline-block text-left group">
                               <button
-                                onClick={() => {
-                                  const link = `${window.location.origin}/tracking/${order.id}/public`;
-                                  setTrackingLink(link);
-                                  setShowTrackingModal(true);
-                                }}
-                                className="text-blue-600 hover:text-blue-900 font-semibold"
-                                title="Get Tracking Link"
+                                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                               >
-                                🔗 Track
+                                Actions
+                                <svg className="ml-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
                               </button>
-                              <button
-                                onClick={() => window.open(`/tracking/${order.id}/public`, '_blank')}
-                                className="text-indigo-600 hover:text-indigo-900"
-                                title="Open Tracking Page"
-                              >
-                                📍 View
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => handleDeleteOrder(order.id)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Delete Order"
-                          >
-                            Delete
-                          </button>
-                          <button
-                            onClick={() => handleExportToPDF(order)}
-                            className="text-purple-600 hover:text-purple-900"
-                            title="Export to PDF"
-                          >
-                            PDF
-                          </button>
-                          <button
-                            onClick={() => handleExportOrderToExcel(order)}
-                            className="text-green-700 hover:text-green-900 font-semibold"
-                            title="Export to Excel"
-                          >
-                            📊 XLS
-                          </button>
-                          <button
-                            onClick={() => router.push(`/orders/${order.id}`)}
-                            className="text-gray-600 hover:text-gray-900"
-                            title="View Details"
-                          >
-                            View
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                              
+                              {/* Dropdown Menu */}
+                              <div className="hidden group-hover:block absolute right-0 z-10 mt-1 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+                                <div className="py-1" role="menu">
+                                  <button
+                                    onClick={() => router.push(`/orders/${order.id}`)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <span className="mr-2">👁️</span> View Details
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditOrder(order)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <span className="mr-2">✏️</span> Edit Order
+                                  </button>
+                                  <button
+                                    onClick={() => handleManageStatus(order)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <span className="mr-2">⚡</span> Manage Status
+                                  </button>
+                                  <button
+                                    onClick={() => handleGenerateQR(order.id)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <span className="mr-2">📱</span> QR Code
+                                  </button>
+                                  {(order.status === 'assigned' || order.status === 'activated' || order.status === 'in_progress' || order.status === 'in_transit' || order.status === 'loaded' || order.status === 'unloading' || order.status === 'completed') && (
+                                    <>
+                                      <div className="border-t border-gray-100"></div>
+                                      <button
+                                        onClick={() => {
+                                          const link = `${window.location.origin}/tracking/${order.id}/public`;
+                                          setTrackingLink(link);
+                                          setShowTrackingModal(true);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center"
+                                      >
+                                        <span className="mr-2">🔗</span> Get Tracking Link
+                                      </button>
+                                      <button
+                                        onClick={() => window.open(`/tracking/${order.id}/public`, '_blank')}
+                                        className="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center"
+                                      >
+                                        <span className="mr-2">📍</span> Open Tracking Page
+                                      </button>
+                                    </>
+                                  )}
+                                  <div className="border-t border-gray-100"></div>
+                                  <button
+                                    onClick={() => handleExportToPDF(order)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <span className="mr-2">📄</span> Export PDF
+                                  </button>
+                                  <button
+                                    onClick={() => handleExportOrderToExcel(order)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                  >
+                                    <span className="mr-2">📊</span> Export Excel
+                                  </button>
+                                  <div className="border-t border-gray-100"></div>
+                                  <button
+                                    onClick={() => handleDeleteOrder(order.id)}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center"
+                                  >
+                                    <span className="mr-2">🗑️</span> Delete Order
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Quick Action Icons */}
+                            <button
+                              onClick={() => router.push(`/orders/${order.id}`)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+                              title="View Details"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

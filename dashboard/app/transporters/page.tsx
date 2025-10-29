@@ -295,6 +295,7 @@ export default function TransportersPage() {
                 className="md:w-96"
                 isClearable
                 onClear={() => setSearchTerm("")}
+                aria-label="Search transporters"
                 classNames={{
                   input: "text-sm",
                   inputWrapper: "border-1 border-gray-200 hover:border-purple-400 focus-within:!border-purple-500 shadow-sm"
@@ -308,6 +309,7 @@ export default function TransportersPage() {
                   setPage(1);
                 }}
                 className="md:w-64"
+                aria-label="Filter by service type"
                 startContent={<FunnelIcon className="w-4 h-4 text-gray-400" />}
                 items={[
                   { key: "", label: "All Types" },
@@ -337,6 +339,7 @@ export default function TransportersPage() {
                   setPage(1);
                 }}
                 className="md:w-48"
+                aria-label="Filter by status"
                 classNames={{
                   trigger: "border-1 border-gray-200 hover:border-purple-400 shadow-sm"
                 }}
@@ -354,6 +357,7 @@ export default function TransportersPage() {
                   setPage(1);
                 }}
                 className="md:w-48"
+                aria-label="Sort transporters by"
               >
                 <SelectItem key="name" value="name">Name</SelectItem>
                 <SelectItem key="company_name" value="company_name">Company</SelectItem>

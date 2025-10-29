@@ -71,6 +71,7 @@ export interface EnhancedRouteData {
 /**
  * Parse PostGIS point format to LatLngLiteral
  * Handles: "POINT(lng lat)", "SRID=4326;POINT(lng lat)", or location objects
+ * Also handles WKB (Well-Known Binary) hexadecimal format
  */
 export function parsePostGISPoint(
   input: string | { latitude: number; longitude: number } | { lat: number; lng: number }
@@ -86,6 +87,24 @@ export function parsePostGISPoint(
   }
 
   if (typeof input === "string") {
+    // Check for WKB hexadecimal format (starts with 01010000...)
+    if (input.startsWith('0101000020') || input.startsWith('0101000000')) {
+      // This is Well-Known Binary format - check if it's all zeros (invalid location)
+      const isAllZeros = input === '0101000020E610000000000000000000000000000000000000' ||
+                         input === '0101000020E6100000000000000000000000000000000000000000000000000000' ||
+                         /^0101000[02]0[0E6]{0,10}0+$/.test(input);
+      
+      if (isAllZeros) {
+        // Silent fail for all-zero WKB - this is expected for orders without locations yet
+        return { lat: 0, lng: 0 };
+      }
+      
+      // For non-zero WKB, we can't parse it here (would need a WKB parser library)
+      // Log once but return zeros
+      console.warn("WKB location format detected but cannot be parsed. Please use ST_AsText() in database query:", input.substring(0, 20) + "...");
+      return { lat: 0, lng: 0 };
+    }
+
     // Remove SRID prefix if present
     let normalized = input.trim();
     const semicolonIdx = normalized.indexOf(";");
@@ -114,7 +133,7 @@ export function parsePostGISPoint(
     }
   }
 
-  console.warn("Failed to parse location:", input);
+  console.warn("Failed to parse location (unsupported format):", typeof input === 'string' ? input.substring(0, 50) : input);
   return { lat: 0, lng: 0 };
 }
 

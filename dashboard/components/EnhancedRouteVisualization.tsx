@@ -215,6 +215,10 @@ export const EnhancedRouteVisualization: React.FC<EnhancedRouteVisualizationProp
     };
 
     updateProgress();
+    // Note: calculateRouteProgress and onProgressUpdate are intentionally not in deps
+    // calculateRouteProgress depends on state and props that are already tracked
+    // onProgressUpdate should be memoized in parent component with useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderRoute, loadingPoint, unloadingPoint]);
 
   if (!routeProgress) {

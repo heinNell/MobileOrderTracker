@@ -1,13 +1,22 @@
 // services/LocationService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { getDistance } from 'geolib';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import GeocodingService from './GeocodingService';
 import webLocationServiceInstance from './WebLocationService';
+
+// Conditionally import Notifications only on native platforms
+let Notifications = null;
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (err) {
+    console.log('Expo Notifications not available on this platform:', err.message);
+  }
+}
 
 // Task name for background location updates
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
@@ -74,14 +83,17 @@ if (Platform.OS !== 'web') {
         );
         if (distance < 100) {
           console.log('Driver within 100m of loading point!');
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'Near Loading Point',
-              body: 'You are within 100 meters of the loading point for your order!',
-              sound: 'default',
-            },
-            trigger: null,
-          });
+          // Only show notification if Notifications is available (native platforms)
+          if (Notifications && Notifications.scheduleNotificationAsync) {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Near Loading Point',
+                body: 'You are within 100 meters of the loading point for your order!',
+                sound: 'default',
+              },
+              trigger: null,
+            });
+          }
         }
       }
 
@@ -154,12 +166,12 @@ class LocationService {
 
     try {
       // Request notification permissions
-      if (Platform.OS !== 'web') {
+      if (Platform.OS !== 'web' && Notifications && Notifications.requestPermissionsAsync) {
         const { status } = await Notifications.requestPermissionsAsync();
         if (status !== 'granted') {
           console.warn('Notification permission not granted');
         }
-      } else {
+      } else if (Platform.OS === 'web') {
         // Initialize WebLocationService from storage for web platform
         await webLocationServiceInstance.initializeFromStorage();
       }

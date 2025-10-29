@@ -1,4 +1,6 @@
 // Messages Page - Communication Hub
+// Fixed: Removed foreign key relationship dependency (messages_recipient_id_fkey)
+// Now using manual joins to fetch user details for sender/recipient
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -18,8 +20,10 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  // Check authentication on mount
   useEffect(() => {
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -96,27 +100,52 @@ export default function MessagesPage() {
 
   const fetchMessagesForOrder = async (orderId: string) => {
     try {
-      const { data, error } = await supabase
+      // Fetch messages without using foreign key relationships
+      const { data: messagesData, error: messagesError } = await supabase
         .from("messages")
-        .select(
-          `
-          *,
-          sender:users!messages_sender_id_fkey(
-            full_name
-          ),
-          recipient:users!messages_recipient_id_fkey(
-            full_name
-          )
-        `
-        )
+        .select("*")
         .eq("order_id", orderId)
         .order("created_at", { ascending: true });
 
-      if (error) throw error;
+      if (messagesError) throw messagesError;
 
-      setMessages(data || []);
-    } catch (error) {
+      if (!messagesData || messagesData.length === 0) {
+        setMessages([]);
+        return;
+      }
+
+      // Get unique user IDs from messages
+      const userIds = new Set<string>();
+      messagesData.forEach(msg => {
+        if (msg.sender_id) userIds.add(msg.sender_id);
+        if (msg.recipient_id) userIds.add(msg.recipient_id);
+      });
+
+      // Fetch user details for all involved users
+      const { data: usersData, error: usersError } = await supabase
+        .from("users")
+        .select("id, full_name, email, role")
+        .in("id", Array.from(userIds));
+
+      if (usersError) {
+        console.warn("Error fetching user details:", usersError);
+      }
+
+      // Create a map of user ID to user details
+      const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
+
+      // Enrich messages with user details
+      const enrichedMessages = messagesData.map(msg => ({
+        ...msg,
+        sender: msg.sender_id ? usersMap.get(msg.sender_id) : null,
+        recipient: msg.recipient_id ? usersMap.get(msg.recipient_id) : null
+      }));
+
+      setMessages(enrichedMessages as any);
+    } catch (error: any) {
       console.error("Error fetching messages:", error);
+      // Show user-friendly error message
+      alert(`An error occurred while retrieving messages: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -130,11 +159,36 @@ export default function MessagesPage() {
           schema: "public",
           table: "messages",
         },
-        (payload) => {
-          const newMessage = payload.new as Message;
+        async (payload) => {
+          const newMessage = payload.new as any; // Use any since DB returns raw data
           // Only add message if it's for the currently selected order
           if (selectedOrder && newMessage.order_id === selectedOrder.id) {
-            setMessages((prev) => [...prev, newMessage]);
+            // Fetch user details for the new message
+            const userIds = [];
+            if (newMessage.sender_id) userIds.push(newMessage.sender_id);
+            // Note: Check if your messages table actually has recipient_id column
+            // If not, you may need to determine recipient differently
+
+            let enrichedMessage = newMessage;
+            
+            if (userIds.length > 0) {
+              const { data: usersData } = await supabase
+                .from("users")
+                .select("id, full_name, email, role")
+                .in("id", userIds);
+
+              const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
+              enrichedMessage = {
+                ...newMessage,
+                sender: newMessage.sender_id ? usersMap.get(newMessage.sender_id) : null,
+                // Only set recipient if recipient_id exists in the message
+                ...(newMessage.recipient_id && {
+                  recipient: usersMap.get(newMessage.recipient_id)
+                })
+              };
+            }
+
+            setMessages((prev) => [...prev, enrichedMessage as Message]);
           }
         }
       )

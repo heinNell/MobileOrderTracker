@@ -186,30 +186,49 @@ export default function TrackingPage() {
     // First try to use the new latitude/longitude columns
     if (order.loading_point_latitude && order.loading_point_longitude && 
         order.unloading_point_latitude && order.unloading_point_longitude) {
-      return {
-        loadingPoint: {
-          lat: Number(order.loading_point_latitude),
-          lng: Number(order.loading_point_longitude)
-        },
-        unloadingPoint: {
-          lat: Number(order.unloading_point_latitude),
-          lng: Number(order.unloading_point_longitude)
-        }
-      };
+      const loadingLat = Number(order.loading_point_latitude);
+      const loadingLng = Number(order.loading_point_longitude);
+      const unloadingLat = Number(order.unloading_point_latitude);
+      const unloadingLng = Number(order.unloading_point_longitude);
+      
+      // Validate coordinates are not zero and are valid numbers
+      if (loadingLat !== 0 && loadingLng !== 0 && 
+          unloadingLat !== 0 && unloadingLng !== 0 &&
+          isFinite(loadingLat) && isFinite(loadingLng) &&
+          isFinite(unloadingLat) && isFinite(unloadingLng)) {
+        return {
+          loadingPoint: { lat: loadingLat, lng: loadingLng },
+          unloadingPoint: { lat: unloadingLat, lng: unloadingLng }
+        };
+      }
     }
     
-    // Fallback to PostGIS location parsing
+    // Fallback to PostGIS location parsing (only if not WKB format)
     try {
-      const loadingPoint = parsePostGISPoint(order.loading_point_location);
-      const unloadingPoint = parsePostGISPoint(order.unloading_point_location);
-      return { loadingPoint, unloadingPoint };
+      // Check if the location is in WKB format (hexadecimal starting with 0101000...)
+      const isWKB = typeof order.loading_point_location === 'string' && 
+                    (order.loading_point_location.startsWith('0101000020') || 
+                     order.loading_point_location.startsWith('0101000000'));
+      
+      if (!isWKB) {
+        const loadingPoint = parsePostGISPoint(order.loading_point_location);
+        const unloadingPoint = parsePostGISPoint(order.unloading_point_location);
+        
+        // Only return if we got valid coordinates (not 0,0)
+        if ((loadingPoint.lat !== 0 || loadingPoint.lng !== 0) &&
+            (unloadingPoint.lat !== 0 || unloadingPoint.lng !== 0)) {
+          return { loadingPoint, unloadingPoint };
+        }
+      }
     } catch (error) {
       console.error(`Error parsing coordinates for order ${order.id}:`, error);
-      return {
-        loadingPoint: { lat: 0, lng: 0 },
-        unloadingPoint: { lat: 0, lng: 0 }
-      };
     }
+    
+    // Return zeros as fallback - calling code should check with isValidCoordinate()
+    return {
+      loadingPoint: { lat: 0, lng: 0 },
+      unloadingPoint: { lat: 0, lng: 0 }
+    };
   }, []);
 
   // Fetch planned route from Google Directions API

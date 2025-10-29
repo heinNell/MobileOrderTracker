@@ -1,7 +1,7 @@
 // Web MapComponent using Google Maps
-import React, { useMemo } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
-import { ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { ActivityIndicator, StyleSheet, Text } from 'react-native';
 import CenteredView from './CenteredView';
 
 // Define constants
@@ -41,6 +41,12 @@ export default function MapComponent({
 
   // Validate and memoize the center coordinates
   const center = useMemo(() => {
+    // Handle undefined or null values
+    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+      console.warn('MapComponent: Coordinates are undefined/null, using default location');
+      return { lat: 51.5074, lng: -0.1278 }; // Default to London
+    }
+
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
     
@@ -51,12 +57,17 @@ export default function MapComponent({
     }
     
     // Return default coordinates (London, UK) if invalid
-    console.warn('Invalid coordinates provided to MapComponent:', { latitude, longitude });
+    console.warn('MapComponent: Invalid coordinates provided:', { latitude, longitude });
     return { lat: 51.5074, lng: -0.1278 };
   }, [latitude, longitude]);
 
   // Validate coordinates
   const isValidCoordinates = useMemo(() => {
+    // Return false if undefined or null
+    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+      return false;
+    }
+    
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
     return Number.isFinite(lat) && Number.isFinite(lng) && 

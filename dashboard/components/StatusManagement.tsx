@@ -57,6 +57,51 @@ export default function StatusManagement({
   const [note, setNote] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
 
+  // Check if current status is valid
+  const isValidStatus = ORDER_STATUSES.some(s => s.value === order.status);
+  
+  // If invalid status, show warning and suggest fix
+  if (!isValidStatus) {
+    const suggestedStatus = order.status === 'active' ? 'activated' : 'assigned';
+    
+    return (
+      <div className={`bg-white rounded-lg shadow p-6 ${className}`}>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          ⚠️ Invalid Order Status
+        </h3>
+        
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <p className="text-sm text-red-800 font-medium mb-2">
+            This order has an invalid status value: <code className="bg-red-100 px-2 py-1 rounded">{order.status}</code>
+          </p>
+          <p className="text-sm text-red-700 mb-3">
+            This needs to be fixed in the database before you can manage this order's status.
+          </p>
+          
+          <div className="bg-white border border-red-300 rounded p-3 mb-3">
+            <p className="text-xs font-medium text-gray-700 mb-2">Run this SQL in Supabase:</p>
+            <code className="block text-xs bg-gray-900 text-green-400 p-2 rounded overflow-x-auto">
+              UPDATE orders SET status = '{suggestedStatus}' WHERE id = '{order.id}';
+            </code>
+          </div>
+          
+          <p className="text-xs text-gray-600">
+            Valid statuses are: pending, assigned, activated, in_progress, in_transit, arrived, 
+            arrived_at_loading_point, loading, loaded, arrived_at_unloading_point, unloading, 
+            delivered, completed, cancelled
+          </p>
+        </div>
+        
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          Refresh After Fixing
+        </button>
+      </div>
+    );
+  }
+
   const handleStatusUpdate = async () => {
     if (selectedStatus === order.status) {
       return; // No change needed
@@ -98,7 +143,17 @@ export default function StatusManagement({
 
     } catch (error: any) {
       console.error('Status update error:', error);
-      alert(`Failed to update status: ${error.message}`);
+      
+      let errorMessage = error.message;
+      
+      // Check for specific error patterns
+      if (errorMessage.includes('invalid status transition')) {
+        errorMessage = `Invalid status transition from "${order.status}" to "${selectedStatus}". Please follow the correct workflow.`;
+      } else if (errorMessage.includes('not permissible')) {
+        errorMessage = `Cannot change status from "${order.status}" to "${selectedStatus}". Check the allowed transitions.`;
+      }
+      
+      alert(`Failed to update status: ${errorMessage}\n\nCurrent status: ${order.status}\nTrying to change to: ${selectedStatus}`);
     } finally {
       setIsUpdating(false);
     }
