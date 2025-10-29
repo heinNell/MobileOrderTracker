@@ -1213,6 +1213,18 @@ export default function EnhancedOrdersPage() {
                             className="text-blue-600 hover:text-blue-900"
                             title="Generate QR Code"
                           >
+                            QR
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDebugOrderId(order.id);
+                              setShowQRDebugger(true);
+                            }}
+                            className="text-yellow-600 hover:text-yellow-900"
+                            title="Debug QR Code"
+                          >
+                            🧪
+                          </button>
                           <button
                             onClick={() => handleEditOrder(order)}
                             className="text-green-600 hover:text-green-900"
@@ -1226,18 +1238,6 @@ export default function EnhancedOrdersPage() {
                             title="Manage Order Status"
                           >
                             ⚡ Status
-                          </button>
-                          {(order.status === 'assigned' || order.status === 'activated' || order.status === 'in_progress' || order.status === 'in_transit' || order.status === 'loaded' || order.status === 'unloading' || order.status === 'completed') && (
-                            title="Debug QR Code"
-                          >
-                            🧪
-                          </button>
-                          <button
-                            onClick={() => handleEditOrder(order)}
-                            className="text-green-600 hover:text-green-900"
-                            title="Edit Order"
-                          >
-                            Edit
                           </button>
                           {(order.status === 'assigned' || order.status === 'activated' || order.status === 'in_progress' || order.status === 'in_transit' || order.status === 'loaded' || order.status === 'unloading' || order.status === 'completed') && (
                             <>
@@ -1432,6 +1432,25 @@ export default function EnhancedOrdersPage() {
         <EnhancedOrderForm
           order={editingOrder}
           onSubmit={handleUpdateOrder}
+          onCancel={() => {
+            setShowEditModal(false);
+            setEditingOrder(null);
+          }}
+          isEditing={true}
+        />
+      )}
+
+      {/* QR Code Debugger */}
+      {showQRDebugger && debugOrderId && (
+        <QRDebugger
+          orderId={debugOrderId}
+          onClose={() => {
+            setShowQRDebugger(false);
+            setDebugOrderId("");
+          }}
+        />
+      )}
+
       {/* Tracking Link Modal */}
       {showTrackingModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1534,25 +1553,6 @@ export default function EnhancedOrdersPage() {
                 order={statusOrder}
                 onStatusUpdate={handleStatusUpdate}
               />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  Email
-                </button>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>ℹ️ Features:</strong> The tracking page shows live driver location, 
-                  route history, trip distance, duration, and automatically refreshes every 10 minutes.
-                  No login required!
-                </p>
-              </div>
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ const ORDER_STATUSES = [
   { value: "activated", label: "Load Activated", color: "emerald" },
   { value: "in_progress", label: "Trip Started", color: "yellow" },
   { value: "in_transit", label: "In Transit", color: "orange" },
+  
   { value: "arrived", label: "Arrived at Location", color: "green" },
   {
     value: "arrived_at_loading_point",
