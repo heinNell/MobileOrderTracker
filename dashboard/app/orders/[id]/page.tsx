@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
+import StatusManagement from "../../../components/StatusManagement";
 import { supabase } from "../../../lib/supabase";
 import type { Order } from "../../../shared/types";
 
@@ -564,10 +565,23 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
               </div>
             )}
           </div>
-
           {/* Status Updates Sidebar */}
           <div className="lg:col-span-1">
+            {/* Status Management Component */}
+            <div className="mb-6">
+              <StatusManagement 
+                order={order}
+                onStatusUpdate={async (updatedOrder) => {
+                  await fetchOrderDetails();
+                  await fetchStatusUpdates();
+                  toast.success("Status updated successfully!");
+                }}
+              />
+            </div>
+
+            {/* Status History */}
             <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Status History</h2>
               <h2 className="text-lg font-medium text-gray-900 mb-4">Status Updates</h2>
               
               {statusUpdates.length === 0 ? (
