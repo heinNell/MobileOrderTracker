@@ -1,8 +1,31 @@
-// Enhanced Route Progress Visualization Component
-// This component shows route progress with red-to-green color transition and ETA calculations
+// components/EnhancedRouteVisualization.tsx
+"use client";
 
-import { Marker, Polyline } from "@react-google-maps/api";
-import React, { useEffect, useState } from "react";
+import L from "leaflet";
+import { useCallback, useEffect, useState } from "react";
+import { Marker, Polyline, Popup } from "react-leaflet";
+
+// Custom icons
+const truckIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/32/3075/3075975.png",
+  iconSize: [40, 40],
+  iconAnchor: [20, 40],
+  popupAnchor: [0, -40],
+});
+
+const loadingIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/32/854/854877.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+const unloadingIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/32/3062/3062619.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+type LatLngTuple = [number, number];
 
 interface RoutePoint {
   lat: number;
@@ -12,291 +35,162 @@ interface RoutePoint {
 }
 
 interface RouteProgress {
-  completedPath: google.maps.LatLngLiteral[];
-  remainingPath: google.maps.LatLngLiteral[];
-  currentPosition: google.maps.LatLngLiteral;
+  completedPath: LatLngTuple[];
+  remainingPath: LatLngTuple[];
+  currentPosition: LatLngTuple;
   progressPercentage: number;
-  estimatedTimeRemaining: number; // in minutes
-  totalDistance: number; // in kilometers
-  completedDistance: number; // in kilometers
-  averageSpeed: number; // in km/h
+  estimatedTimeRemaining: number;
+  totalDistance: number;
+  completedDistance: number;
+  averageSpeed: number;
 }
 
 interface EnhancedRouteVisualizationProps {
   orderRoute: RoutePoint[];
-  loadingPoint: google.maps.LatLngLiteral;
-  unloadingPoint: google.maps.LatLngLiteral;
+  loadingPoint: LatLngTuple;
+  unloadingPoint: LatLngTuple;
   onProgressUpdate?: (progress: RouteProgress) => void;
-  mapRef?: google.maps.Map;
 }
-
-// Google Maps component typed versions
-const PolylineTyped = Polyline as any;
-const MarkerTyped = Marker as any;
 
 export const EnhancedRouteVisualization: React.FC<EnhancedRouteVisualizationProps> = ({
   orderRoute,
   loadingPoint,
   unloadingPoint,
   onProgressUpdate,
-  mapRef
 }) => {
   const [routeProgress, setRouteProgress] = useState<RouteProgress | null>(null);
 
-  // Calculate distance between two points using Haversine formula
-  const calculateDistance = (
-    point1: google.maps.LatLngLiteral,
-    point2: google.maps.LatLngLiteral
-  ): number => {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = (point2.lat - point1.lat) * (Math.PI / 180);
-    const dLon = (point2.lng - point1.lng) * (Math.PI / 180);
+  const haversineDistance = (p1: LatLngTuple, p2: LatLngTuple): number => {
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(p2[0] - p1[0]);
+    const dLon = toRad(p2[1] - p1[1]);
+    const lat1 = toRad(p1[0]);
+    const lat2 = toRad(p2[0]);
+
     const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(point1.lat * (Math.PI / 180)) *
-        Math.cos(point2.lat * (Math.PI / 180)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.sin(dLat / 2) ** 2 +
+      Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
 
-  // Calculate total route distance
-  const calculateTotalRouteDistance = (points: google.maps.LatLngLiteral[]): number => {
-    let totalDistance = 0;
+  const totalDistance = (points: LatLngTuple[]): number => {
+    let dist = 0;
     for (let i = 1; i < points.length; i++) {
-      totalDistance += calculateDistance(points[i - 1], points[i]);
+      dist += haversineDistance(points[i - 1], points[i]);
     }
-    return totalDistance;
+    return dist;
   };
 
-  // Get the planned route using Google Directions API
-  const getPlannedRoute = async (): Promise<google.maps.LatLngLiteral[]> => {
-    return new Promise((resolve) => {
-      if (!window.google || !mapRef) {
-        // Fallback to direct line
-        resolve([loadingPoint, unloadingPoint]);
-        return;
-      }
+  const fetchPlannedRoute = useCallback(async (): Promise<LatLngTuple[]> => {
+    if (!process.env.NEXT_PUBLIC_ORS_API_KEY) {
+      return [loadingPoint, unloadingPoint];
+    }
 
-      const directionsService = new google.maps.DirectionsService();
-      
-      directionsService.route(
-        {
-          origin: loadingPoint,
-          destination: unloadingPoint,
-          travelMode: google.maps.TravelMode.DRIVING,
-          optimizeWaypoints: true,
-          avoidHighways: false,
-          avoidTolls: false,
-        },
-        (result, status) => {
-          if (status === google.maps.DirectionsStatus.OK && result) {
-            const route = result.routes[0];
-            const path: google.maps.LatLngLiteral[] = [];
-            
-            route.legs.forEach((leg) => {
-              leg.steps.forEach((step) => {
-                const stepPath = step.path;
-                stepPath.forEach((point) => {
-                  path.push({ lat: point.lat(), lng: point.lng() });
-                });
-              });
-            });
-            
-            resolve(path);
-          } else {
-            // Fallback to direct line
-            console.warn("Could not get directions, using direct route");
-            resolve([loadingPoint, unloadingPoint]);
-          }
-        }
+    try {
+      const res = await fetch(
+        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${process.env.NEXT_PUBLIC_ORS_API_KEY}&start=${loadingPoint[1]},${loadingPoint[0]}&end=${unloadingPoint[1]},${unloadingPoint[0]}`
       );
-    });
-  };
+      const data = await res.json();
+      if (data.features?.[0]?.geometry?.coordinates) {
+        return data.features[0].geometry.coordinates.map(([lng, lat]: number[]) => [lat, lng] as LatLngTuple);
+      }
+    } catch (err) {
+      console.warn("Using straight line route");
+    }
+    return [loadingPoint, unloadingPoint];
+  }, [loadingPoint, unloadingPoint]);
 
-  // Find the closest point on the planned route to the current position
-  const findClosestPointOnRoute = (
-    currentPos: google.maps.LatLngLiteral,
-    plannedRoute: google.maps.LatLngLiteral[]
-  ): { index: number; distance: number } => {
-    let closestIndex = 0;
-    let minDistance = Number.MAX_VALUE;
-
-    plannedRoute.forEach((point, index) => {
-      const distance = calculateDistance(currentPos, point);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = index;
+  const findClosestPoint = (current: LatLngTuple, route: LatLngTuple[]): number => {
+    let minDist = Infinity;
+    let index = 0;
+    route.forEach((p, i) => {
+      const d = haversineDistance(current, p);
+      if (d < minDist) {
+        minDist = d;
+        index = i;
       }
     });
-
-    return { index: closestIndex, distance: minDistance };
+    return index;
   };
 
-  // Calculate route progress
-  const calculateRouteProgress = async (): Promise<RouteProgress | null> => {
-    if (orderRoute.length === 0) return null;
+  const calculateProgress = useCallback(async () => {
+    if (orderRoute.length === 0) return;
 
-    // Get the planned route
-    const plannedRoute = await getPlannedRoute();
-    const totalPlannedDistance = calculateTotalRouteDistance(plannedRoute);
+    const plannedRoute = await fetchPlannedRoute();
+    const totalPlannedDistance = totalDistance(plannedRoute);
 
-    // Current position is the latest point in the route
-    const currentPosition = {
-      lat: orderRoute[orderRoute.length - 1].lat,
-      lng: orderRoute[orderRoute.length - 1].lng,
-    };
+    const currentPos: LatLngTuple = [orderRoute[orderRoute.length - 1].lat, orderRoute[orderRoute.length - 1].lng];
+    const closestIdx = findClosestPoint(currentPos, plannedRoute);
 
-    // Find where we are on the planned route
-    const { index: currentRouteIndex } = findClosestPointOnRoute(currentPosition, plannedRoute);
+    const completedPath = plannedRoute.slice(0, closestIdx + 1);
+    const remainingPath = plannedRoute.slice(closestIdx);
 
-    // Calculate completed and remaining paths
-    const completedPath = plannedRoute.slice(0, currentRouteIndex + 1);
-    const remainingPath = plannedRoute.slice(currentRouteIndex);
-
-    // Add current position to completed path if it's not already there
-    if (completedPath.length === 0 || 
-        calculateDistance(completedPath[completedPath.length - 1], currentPosition) > 0.01) {
-      completedPath.push(currentPosition);
+    if (haversineDistance(completedPath[completedPath.length - 1], currentPos) > 0.01) {
+      completedPath.push(currentPos);
     }
 
-    // Calculate distances
-    const completedDistance = calculateTotalRouteDistance(completedPath);
-    const remainingDistance = calculateTotalRouteDistance(remainingPath);
-
-    // Calculate progress percentage
-    const progressPercentage = totalPlannedDistance > 0 
+    const completedDistance = totalDistance(completedPath);
+    const progressPercentage = totalPlannedDistance > 0
       ? Math.min((completedDistance / totalPlannedDistance) * 100, 100)
       : 0;
 
-    // Calculate average speed from actual route data
     let averageSpeed = 0;
     if (orderRoute.length >= 2) {
-      const firstPoint = orderRoute[0];
-      const lastPoint = orderRoute[orderRoute.length - 1];
-      const timeElapsed = (new Date(lastPoint.timestamp).getTime() - new Date(firstPoint.timestamp).getTime()) / (1000 * 60 * 60); // hours
-      const actualDistance = calculateTotalRouteDistance(orderRoute.map(p => ({ lat: p.lat, lng: p.lng })));
-      
-      if (timeElapsed > 0 && actualDistance > 0) {
-        averageSpeed = actualDistance / timeElapsed;
-      }
+      const first = orderRoute[0];
+      const last = orderRoute[orderRoute.length - 1];
+      const timeHours = (new Date(last.timestamp).getTime() - new Date(first.timestamp).getTime()) / 3600000;
+      const actualDist = totalDistance(orderRoute.map(p => [p.lat, p.lng] as LatLngTuple));
+      if (timeHours > 0) averageSpeed = actualDist / timeHours;
     }
 
-    // Calculate ETA (estimated time remaining)
-    let estimatedTimeRemaining = 0;
-    if (averageSpeed > 0 && remainingDistance > 0) {
-      estimatedTimeRemaining = (remainingDistance / averageSpeed) * 60; // convert to minutes
-    } else if (remainingDistance > 0) {
-      // Fallback: assume average city driving speed of 30 km/h
-      estimatedTimeRemaining = (remainingDistance / 30) * 60;
-    }
+    const remainingDistance = totalPlannedDistance - completedDistance;
+    const estimatedTimeRemaining = averageSpeed > 5
+      ? (remainingDistance / averageSpeed) * 60
+      : (remainingDistance / 30) * 60;
 
-    return {
+    const progress: RouteProgress = {
       completedPath,
       remainingPath,
-      currentPosition,
+      currentPosition: currentPos,
       progressPercentage,
       estimatedTimeRemaining,
       totalDistance: totalPlannedDistance,
       completedDistance,
       averageSpeed,
     };
-  };
 
-  // Update route progress when route data changes
-  useEffect(() => {
-    const updateProgress = async () => {
-      const progress = await calculateRouteProgress();
-      if (progress) {
-        setRouteProgress(progress);
-        onProgressUpdate?.(progress);
-      }
-    };
-
-    updateProgress();
-    // Note: calculateRouteProgress and onProgressUpdate are intentionally not in deps
-    // calculateRouteProgress depends on state and props that are already tracked
-    // onProgressUpdate should be memoized in parent component with useCallback
+    setRouteProgress(progress);
+    onProgressUpdate?.(progress);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderRoute, loadingPoint, unloadingPoint]);
+  }, [orderRoute, fetchPlannedRoute, onProgressUpdate]);
 
-  if (!routeProgress) {
-    return null;
-  }
+  useEffect(() => {
+    calculateProgress();
+  }, [calculateProgress]);
+
+  if (!routeProgress) return null;
 
   return (
     <>
-      {/* Completed route (green) */}
-      {routeProgress.completedPath.length > 1 && (
-        <PolylineTyped
-          path={routeProgress.completedPath}
-          options={{
-            strokeColor: "#10B981", // Green
-            strokeOpacity: 1,
-            strokeWeight: 6,
-            zIndex: 2,
-          }}
-        />
-      )}
+      <Polyline positions={routeProgress.completedPath} color="#10b981" weight={6} />
+      <Polyline positions={routeProgress.remainingPath} color="#ef4444" weight={5} opacity={0.8} />
 
-      {/* Remaining route (red) */}
-      {routeProgress.remainingPath.length > 1 && (
-        <PolylineTyped
-          path={routeProgress.remainingPath}
-          options={{
-            strokeColor: "#EF4444", // Red
-            strokeOpacity: 0.8,
-            strokeWeight: 4,
-            zIndex: 1,
-          }}
-        />
-      )}
+      <Marker position={routeProgress.currentPosition} icon={truckIcon}>
+        <Popup>
+          <strong>Current Location</strong><br />
+          Progress: {routeProgress.progressPercentage.toFixed(1)}%
+        </Popup>
+      </Marker>
 
-      {/* Current position marker with enhanced styling */}
-      <MarkerTyped
-        position={routeProgress.currentPosition}
-        icon={{
-          path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-          scale: 15,
-          fillColor: "#3B82F6", // Blue
-          fillOpacity: 1,
-          strokeColor: "#FFFFFF",
-          strokeWeight: 3,
-          zIndex: 3,
-        }}
-        title={`Current Position - ${routeProgress.progressPercentage.toFixed(1)}% Complete`}
-      />
+      <Marker position={loadingPoint} icon={loadingIcon}>
+        <Popup>Loading Point</Popup>
+      </Marker>
 
-      {/* Loading point marker */}
-      <MarkerTyped
-        position={loadingPoint}
-        icon={{
-          path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-          scale: 10,
-          fillColor: "#F59E0B", // Amber for start
-          fillOpacity: 1,
-          strokeColor: "#FFFFFF",
-          strokeWeight: 2,
-          zIndex: 2,
-        }}
-        title="Loading Point (Start)"
-      />
-
-      {/* Unloading point marker */}
-      <MarkerTyped
-        position={unloadingPoint}
-        icon={{
-          path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-          scale: 10,
-          fillColor: "#8B5CF6", // Purple for destination
-          fillOpacity: 1,
-          strokeColor: "#FFFFFF",
-          strokeWeight: 2,
-          zIndex: 2,
-        }}
-        title="Unloading Point (Destination)"
-      />
+      <Marker position={unloadingPoint} icon={unloadingIcon}>
+        <Popup>Unloading Point</Popup>
+      </Marker>
     </>
   );
 };

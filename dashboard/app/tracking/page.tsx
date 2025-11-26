@@ -1,15 +1,9 @@
 // Live Tracking Page - Real-time Vehicle Location Visualization
 "use client";
 
-import
-  {
-    GoogleMap,
-    LoadScript,
-    Marker,
-    Polyline
-  } from "@react-google-maps/api";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import
   {
     createEnhancedRouteData,
@@ -27,23 +21,23 @@ import
 import { supabase } from "../../lib/supabase";
 import type { LocationUpdate, Order } from "../../shared/types";
 
-// Suppress Google Maps "Element already defined" warnings (harmless during dev hot-reload)
-if (typeof window !== 'undefined') {
-  const originalWarn = console.warn;
-  console.warn = (...args) => {
-    const msg = args[0]?.toString() || '';
-    if (msg.includes('Element with name "gmp-') || msg.includes('already defined')) {
-      return; // Suppress these specific warnings
-    }
-    originalWarn.apply(console, args);
-  };
-}
+// Dynamic import for Leaflet map (client-side only)
+const TrackingMap = dynamic(
+  () => import("../../components/TrackingMap").then((mod) => ({ default: mod.TrackingMap })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full bg-gray-100 rounded-lg">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-800 font-medium">Loading map...</p>
+        </div>
+      </div>
+    )
+  }
+);
 
-// Type overrides for Google Maps components
-const GoogleMapTyped = GoogleMap as any;
-const LoadScriptTyped = LoadScript as any;
-const MarkerTyped = Marker as any;
-const PolylineTyped = Polyline as any;
+type LatLngTuple = [number, number];
 
 export default function TrackingPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -52,9 +46,8 @@ export default function TrackingPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   // Default center: Pretoria, South Africa (valid coordinates)
-  const [mapCenter, setMapCenter] = useState<LatLngLiteral>({ lat: -25.7479, lng: 28.2293 });
+  const [mapCenter, setMapCenter] = useState<LatLngTuple>([-25.7479, 28.2293]);
   const [mapZoom, setMapZoom] = useState(6);
-  const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
   const [plannedRoutes, setPlannedRoutes] = useState<Record<string, LatLngLiteral[]>>({});
   const [enhancedRoutes, setEnhancedRoutes] = useState<Record<string, EnhancedRouteData>>({});
   const [etaByOrder, setETAByOrder] = useState<Record<string, ETAData>>({});
@@ -62,30 +55,12 @@ export default function TrackingPage() {
   const router = useRouter();
 
   // Refs for optimized services
-  const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
   const routeCalculatorRef = useRef(new RouteProgressCalculator());
   const etaCalculatorsRef = useRef<Record<string, ETACalculator>>({});
   const previousLocationsRef = useRef<Record<string, LocationUpdate>>({});
   const isMountedRef = useRef(true);
   const locationChannelRef = useRef<any>(null);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Map container style
-  const mapContainerStyle: React.CSSProperties = {
-    width: "100%",
-    height: "calc(100vh - 200px)",
-  };
-
-  // Default map options
-  const mapOptions = useMemo<google.maps.MapOptions>(
-    () => ({
-      zoomControl: true,
-      streetViewControl: false,
-      mapTypeControl: true,
-      fullscreenControl: true,
-    }),
-    []
-  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -114,17 +89,9 @@ export default function TrackingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initialize Google Maps services when map loads
+  // Fetch planned routes when orders are loaded
   useEffect(() => {
-    if (mapRef && !directionsServiceRef.current) {
-      directionsServiceRef.current = new google.maps.DirectionsService();
-      console.log("DirectionsService initialized");
-    }
-  }, [mapRef]);
-
-  // Fetch planned routes when DirectionsService is ready
-  useEffect(() => {
-    if (directionsServiceRef.current && orders.length > 0) {
+    if (orders.length > 0) {
       fetchPlannedRoutesForOrders();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,59 +198,40 @@ export default function TrackingPage() {
     };
   }, []);
 
-  // Fetch planned route from Google Directions API
+  // Fetch planned route using OpenRouteService or fallback to direct line
   const fetchPlannedRoute = useCallback(
     async (origin: LatLngLiteral, destination: LatLngLiteral): Promise<LatLngLiteral[]> => {
-      if (!directionsServiceRef.current) {
-        console.warn("DirectionsService not available yet");
-        return [];
-      }
-
       // Validate coordinates before making API call
       if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
         console.warn("Invalid origin or destination coordinates:", { origin, destination });
         return [];
       }
 
-      try {
-        const result = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
-          directionsServiceRef.current!.route(
-            {
-              origin,
-              destination,
-              travelMode: google.maps.TravelMode.DRIVING,
-              unitSystem: google.maps.UnitSystem.METRIC,
-              avoidHighways: false,
-              avoidTolls: false,
-            },
-            (result, status) => {
-              if (status === google.maps.DirectionsStatus.OK && result) {
-                resolve(result);
-              } else {
-                reject(new Error(`Directions API status: ${status}`));
-              }
-            }
+      // Try OpenRouteService if API key is available
+      if (process.env.NEXT_PUBLIC_ORS_API_KEY) {
+        try {
+          const response = await fetch(
+            `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${process.env.NEXT_PUBLIC_ORS_API_KEY}&start=${origin.lng},${origin.lat}&end=${destination.lng},${destination.lat}`
           );
-        });
-
-        if (result.routes?.[0]) {
-          const path = result.routes[0].overview_path.map((point) => ({
-            lat: point.lat(),
-            lng: point.lng(),
-          }));
-          console.log("Planned route fetched:", path.length, "points");
-          return path;
-        }
-      } catch (error) {
-        // Suppress "Failed to fetch" noise - this is usually CORS or network timing
-        if (error instanceof Error && error.message.includes('Failed to fetch')) {
-          console.warn("Directions API temporarily unavailable (network/CORS)");
-        } else {
-          console.error("Error fetching planned route:", error);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.features?.[0]?.geometry?.coordinates) {
+              const path = data.features[0].geometry.coordinates.map(
+                ([lng, lat]: [number, number]) => ({ lat, lng })
+              );
+              console.log("Planned route fetched from ORS:", path.length, "points");
+              return path;
+            }
+          }
+        } catch (error) {
+          console.warn("ORS API temporarily unavailable, using direct line");
         }
       }
 
-      return [];
+      // Fallback: Return direct line between points
+      console.log("Using direct line between points (no API key)");
+      return [origin, destination];
     },
     []
   );
@@ -516,7 +464,7 @@ export default function TrackingPage() {
               const lng = typeof loadingPoint.lng === 'number' ? loadingPoint.lng : parseFloat(String(loadingPoint.lng));
               
               if (!isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
-                setMapCenter({ lat, lng });
+                setMapCenter([lat, lng]);
                 setMapZoom(10);
                 console.log("Map centered at:", { lat, lng });
               } else {
@@ -654,8 +602,19 @@ export default function TrackingPage() {
             }
           }
         )
-        .subscribe((status) => {
-          console.log("Location subscription status:", status);
+        .subscribe((status, err) => {
+          console.log("📡 Location subscription status:", status);
+          if (status === 'SUBSCRIBED') {
+            console.log("✅ Successfully subscribed to driver location updates");
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error("❌ Location subscription error:", err);
+            console.error("💡 Possible fixes:");
+            console.error("  1. Run ENABLE_REALTIME_SUBSCRIPTIONS.sql in Supabase SQL editor");
+            console.error("  2. Check RLS policies allow SELECT on driver_locations");
+            console.error("  3. Verify realtime is enabled: ALTER PUBLICATION supabase_realtime ADD TABLE driver_locations;");
+          } else if (status === 'CLOSED') {
+            console.warn("⚠️ Location subscription closed");
+          }
         });
 
       locationChannelRef.current = locationChannel;
@@ -683,8 +642,19 @@ export default function TrackingPage() {
             }
           }
         )
-        .subscribe((status) => {
-          console.log("Orders subscription status:", status);
+        .subscribe((status, err) => {
+          console.log("📡 Orders subscription status:", status);
+          if (status === 'SUBSCRIBED') {
+            console.log("✅ Successfully subscribed to order updates");
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error("❌ Orders subscription error:", err);
+            console.error("💡 Possible fixes:");
+            console.error("  1. Run ENABLE_REALTIME_SUBSCRIPTIONS.sql in Supabase SQL editor");
+            console.error("  2. Check RLS policies allow SELECT on orders");
+            console.error("  3. Verify realtime is enabled: ALTER PUBLICATION supabase_realtime ADD TABLE orders;");
+          } else if (status === 'CLOSED') {
+            console.warn("⚠️ Orders subscription closed");
+          }
         });
 
       return () => {
@@ -713,8 +683,8 @@ export default function TrackingPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-xl text-gray-600">Loading tracking data...</p>
-          <p className="text-sm text-gray-500 mt-2">Fetching active orders and location updates...</p>
+          <p className="text-xl text-gray-700">Loading tracking data...</p>
+          <p className="text-sm text-gray-700 mt-2">Fetching active orders and location updates...</p>
         </div>
       </div>
     );
@@ -749,16 +719,24 @@ export default function TrackingPage() {
               Logout
             </button>
           </div>
-          <p className="text-gray-600 mt-2">Real-time tracking of active deliveries</p>
+          <p className="text-gray-700 mt-2">Real-time tracking of active deliveries</p>
         </div>
 
         {/* Active Orders Summary */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Active Deliveries</h2>
           {orders.length === 0 ? (
-            <p className="text-gray-500">No active deliveries at the moment</p>
+            <p className="text-gray-700">No active deliveries at the moment</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <>
+              {locationUpdates.length === 0 && (
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ <strong>No GPS location data available.</strong> Orders are displayed but live tracking requires drivers to share their location from the mobile app.
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {orders.map((order) => {
                 const latestLocation = orderLocations[order.id];
                 const eta = etaByOrder[order.id];
@@ -776,7 +754,7 @@ export default function TrackingPage() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h3 className="font-bold text-gray-900">{order.order_number}</h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-700">
                           {order.assigned_driver?.full_name || "Unassigned"}
                         </p>
                       </div>
@@ -792,7 +770,7 @@ export default function TrackingPage() {
                     {/* Route Info */}
                     <div className="mt-3 text-sm mb-3">
                       <p className="font-medium">{order.loading_point_name}</p>
-                      <p className="text-gray-600 text-xs">to</p>
+                      <p className="text-gray-700 text-xs">to</p>
                       <p className="font-medium">{order.unloading_point_name}</p>
                     </div>
 
@@ -800,7 +778,7 @@ export default function TrackingPage() {
                     {enhanced && (
                       <div className="mb-3">
                         <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-medium text-gray-600">Progress</span>
+                          <span className="text-xs font-medium text-gray-700">Progress</span>
                           <span className="text-xs font-bold text-gray-900">
                             {enhanced.progressPercentage.toFixed(1)}%
                           </span>
@@ -833,7 +811,7 @@ export default function TrackingPage() {
                             {eta.confidence}
                           </span>
                         </div>
-                        <div className="flex justify-between text-gray-600 mt-1">
+                        <div className="flex justify-between text-gray-700 mt-1">
                           <span>Speed: {eta.currentSpeed.toFixed(1)} km/h</span>
                           <span>
                             {eta.speedTrend === "increasing"
@@ -848,14 +826,15 @@ export default function TrackingPage() {
 
                     {/* Last Update */}
                     {latestLocation && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-700">
                         Last update: {new Date(latestLocation.timestamp).toLocaleTimeString()}
                       </div>
                     )}
                   </div>
                 );
               })}
-            </div>
+              </div>
+            </>
           )}
         </div>
 
@@ -887,157 +866,35 @@ export default function TrackingPage() {
             </div>
           </div>
 
-          <LoadScriptTyped googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-            {orders.length > 0 && isFinite(mapCenter.lat) && isFinite(mapCenter.lng) && (
-              <GoogleMapTyped
-                mapContainerStyle={mapContainerStyle}
+          {/* Leaflet Map */}
+          <div style={{ width: "100%", height: "calc(100vh - 200px)", position: "relative" }}>
+            {orders.length > 0 && isFinite(mapCenter[0]) && isFinite(mapCenter[1]) ? (
+              <TrackingMap
                 center={mapCenter}
                 zoom={mapZoom}
-                options={mapOptions}
-                onLoad={(map: google.maps.Map) => setMapRef(map)}
-              >
-              {/* Render routes for selected or all orders */}
-              {(selectedOrder ? [selectedOrder] : orders).map((order) => {
-                try {
-                  const enhanced = enhancedRoutes[order.id];
-                  const isHighlighted = selectedOrder?.id === order.id;
-
-                  if (!enhanced) return null;
-
-                  return (
-                    <React.Fragment key={order.id}>
-                      {/* Planned Route (light gray) */}
-                      {enhanced.plannedRoute && enhanced.plannedRoute.length > 1 && (
-                        <PolylineTyped
-                          path={enhanced.plannedRoute}
-                          options={{
-                            strokeColor: "#9CA3AF",
-                            strokeOpacity: isHighlighted ? 0.7 : 0.3,
-                            strokeWeight: isHighlighted ? 4 : 2,
-                            strokeLineCap: "round",
-                            strokeLineJoin: "round",
-                            zIndex: 0,
-                          }}
-                        />
-                      )}
-
-                      {/* Completed Route (green) */}
-                      {enhanced.completedPath && enhanced.completedPath.length > 1 && (
-                        <PolylineTyped
-                          path={enhanced.completedPath}
-                          options={{
-                            strokeColor: "#10B981",
-                            strokeOpacity: 1,
-                            strokeWeight: isHighlighted ? 6 : 4,
-                            strokeLineCap: "round",
-                            strokeLineJoin: "round",
-                            zIndex: 2,
-                          }}
-                        />
-                      )}
-
-                      {/* Remaining Route (red) */}
-                      {enhanced.remainingPath && enhanced.remainingPath.length > 1 && (
-                        <PolylineTyped
-                          path={enhanced.remainingPath}
-                          options={{
-                            strokeColor: "#EF4444",
-                            strokeOpacity: 0.8,
-                            strokeWeight: isHighlighted ? 5 : 3,
-                            strokeLineCap: "round",
-                            strokeLineJoin: "round",
-                            zIndex: 1,
-                          }}
-                        />
-                      )}
-
-                      {/* Current position marker */}
-                      {isValidCoordinate(enhanced.currentPosition) && (
-                        <MarkerTyped
-                          position={enhanced.currentPosition}
-                          icon={{
-                            path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                            scale: isHighlighted ? 15 : 10,
-                            fillColor: isHighlighted ? "#3B82F6" : "#10B981",
-                            fillOpacity: 1,
-                            strokeColor: "#FFFFFF",
-                            strokeWeight: isHighlighted ? 3 : 2,
-                            zIndex: 3,
-                          }}
-                          title={`Order: ${order.order_number}\nDriver: ${order.assigned_driver?.full_name || "Unknown"}\nProgress: ${enhanced.progressPercentage.toFixed(1)}%`}
-                          onClick={() => setSelectedOrder(order)}
-                        />
-                      )}
-                    </React.Fragment>
-                  );
-                } catch (error) {
-                  console.error(`Error rendering routes for order ${order.id}:`, error);
-                  return null;
-                }
-              })}
-
-              {/* Loading and Unloading Points */}
-              {orders.map((order) => {
-                try {
-                  const { loadingPoint, unloadingPoint } = getOrderCoordinates(order);
-
-                  if (!isValidCoordinate(loadingPoint) || !isValidCoordinate(unloadingPoint)) {
-                    return null;
-                  }
-
-                  const isHighlighted = selectedOrder?.id === order.id;
-
-                  return (
-                    <React.Fragment key={`points-${order.id}`}>
-                      {/* Loading Point - RED marker */}
-                      <MarkerTyped
-                        position={loadingPoint}
-                        icon={{
-                          path: (typeof google !== 'undefined' && google.maps?.SymbolPath?.CIRCLE) || "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                          scale: isHighlighted ? 12 : 8,
-                          fillColor: "#EF4444",
-                          fillOpacity: 1,
-                          strokeColor: "#FFFFFF",
-                          strokeWeight: 3,
-                        }}
-                        label={{
-                          text: "🏭",
-                          fontSize: isHighlighted ? "24px" : "18px",
-                        }}
-                        title={`Loading Point\n${order.loading_point_name}\nOrder: ${order.order_number}`}
-                        zIndex={isHighlighted ? 10 : 5}
-                        onClick={() => setSelectedOrder(order)}
-                      />
-
-                      {/* Unloading Point - BLUE marker */}
-                      <MarkerTyped
-                        position={unloadingPoint}
-                        icon={{
-                          path: (typeof google !== 'undefined' && google.maps?.SymbolPath?.CIRCLE) || "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                          scale: isHighlighted ? 12 : 8,
-                          fillColor: "#3B82F6",
-                          fillOpacity: 1,
-                          strokeColor: "#FFFFFF",
-                          strokeWeight: 3,
-                        }}
-                        label={{
-                          text: "🏢",
-                          fontSize: isHighlighted ? "24px" : "18px",
-                        }}
-                        title={`Unloading Point\n${order.unloading_point_name}\nOrder: ${order.order_number}`}
-                        zIndex={isHighlighted ? 10 : 5}
-                        onClick={() => setSelectedOrder(order)}
-                      />
-                    </React.Fragment>
-                  );
-                } catch (error) {
-                  console.error(`Error rendering points for order ${order.id}:`, error);
-                  return null;
-                }
-              })}
-            </GoogleMapTyped>
+                orders={orders}
+                selectedOrder={selectedOrder}
+                enhancedRoutes={enhancedRoutes}
+                getOrderCoordinates={getOrderCoordinates}
+                isValidCoordinate={isValidCoordinate}
+                onSelectOrder={(order) => setSelectedOrder(order)}
+              />
+            ) : orders.length === 0 ? (
+              <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg border border-gray-200">
+                <div className="text-center p-6">
+                  <p className="text-gray-700 text-lg mb-2">No active orders to display</p>
+                  <p className="text-gray-600 text-sm">Active orders will appear on the map once created</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg border border-gray-200">
+                <div className="text-center p-6">
+                  <p className="text-gray-700 text-lg mb-2">Loading map...</p>
+                  <p className="text-gray-600 text-sm">Initializing map coordinates</p>
+                </div>
+              </div>
             )}
-          </LoadScriptTyped>
+          </div>
 
           {selectedOrder && (
             <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -1056,57 +913,57 @@ export default function TrackingPage() {
                 return (
                   <>
                     <div>
-                      <p className="text-gray-500 uppercase tracking-wide text-xs font-semibold mb-1">Current Location</p>
+                      <p className="text-gray-700 uppercase tracking-wide text-xs font-semibold mb-1">Current Location</p>
                       <p className="text-gray-900 font-medium">{currentLocationDisplay}</p>
                       {latestLocation && (
-                        <p className="text-gray-500 text-xs mt-1">
+                        <p className="text-gray-700 text-xs mt-1">
                           Last update: {new Date(latestLocation.timestamp).toLocaleString()}
                         </p>
                       )}
                     </div>
 
                     <div>
-                      <p className="text-gray-500 uppercase tracking-wide text-xs font-semibold mb-1">Planned Route</p>
+                      <p className="text-gray-700 uppercase tracking-wide text-xs font-semibold mb-1">Planned Route</p>
                       <p className="text-gray-900 font-medium">
                         {isValidCoordinate(loadingPoint) && isValidCoordinate(unloadingPoint)
                           ? `${selectedOrder.loading_point_name || "Loading"} → ${selectedOrder.unloading_point_name || "Unloading"}`
                           : "Not available"}
                       </p>
                       {isValidCoordinate(loadingPoint) && (
-                        <p className="text-gray-500 text-xs mt-1">
+                        <p className="text-gray-700 text-xs mt-1">
                           Loading: {loadingPoint.lat.toFixed(4)}, {loadingPoint.lng.toFixed(4)}
                         </p>
                       )}
                       {isValidCoordinate(unloadingPoint) && (
-                        <p className="text-gray-500 text-xs">
+                        <p className="text-gray-700 text-xs">
                           Unloading: {unloadingPoint.lat.toFixed(4)}, {unloadingPoint.lng.toFixed(4)}
                         </p>
                       )}
                     </div>
 
                     <div>
-                      <p className="text-gray-500 uppercase tracking-wide text-xs font-semibold mb-1">Completed Route</p>
+                      <p className="text-gray-700 uppercase tracking-wide text-xs font-semibold mb-1">Completed Route</p>
                       <p className="text-gray-900 font-medium">
                         {enhanced?.distanceMetrics
                           ? formatDistance(enhanced.distanceMetrics.completedDistance)
                           : "Not available"}
                       </p>
                       {enhanced?.distanceMetrics && (
-                        <p className="text-gray-500 text-xs mt-1">
+                        <p className="text-gray-700 text-xs mt-1">
                           Progress: {enhanced.progressPercentage.toFixed(1)}%
                         </p>
                       )}
                     </div>
 
                     <div>
-                      <p className="text-gray-500 uppercase tracking-wide text-xs font-semibold mb-1">Remaining Route</p>
+                      <p className="text-gray-700 uppercase tracking-wide text-xs font-semibold mb-1">Remaining Route</p>
                       <p className="text-gray-900 font-medium">
                         {enhanced?.distanceMetrics
                           ? formatDistance(enhanced.distanceMetrics.remainingDistance)
                           : "Not available"}
                       </p>
                       {eta && (
-                        <p className="text-gray-500 text-xs mt-1">
+                        <p className="text-gray-700 text-xs mt-1">
                           ETA in {formatDuration(eta.estimatedDurationMinutes)} ({eta.confidence} confidence)
                         </p>
                       )}

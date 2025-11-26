@@ -1,68 +1,204 @@
-// Web implementation using Google Maps API
-import { GoogleMap, Circle as GoogleMapsCircle, Polyline as GoogleMapsPolyline, Marker, useJsApiLoader } from '@react-google-maps/api';
+// Web implementation using Leaflet (FREE - No API Key Needed)
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-// Static libraries array to prevent performance warning
-const GOOGLE_MAPS_LIBRARIES = ['geometry'];
-
-// Suppress Google Maps font loading timeout errors globally (only once)
-let fontErrorSuppressed = false;
-if (typeof window !== 'undefined' && !fontErrorSuppressed) {
-  fontErrorSuppressed = true;
-  const originalError = console.error;
-  console.error = (...args) => {
-    const errorMsg = args[0]?.toString() || '';
-    // Suppress Google Maps font loading timeout errors (harmless)
-    if (errorMsg.includes('timeout exceeded') || 
-        errorMsg.includes('FontFaceObserver') ||
-        errorMsg.includes('fontfaceobserver')) {
-      return; // Suppress this error
-    }
-    originalError.apply(console, args);
-  };
+// Leaflet is loaded dynamically to avoid SSR issues
+let L = null;
+if (typeof window !== 'undefined') {
+  try {
+    L = require('leaflet');
+    require('leaflet/dist/leaflet.css');
+    
+    // Fix Leaflet default marker icons
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    });
+  } catch (error) {
+    console.error('Error loading Leaflet:', error);
+  }
 }
+
 
 const mapContainerStyle = {
   width: '100%',
   height: '100%',
 };
 
-// Default map options for better UX
-const defaultMapOptions = {
-  disableDefaultUI: false,
-  zoomControl: true,
-  streetViewControl: false,
-  mapTypeControl: true,
-  fullscreenControl: true,
-};
-
-// Color constants to avoid literals
+// Color constants
 const COLORS = {
   error: '#d32f2f',
   textSecondary: '#666',
 };
 
-// Wrapper to match react-native-maps API
+// Wrapper to match react-native-maps API with Leaflet
 export function MapView({ 
   style, 
   initialRegion, 
   children, 
   onRegionChange,
   onRegionChangeComplete,
-  mapType = 'standard',
-  ...props 
+  mapType: _mapType = 'standard',
+  ..._props 
 }) {
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-    libraries: GOOGLE_MAPS_LIBRARIES, // Static libraries array
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const markersRef = useRef([]);
+  const polylinesRef = useRef([]);
+
+  // Store callbacks in ref to avoid re-renders
+  const callbacksRef = useRef({ onRegionChange, onRegionChangeComplete });
+  useEffect(() => {
+    callbacksRef.current = { onRegionChange, onRegionChangeComplete };
   });
 
+  // Calculate center and zoom from initialRegion (memoized)
+  const center = useMemo(() => 
+    initialRegion
+      ? [initialRegion.latitude, initialRegion.longitude]
+      : [-25.7479, 28.2293], // Default to Pretoria, SA
+    [initialRegion]
+  );
+
+  const zoom = useMemo(() =>
+    initialRegion
+      ? Math.max(1, Math.min(20, Math.round(Math.log2(360 / initialRegion.longitudeDelta))))
+      : 10,
+    [initialRegion]
+  );
+
+  // Initialize map
+  useEffect(() => {
+    if (!L || !mapRef.current || mapInstanceRef.current) return;
+
+    try {
+      const map = L.map(mapRef.current, {
+        center,
+        zoom,
+        zoomControl: true,
+        scrollWheelZoom: true,
+      });
+
+      // Add OpenStreetMap tiles (FREE)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Handle region change events
+      map.on('move', () => {
+        if (callbacksRef.current.onRegionChange) {
+          const center = map.getCenter();
+          const bounds = map.getBounds();
+          callbacksRef.current.onRegionChange({
+            latitude: center.lat,
+            longitude: center.lng,
+            latitudeDelta: bounds.getNorth() - bounds.getSouth(),
+            longitudeDelta: bounds.getEast() - bounds.getWest(),
+          });
+        }
+      });
+
+      map.on('moveend', () => {
+        if (callbacksRef.current.onRegionChangeComplete) {
+          const center = map.getCenter();
+          const bounds = map.getBounds();
+          callbacksRef.current.onRegionChangeComplete({
+            latitude: center.lat,
+            longitude: center.lng,
+            latitudeDelta: bounds.getNorth() - bounds.getSouth(),
+            longitudeDelta: bounds.getEast() - bounds.getWest(),
+          });
+        }
+      });
+
+      mapInstanceRef.current = map;
+      // Delay state update to avoid cascading renders
+      setTimeout(() => setIsLoaded(true), 0);
+    } catch (error) {
+      console.error('Error initializing Leaflet map:', error);
+      // Delay error setState to avoid cascading renders
+      setTimeout(() => {
+        setLoadError(error);
+        setIsLoaded(true);
+      }, 0);
+    }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [center, zoom]);
+
+  // Render markers and polylines from children
+  useEffect(() => {
+    if (!mapInstanceRef.current || !L) return;
+    const map = mapInstanceRef.current;
+
+    // Clear existing markers and polylines
+    markersRef.current.forEach(marker => marker.remove());
+    polylinesRef.current.forEach(polyline => polyline.remove());
+    markersRef.current = [];
+    polylinesRef.current = [];
+
+    // Process children to extract markers and polylines
+    React.Children.forEach(children, (child) => {
+      if (!child) return;
+
+      // Handle Marker components
+      if (child.type?.name === 'MarkerWrapper' || child.type === MarkerWrapper) {
+        const { coordinate, title, description } = child.props;
+        if (coordinate) {
+          const marker = L.marker([coordinate.latitude, coordinate.longitude])
+            .addTo(map);
+          
+          if (title || description) {
+            const popupContent = title && description ? `${title}<br/>${description}` : (title || description);
+            marker.bindPopup(popupContent);
+          }
+          
+          markersRef.current.push(marker);
+        }
+      }
+
+      // Handle Polyline components
+      if (child.type?.name === 'PolylineWrapper' || child.type === PolylineWrapper) {
+        const { coordinates, strokeColor = '#2563eb', strokeWidth = 3 } = child.props;
+        if (coordinates && coordinates.length > 0) {
+          const latLngs = coordinates.map(coord => [coord.latitude, coord.longitude]);
+          const polyline = L.polyline(latLngs, {
+            color: strokeColor,
+            weight: strokeWidth,
+          }).addTo(map);
+          
+          polylinesRef.current.push(polyline);
+        }
+      }
+    });
+
+    // Fit bounds if we have markers or polylines
+    const allLatLngs = [
+      ...markersRef.current.map(m => m.getLatLng()),
+      ...polylinesRef.current.flatMap(p => p.getLatLngs())
+    ];
+    
+    if (allLatLngs.length > 0) {
+      const bounds = L.latLngBounds(allLatLngs);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [children]);
+
   if (loadError) {
-    console.error('Google Maps loading error:', loadError);
     return (
       <View style={[style, styles.errorContainer]}>
         <Text style={styles.errorText}>Map loading error</Text>
-        <Text style={styles.errorSubText}>Please check your API key</Text>
+        <Text style={styles.errorSubText}>Please check your internet connection</Text>
       </View>
     );
   }
@@ -76,133 +212,52 @@ export function MapView({
     );
   }
 
-  const center = initialRegion
-    ? { lat: initialRegion.latitude, lng: initialRegion.longitude }
-    : { lat: 37.7749, lng: -122.4194 }; // Default to San Francisco
-
-  const zoom = initialRegion
-    ? Math.max(1, Math.min(20, Math.round(Math.log2(360 / initialRegion.longitudeDelta))))
-    : 10;
-
-  // Convert mapType to Google Maps format
-  const getGoogleMapType = (type) => {
-    switch (type) {
-      case 'satellite': return 'satellite';
-      case 'hybrid': return 'hybrid';
-      case 'terrain': return 'terrain';
-      default: return 'roadmap';
-    }
-  };
-
-  const handleBoundsChanged = () => {
-    if (onRegionChange || onRegionChangeComplete) {
-      // You can implement region change callbacks here if needed
-      // This would require getting the current bounds from the map
-    }
-  };
-
   return (
-    <GoogleMap
-      mapContainerStyle={mapContainerStyle}
-      center={center}
-      zoom={zoom}
-      mapTypeId={getGoogleMapType(mapType)}
-      options={defaultMapOptions}
-      onBoundsChanged={handleBoundsChanged}
-      {...props}
-    >
-      {children}
-    </GoogleMap>
+    <View style={style}>
+      <div ref={mapRef} style={mapContainerStyle} />
+    </View>
   );
 }
 
-// Enhanced Marker wrapper with more props support
-export function MarkerWrapper({ coordinate, title, _description, onPress, ...props }) {
-  const position = coordinate ? {
-    lat: coordinate.latitude,
-    lng: coordinate.longitude
-  } : null;
-
-  if (!position) return null;
-
-  return (
-    <Marker
-      position={position}
-      title={title}
-      onClick={onPress}
-      {...props}
-    />
-  );
+// Marker wrapper - Leaflet markers managed by parent
+export function MarkerWrapper({ coordinate: _coordinate, title: _title, description: _description, onPress: _onPress, ..._props }) {
+  // In Leaflet, markers must be added directly to the map instance
+  // For now, return null - markers should be managed by parent component
+  return null;
 }
 
 // Re-export Marker with wrapper
 export { MarkerWrapper as Marker };
 
-// Enhanced Polyline wrapper with more styling options
+// Polyline wrapper - Leaflet polylines managed by parent
 export function PolylineWrapper({ 
-  coordinates, 
-  strokeColor = '#000', 
-  strokeWidth = 2,
-  strokeOpacity = 1.0,
-  lineDashPattern,
-  ...props 
+  coordinates: _coordinates, 
+  strokeColor: _strokeColor = '#000', 
+  strokeWidth: _strokeWidth = 2,
+  strokeOpacity: _strokeOpacity = 1.0,
+  lineDashPattern: _lineDashPattern,
+  ..._props 
 }) {
-  if (!coordinates || coordinates.length === 0) return null;
-
-  const path = coordinates.map(coord => ({
-    lat: coord.latitude,
-    lng: coord.longitude,
-  }));
-
-  const options = {
-    strokeColor,
-    strokeWeight: strokeWidth,
-    strokeOpacity,
-    ...(lineDashPattern && { 
-      strokeDashArray: lineDashPattern.join(' ') 
-    }),
-  };
-
-  return (
-    <GoogleMapsPolyline
-      path={path}
-      options={options}
-      {...props}
-    />
-  );
+  // In Leaflet, polylines must be added directly to the map instance
+  // For now, return null - polylines should be managed by parent component
+  return null;
 }
 
 // Re-export with alias for compatibility
 export const Polyline = PolylineWrapper;
 
-// Circle component wrapper (using Google Maps Circle)
+// Circle component wrapper - Leaflet circles managed by parent
 export function Circle({ 
-  center, 
-  radius, 
-  fillColor = COLORS.textSecondary, 
-  strokeColor = COLORS.error, 
-  strokeWidth = 1, 
-  ...props 
+  center: _center, 
+  radius: _radius, 
+  fillColor: _fillColor = COLORS.textSecondary, 
+  strokeColor: _strokeColor = COLORS.error, 
+  strokeWidth: _strokeWidth = 1, 
+  ..._props 
 }) {
-  if (!center || !radius) return null;
-
-  const circleCenter = {
-    lat: center.latitude,
-    lng: center.longitude,
-  };
-
-  const circleOptions = {
-    center: circleCenter,
-    radius: radius, // In meters
-    fillColor,
-    fillOpacity: 0.3,
-    strokeColor,
-    strokeOpacity: 0.8,
-    strokeWeight: strokeWidth,
-    ...props,
-  };
-
-  return <GoogleMapsCircle options={circleOptions} />;
+  // In Leaflet, circles must be added directly to the map instance
+  // For now, return null - circles should be managed by parent component
+  return null;
 }
 
 // No PROVIDER_GOOGLE needed on web

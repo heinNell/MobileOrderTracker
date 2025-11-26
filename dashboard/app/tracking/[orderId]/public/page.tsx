@@ -1,31 +1,47 @@
+// app/tracking/[orderId]/page.tsx
 "use client";
 
-import { GoogleMap, LoadScript, Marker, Polyline } from "@react-google-maps/api";
+import { lineString } from "@turf/helpers";
+import length from "@turf/length";
+import L, { LatLngExpression } from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import
-  {
-    calculateDistanceMatrix,
-    calculateETAFromDistanceMatrix,
-    type DistanceMatrixElement
-  } from "../../../../lib/distanceMatrixUtils";
-import
-  {
-    createEnhancedRouteData,
-    ETACalculator,
-    formatDistance,
-    formatDuration,
-    formatTime,
-    getStatusColor,
-    parsePostGISPoint,
-    RouteProgressCalculator,
-    type EnhancedRouteData,
-    type ETAData,
-    type LatLngLiteral,
-  } from "../../../../lib/routeUtils";
+import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
+import { AdvancedETACalculator } from "../../../../lib/leaflet/advanced-eta";
+import { DistanceMatrixService } from "../../../../lib/leaflet/distance-matrix";
+import { formatDistance, formatDuration, getStatusColor } from "../../../../lib/routeUtils";
 import { supabase } from "../../../../lib/supabase";
 
-// Type definitions
+// Fix Leaflet default icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const truckIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/32/3075/3075975.png",
+  iconSize: [40, 40],
+  iconAnchor: [20, 40],
+  popupAnchor: [0, -40],
+});
+
+const loadingIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/32/854/854877.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+const unloadingIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/32/3062/3062619.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+type LatLngTuple = [number, number];
+
 interface TrackingData {
   order_id: string;
   order_number: string;
@@ -41,9 +57,6 @@ interface TrackingData {
   total_duration_minutes: number;
   average_speed_kmh: number;
   last_update: string;
-  loading_point_location?: string;
-  unloading_point_location?: string;
-  // New coordinate fields
   loading_point_latitude?: number;
   loading_point_longitude?: number;
   unloading_point_latitude?: number;
@@ -54,948 +67,325 @@ interface LocationPoint {
   latitude: number;
   longitude: number;
   created_at: string;
-  order_id: string;
 }
 
-// Type overrides for Google Maps
-const GoogleMapTyped = GoogleMap as any;
-const LoadScriptTyped = LoadScript as any;
-const MarkerTyped = Marker as any;
-const PolylineTyped = Polyline as any;
+interface RouteProgress {
+  progressPercentage: number;
+  completedDistance: number;
+  remainingDistance: number;
+  completedPath: LatLngTuple[];
+  remainingPath: LatLngTuple[];
+}
 
-// Helper function to format distance from Distance Matrix result
-const formatDistanceFromMatrix = (distanceMeters: number): string => {
-  if (distanceMeters < 1000) {
-    return `${Math.round(distanceMeters)} m`;
-  }
-  return `${(distanceMeters / 1000).toFixed(1)} km`;
-};
-
-// Helper function to get ETA color class based on delay
-const getETAColorClass = (trafficDelay?: number): string => {
-  if (!trafficDelay) return "text-green-600";
-  if (trafficDelay < 5) return "text-green-600";
-  if (trafficDelay < 15) return "text-yellow-600";
-  return "text-red-600";
-};
+interface ETAData {
+  estimatedDurationMinutes: number;
+  estimatedArrivalTime: Date;
+  currentSpeed: number;
+  averageSpeed: number;
+  speedTrend: "increasing" | "decreasing" | "stable";
+  confidence: "high" | "medium" | "low";
+  onRoute: boolean;
+  lastUpdated: Date;
+}
 
 export default function PublicOrderTracking() {
   const params = useParams();
   const orderId = params.orderId as string;
 
-  // State variables
   const [trackingData, setTrackingData] = useState<TrackingData | null>(null);
-  const [route, setRoute] = useState<LocationPoint[]>([]);
+  const [routeHistory, setRouteHistory] = useState<LocationPoint[]>([]);
+  const [plannedRoute, setPlannedRoute] = useState<LatLngTuple[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [enhancedRoute, setEnhancedRoute] = useState<EnhancedRouteData | null>(null);
-  const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
-  const [directionsRoute, setDirectionsRoute] = useState<LatLngLiteral[]>([]);
-  const [etaData, setETAData] = useState<ETAData | null>(null);
-  const [distanceMatrixData, setDistanceMatrixData] = useState<DistanceMatrixElement | null>(null);
-  const [realTimeETA, setRealTimeETA] = useState<{
-    arrivalTime: Date;
-    durationMinutes: number;
-    distanceKm?: number;
-    trafficDelay?: number;
-  } | null>(null);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Google Maps service references  
-  const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
-  const distanceMatrixServiceRef = useRef<google.maps.DistanceMatrixService | null>(null);
-  const routeCalculatorRef = useRef(new RouteProgressCalculator());
-  const etaCalculatorRef = useRef(new ETACalculator());
-  const previousLocationRef = useRef<LocationPoint | null>(null);
-  const isMountedRef = useRef(true);
+  const [routeProgress, setRouteProgress] = useState<RouteProgress | null>(null);
+  const [etaData, setEtaData] = useState<ETAData | null>(null);
+  const [liveRemaining, setLiveRemaining] = useState<{ distance: number; duration: number } | null>(null);
 
-  // Memoized map configuration
-  const mapContainerStyle = useMemo(
-    () => ({
-      width: "100%",
-      height: "500px",
-    }),
-    []
+  const speedHistoryRef = useRef<{ time: Date; speed: number }[]>([]);
+  const isMounted = useRef(true);
+  
+  // Advanced ETA Calculator
+  const etaCalculatorRef = useRef<AdvancedETACalculator>(new AdvancedETACalculator());
+  const distanceMatrixServiceRef = useRef<DistanceMatrixService>(
+    new DistanceMatrixService(process.env.NEXT_PUBLIC_ORS_API_KEY || '', 'ors')
   );
 
-  const mapOptions = useMemo(
-    () => ({
-      zoomControl: true,
-      streetViewControl: false,
-      mapTypeControl: true,
-      fullscreenControl: true,
-    }),
-    []
-  );
-
-  // Initialize Directions Service
-  useEffect(() => {
-    if (mapRef && !directionsServiceRef.current) {
-      directionsServiceRef.current = new google.maps.DirectionsService();
-      console.log("DirectionsService initialized");
-    }
-  }, [mapRef]);
-
-  // Helper function to get coordinates from either lat/lng columns or PostGIS location
-  const getTrackingCoordinates = useCallback((data: TrackingData) => {
-    // First try to use the new latitude/longitude columns
-    if (data.loading_point_latitude && data.loading_point_longitude && 
-        data.unloading_point_latitude && data.unloading_point_longitude) {
-      return {
-        loadingPoint: {
-          lat: Number(data.loading_point_latitude),
-          lng: Number(data.loading_point_longitude)
-        },
-        unloadingPoint: {
-          lat: Number(data.unloading_point_latitude),
-          lng: Number(data.unloading_point_longitude)
-        }
-      };
-    }
-    
-    // Fallback to PostGIS location parsing
+  // OpenRouteService API calls
+  const fetchPlannedRoute = async (start: LatLngTuple, end: LatLngTuple) => {
+    if (!process.env.NEXT_PUBLIC_ORS_API_KEY) return;
     try {
-      const loadingPoint = data.loading_point_location 
-        ? parsePostGISPoint(data.loading_point_location)
-        : { lat: 0, lng: 0 };
-      const unloadingPoint = data.unloading_point_location 
-        ? parsePostGISPoint(data.unloading_point_location)
-        : { lat: 0, lng: 0 };
-      return { loadingPoint, unloadingPoint };
-    } catch (error) {
-      console.error(`Error parsing coordinates for order ${data.order_id}:`, error);
-      return {
-        loadingPoint: { lat: 0, lng: 0 },
-        unloadingPoint: { lat: 0, lng: 0 }
-      };
-    }
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    // Capture ref values at effect time for cleanup
-    const routeCalculator = routeCalculatorRef.current;
-    const etaCalculator = etaCalculatorRef.current;
-
-    return () => {
-      isMountedRef.current = false;
-      routeCalculator.clearCache();
-      etaCalculator.clearHistory();
-    };
-  }, []);
-
-  // Fetch planned route from Google Directions API
-  const fetchPlannedRoute = useCallback(
-    async (origin: LatLngLiteral, destination: LatLngLiteral): Promise<LatLngLiteral[]> => {
-      if (!directionsServiceRef.current) {
-        console.warn("DirectionsService not available");
-        return [];
-      }
-
-      try {
-        const result = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
-          directionsServiceRef.current!.route(
-            {
-              origin,
-              destination,
-              travelMode: google.maps.TravelMode.DRIVING,
-              unitSystem: google.maps.UnitSystem.METRIC,
-              avoidHighways: false,
-              avoidTolls: false,
-            },
-            (result, status) => {
-              if (status === google.maps.DirectionsStatus.OK && result) {
-                resolve(result);
-              } else {
-                reject(new Error(`Directions API failed: ${status}`));
-              }
-            }
-          );
-        });
-
-        if (result.routes?.[0]) {
-          const path = result.routes[0].overview_path.map((point) => ({
-            lat: point.lat(),
-            lng: point.lng(),
-          }));
-          console.log("Planned route fetched:", path.length, "points");
-          return path;
-        }
-      } catch (error) {
-        console.error("Error fetching planned route:", error);
-      }
-
-      return [];
-    },
-    []
-  );
-
-  // Update planned route when tracking data is available
-  useEffect(() => {
-    const updatePlannedRoute = async () => {
-      if (!trackingData || !directionsServiceRef.current) return;
-
-      try {
-        const { loadingPoint, unloadingPoint } = getTrackingCoordinates(trackingData);
-
-        if (loadingPoint.lat !== 0 && unloadingPoint.lat !== 0) {
-          const plannedRoute = await fetchPlannedRoute(loadingPoint, unloadingPoint);
-          if (isMountedRef.current) {
-            setDirectionsRoute(plannedRoute);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to update planned route:", err);
-      }
-    };
-
-    updatePlannedRoute();
-  }, [trackingData, fetchPlannedRoute, getTrackingCoordinates]);
-
-  // Calculate route progress with optimized calculator and real-time ETA
-  const calculateRouteProgress = useCallback(async (): Promise<void> => {
-    if (!trackingData || route.length === 0) {
-      if (isMountedRef.current) {
-        setEnhancedRoute(null);
-        setETAData(null);
-      }
-      return;
-    }
-
-    try {
-      // Convert route to LatLngLiteral
-      const actualRoute = route.map((point) => ({
-        lat: point.latitude,
-        lng: point.longitude,
-      }));
-
-      const currentPosition = {
-        lat: route[route.length - 1].latitude,
-        lng: route[route.length - 1].longitude,
-      };
-
-      // Add location to ETA calculator for speed trending
-      if (previousLocationRef.current) {
-        const prevPoint = {
-          lat: previousLocationRef.current.latitude,
-          lng: previousLocationRef.current.longitude,
-        };
-        etaCalculatorRef.current.addLocationUpdate(
-          currentPosition,
-          prevPoint,
-          new Date(route[route.length - 1].created_at)
-        );
-      }
-      previousLocationRef.current = route[route.length - 1];
-
-      // Create enhanced route data with all calculations
-      const enhanced = createEnhancedRouteData(
-        orderId,
-        actualRoute,
-        directionsRoute.length > 0 ? directionsRoute : [currentPosition],
-        currentPosition,
-        routeCalculatorRef.current,
-        etaCalculatorRef.current
+      const res = await fetch(
+        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${process.env.NEXT_PUBLIC_ORS_API_KEY}&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}`
       );
-
-      if (isMountedRef.current) {
-        setEnhancedRoute(enhanced);
-        if (enhanced?.eta) {
-          setETAData(enhanced.eta);
-        }
+      const data = await res.json();
+      if (data.features?.[0]?.geometry?.coordinates) {
+        const path = data.features[0].geometry.coordinates.map(([lng, lat]: number[]) => [lat, lng] as LatLngTuple);
+        if (isMounted.current) setPlannedRoute(path);
       }
-    } catch (error) {
-      console.error("Error calculating route progress:", error);
+    } catch (err) {
+      console.error("Route fetch failed:", err);
     }
-  }, [trackingData, route, directionsRoute, orderId]);
+  };
 
-  // Update route progress when data changes
+  const updateLiveDistance = async (current: LatLngTuple, destination: LatLngTuple) => {
+    if (!process.env.NEXT_PUBLIC_ORS_API_KEY) return;
+    try {
+      const distanceMatrixService = distanceMatrixServiceRef.current;
+      const result = await distanceMatrixService.getDistance(
+        { lat: current[0], lng: current[1] },
+        { lat: destination[0], lng: destination[1] },
+        { trafficAware: false, useCache: true }
+      );
+      
+      if (result) {
+        setLiveRemaining({
+          distance: result.distance / 1000,
+          duration: result.duration / 60,
+        });
+      }
+    } catch (err) {
+      console.error("Matrix failed:", err);
+    }
+  };
+
+  // Get coordinates
+  const coords = useMemo(() => {
+    if (!trackingData) return { current: [0, 0] as LatLngTuple, loading: null, unloading: null };
+
+    const current: LatLngTuple = [trackingData.current_lat, trackingData.current_lng];
+    const loading = trackingData.loading_point_latitude
+      ? [trackingData.loading_point_latitude, trackingData.loading_point_longitude] as LatLngTuple
+      : null;
+    const unloading = trackingData.unloading_point_latitude
+      ? [trackingData.unloading_point_latitude, trackingData.unloading_point_longitude] as LatLngTuple
+      : null;
+
+    return { current, loading, unloading };
+  }, [trackingData]);
+
+  // Advanced route progress + ETA using AdvancedETACalculator
+  const calculateProgressAndETA = useCallback(() => {
+    if (!plannedRoute.length || routeHistory.length < 2 || !coords.unloading) return;
+
+    const calculator = etaCalculatorRef.current;
+    const actualPath = routeHistory.map(p => [p.latitude, p.longitude] as LatLngTuple);
+    const currentPos = actualPath[actualPath.length - 1];
+    const currentLocation = {
+      lat: currentPos[0],
+      lng: currentPos[1],
+      timestamp: routeHistory[routeHistory.length - 1].created_at,
+    };
+
+    // Add location to advanced calculator
+    calculator.addLocationUpdate(currentLocation);
+
+    // Convert planned route to required format
+    const plannedRouteForCalc = plannedRoute.map(([lat, lng]) => ({ lat, lng }));
+    const destination = { lat: coords.unloading[0], lng: coords.unloading[1] };
+
+    // Calculate route progress
+    const progress = calculator.calculateRouteProgress(
+      currentLocation,
+      plannedRouteForCalc
+    );
+
+    // Calculate ETA
+    const eta = calculator.calculateETA(
+      currentLocation,
+      destination
+    );
+
+    // Calculate visual path progress for map
+    const plannedLine = lineString(plannedRoute);
+    const totalDistance = length(plannedLine, { units: "kilometers" });
+    
+    // Snap current position to planned route for visualization
+    let snappedIndex = 0;
+    let minDist = Infinity;
+    plannedRoute.forEach((point, i) => {
+      const d = Math.hypot(point[0] - currentPos[0], point[1] - currentPos[1]);
+      if (d < minDist) {
+        minDist = d;
+        snappedIndex = i;
+      }
+    });
+
+    const completedDistance = progress.completedDistance / 1000; // Convert to km
+    const remainingDistance = progress.remainingDistance / 1000; // Convert to km
+
+    setRouteProgress({
+      progressPercentage: progress.progressPercentage,
+      completedDistance,
+      remainingDistance,
+      completedPath: actualPath,
+      remainingPath: plannedRoute.slice(snappedIndex),
+    });
+
+    // Map to legacy ETAData format for existing UI
+    setEtaData({
+      estimatedDurationMinutes: eta.remainingDuration / 60,
+      estimatedArrivalTime: eta.estimatedArrival,
+      currentSpeed: eta.currentSpeed,
+      averageSpeed: eta.averageSpeed,
+      speedTrend: eta.speedTrend,
+      confidence: eta.confidence,
+      onRoute: progress.isOnRoute,
+      lastUpdated: new Date(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannedRoute, routeHistory, liveRemaining, coords.unloading]);
+
   useEffect(() => {
-    calculateRouteProgress();
-  }, [calculateRouteProgress]);
+    if (plannedRoute.length && routeHistory.length && coords.unloading) {
+      calculateProgressAndETA();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannedRoute, routeHistory, liveRemaining, calculateProgressAndETA, coords.unloading]);
 
-  // Fetch tracking data
+  // Fetch data
   const fetchTrackingData = useCallback(async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .rpc("get_tracking_data", { p_order_id: orderId })
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      if (!data) {
-        throw new Error("Tracking data not available for this order");
-      }
-
-      if (isMountedRef.current) {
+      const { data } = await supabase.rpc("get_tracking_data", { p_order_id: orderId }).single();
+      if (data && isMounted.current) {
         setTrackingData(data as TrackingData);
         setLoading(false);
       }
     } catch (err: any) {
-      console.error("Error fetching tracking data:", err);
-      if (isMountedRef.current) {
-        setError(err.message || "Failed to load tracking data");
-        setLoading(false);
-      }
+      if (isMounted.current) setError(err.message);
     }
   }, [orderId]);
 
-  // Fetch route history
-  const fetchRoute = useCallback(async () => {
-    try {
-      const { data, error: fetchError } = await supabase
-        .from("driver_locations")
-        .select("latitude, longitude, created_at, order_id")
-        .eq("order_id", orderId)
-        .not("latitude", "is", null)
-        .not("longitude", "is", null)
-        .order("created_at", { ascending: true });
-
-      if (fetchError) throw fetchError;
-
-      const routeData: LocationPoint[] = (data || []).map((point) => ({
-        latitude: point.latitude,
-        longitude: point.longitude,
-        created_at: point.created_at,
-        order_id: point.order_id || orderId,
-      }));
-
-      if (isMountedRef.current) {
-        setRoute(routeData);
-      }
-    } catch (err: any) {
-      console.error("Error fetching route:", err);
-    }
+  const fetchRouteHistory = useCallback(async () => {
+    const { data } = await supabase
+      .from("driver_locations")
+      .select("latitude, longitude, created_at")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true });
+    if (data) setRouteHistory(data);
   }, [orderId]);
 
-  // Set up data fetching and subscriptions
   useEffect(() => {
     if (!orderId) return;
-
-    // Initial fetch
     fetchTrackingData();
-    fetchRoute();
+    fetchRouteHistory();
 
-    // Real-time subscriptions
-    const locationChannel = supabase
-      .channel(`public_tracking_${orderId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "driver_locations",
-          filter: `order_id=eq.${orderId}`,
-        },
-        () => {
-          console.log("New location update received");
-          fetchTrackingData();
-          fetchRoute();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-          filter: `id=eq.${orderId}`,
-        },
-        () => {
-          console.log("Order status update received");
-          fetchTrackingData();
-        }
-      )
+    if (coords.loading && coords.unloading) {
+      fetchPlannedRoute(coords.loading, coords.unloading);
+      updateLiveDistance(coords.current, coords.unloading);
+      const interval = setInterval(() => updateLiveDistance(coords.current, coords.unloading), 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords, orderId]);
+
+  useEffect(() => {
+    const channel = supabase.channel(`tracking_${orderId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "driver_locations", filter: `order_id=eq.${orderId}` }, () => {
+        fetchRouteHistory();
+        fetchTrackingData();
+      })
       .subscribe();
 
-    // Periodic refresh (20 minutes)
-    const refreshInterval = setInterval(() => {
-      fetchTrackingData();
-      fetchRoute();
-      if (isMountedRef.current) {
-        setLastRefresh(new Date());
-      }
-    }, 20 * 60 * 1000);
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
 
-    return () => {
-      supabase.removeChannel(locationChannel);
-      clearInterval(refreshInterval);
-    };
-  }, [orderId, fetchTrackingData, fetchRoute]);
+  const center: LatLngExpression = coords.current[0] !== 0 ? coords.current : [0, 0];
 
-  // Calculate map center
-  const currentPosition = useMemo(
-    () =>
-      trackingData?.current_lat && trackingData?.current_lng
-        ? { lat: trackingData.current_lat, lng: trackingData.current_lng }
-        : route.length > 0
-          ? { lat: route[route.length - 1].latitude, lng: route[route.length - 1].longitude }
-          : { lat: 0, lng: 0 },
-    [trackingData, route]
-  );
-
-  // Fetch real-time distance matrix data for accurate ETA
-  const fetchDistanceMatrix = useCallback(async () => {
-    if (!trackingData || !currentPosition.lat || currentPosition.lat === 0) return;
-
-    try {
-      const { unloadingPoint } = getTrackingCoordinates(trackingData);
-      
-      if (unloadingPoint.lat === 0) return;
-
-      console.log("Fetching Distance Matrix data...");
-      const matrixResult = await calculateDistanceMatrix(
-        [currentPosition],
-        [unloadingPoint],
-        google.maps.TravelMode.DRIVING
-      );
-
-      if (matrixResult && isMountedRef.current) {
-        setDistanceMatrixData(matrixResult);
-        
-        // Calculate real-time ETA from Distance Matrix
-        const etaCalc = calculateETAFromDistanceMatrix(matrixResult);
-        setRealTimeETA({
-          arrivalTime: etaCalc.arrivalTime,
-          durationMinutes: etaCalc.durationMinutes,
-          distanceKm: etaCalc.distanceKm,
-          trafficDelay: matrixResult.duration_in_traffic 
-            ? (matrixResult.duration_in_traffic.value - matrixResult.duration.value) / 60
-            : undefined,
-        });
-
-        console.log("Distance Matrix data updated:", {
-          distance: matrixResult.distance.text,
-          duration: matrixResult.duration.text,
-          durationInTraffic: matrixResult.duration_in_traffic?.text,
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching Distance Matrix:", error);
-    }
-  }, [trackingData, currentPosition, getTrackingCoordinates]);
-
-  // Update Distance Matrix data periodically
-  useEffect(() => {
-    if (!trackingData || !mapRef) return;
-
-    // Initial fetch
-    fetchDistanceMatrix();
-
-    // Refresh every 5 minutes for traffic updates
-    const intervalId = setInterval(() => {
-      fetchDistanceMatrix();
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(intervalId);
-  }, [trackingData, mapRef, fetchDistanceMatrix]);
-
-  const mapCenter = useMemo(() => {
-    const points: LatLngLiteral[] = [];
-    
-    if (currentPosition.lat !== 0) points.push(currentPosition);
-    if (trackingData) {
-      const { loadingPoint, unloadingPoint } = getTrackingCoordinates(trackingData);
-      if (loadingPoint.lat !== 0) points.push(loadingPoint);
-      if (unloadingPoint.lat !== 0) points.push(unloadingPoint);
-    }
-    if (directionsRoute.length > 0) {
-      points.push(...directionsRoute.slice(0, Math.min(5, directionsRoute.length)));
-    }
-
-    if (points.length === 0) return { lat: 0, lng: 0 };
-    if (points.length === 1) return points[0];
-
-    const avgLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
-    const avgLng = points.reduce((sum, p) => sum + p.lng, 0) / points.length;
-    return { lat: avgLat, lng: avgLng };
-  }, [trackingData, directionsRoute, currentPosition, getTrackingCoordinates]);
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading tracking data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error || !trackingData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md">
-          <div className="text-red-500 text-6xl mb-4 text-center">⚠️</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
-            Tracking Not Available
-          </h2>
-          <p className="text-gray-600 text-center">
-            {error || "This order is not currently being tracked or the tracking link is invalid."}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  if (error || !trackingData) return <div className="text-center p-10 text-red-600">Tracking not available</div>;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="text-3xl md:text-4xl">🚚</span>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold">Live Tracking</h1>
-                <p className="text-blue-100 mt-1">Order #{trackingData.order_number}</p>
-              </div>
-            </div>
-            <div className="mt-3 md:mt-0">
-              <span
-                className={`px-4 py-2 rounded-full text-white text-sm font-bold shadow-md ${getStatusColor(
-                trackingData.status
-              )}`}
-              >
-                {trackingData.status.toUpperCase().replace("_", " ")}
-              </span>
-            </div>
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Live Tracking</h1>
+            <p className="text-xl">Order #{trackingData.order_number}</p>
           </div>
+          <span className={`px-6 py-3 rounded-full text-lg font-bold ${getStatusColor(trackingData.status)}`}>
+            {trackingData.status.replace("_", " ").toUpperCase()}
+          </span>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
-        {/* Order Details */}
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Order Details</h2>
-            <button
-              onClick={() => {
-                setLastRefresh(new Date());
-                fetchTrackingData();
-              }}
-              className="mt-2 md:mt-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Refresh
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            <div>
-              <div className="mb-4">
-                <label className="text-sm font-medium text-gray-500">Driver</label>
-                <p className="text-lg font-semibold text-gray-900">
-                  {trackingData.driver_name || "Not assigned"}
-                </p>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Dashboard */}
+        {routeProgress && etaData && (
+          <div className="bg-white rounded-xl shadow-xl p-6">
+            <h2 className="text-2xl font-bold mb-6">Route Progress & ETA</h2>
+            <div className="mb-8">
+              <div className="flex justify-between mb-2">
+                <span>Progress</span>
+                <span className="font-bold">{routeProgress.progressPercentage.toFixed(1)}%</span>
               </div>
-              <div className="mb-4">
-                <label className="text-sm font-medium text-gray-500">Loading Point</label>
-                <p className="text-gray-900">{trackingData.loading_point_name}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-500">Unloading Point</label>
-                <p className="text-gray-900">{trackingData.unloading_point_name}</p>
+              <div className="w-full bg-gray-200 rounded-full h-6">
+                <div className="h-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-full transition-all" style={{ width: `${routeProgress.progressPercentage}%` }} />
               </div>
             </div>
 
-            <div>
-              {trackingData.tracking_active && (
-                <>
-                  <div className="mb-4">
-                    <label className="text-sm font-medium text-gray-500">Trip Started</label>
-                    <p className="text-gray-900">{formatTime(trackingData.trip_start_time)}</p>
-                  </div>
-                  {trackingData.total_distance_km > 0 && (
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-gray-500">Distance Traveled</label>
-                      <p className="text-2xl font-bold text-blue-600">
-                        {trackingData.total_distance_km.toFixed(2)} km
-                      </p>
-                    </div>
-                  )}
-                  {trackingData.total_duration_minutes > 0 && (
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-gray-500">Duration</label>
-                      <p className="text-2xl font-bold text-green-600">
-                        {formatDuration(trackingData.total_duration_minutes)}
-                      </p>
-                    </div>
-                  )}
-                  {trackingData.average_speed_kmh > 0 && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Average Speed</label>
-                      <p className="text-2xl font-bold text-purple-600">
-                        {trackingData.average_speed_kmh.toFixed(1)} km/h
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-              {!trackingData.tracking_active && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-yellow-800 font-medium">
-                    Tracking is not currently active for this order
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Enhanced Route Progress Dashboard */}
-        {enhancedRoute && (
-          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Route Progress</h2>
-                <p className="text-gray-600 mt-1">Real-time tracking with ETA calculations</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="text-3xl">Estimated Arrival</div>
+                <div className="text-4xl font-bold text-blue-600">{formatDuration(etaData.estimatedDurationMinutes)}</div>
+                <div className="text-sm">{etaData.estimatedArrivalTime.toLocaleTimeString()}</div>
               </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">Route Progress</span>
-                <span className="text-sm font-bold text-gray-900">
-                  {enhancedRoute.progressPercentage.toFixed(1)}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-4">
-                <div
-                  className="h-4 rounded-full transition-all duration-500 bg-green-500"
-                  style={{ width: `${Math.min(enhancedRoute.progressPercentage, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* ETA Card with Real-time Distance Matrix Data */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
-                <div className="flex items-center">
-                  <span className="text-2xl">⏱️</span>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-blue-600">Estimated Arrival</p>
-                    {realTimeETA ? (
-                      <>
-                        <p className={`text-2xl font-bold ${getETAColorClass(realTimeETA.trafficDelay)}`}>
-                          {formatDuration(realTimeETA.durationMinutes)}
-                        </p>
-                        <p className="text-xs text-blue-700 mt-1">
-                          {realTimeETA.arrivalTime.toLocaleTimeString()}
-                        </p>
-                        {realTimeETA.trafficDelay && realTimeETA.trafficDelay > 5 && (
-                          <p className="text-xs text-orange-600 mt-1">
-                            +{Math.round(realTimeETA.trafficDelay)}min traffic
-                          </p>
-                        )}
-                      </>
-                    ) : etaData?.estimatedDurationMinutes ? (
-                      <>
-                        <p className="text-2xl font-bold text-blue-900">
-                          {formatDuration(etaData.estimatedDurationMinutes)}
-                        </p>
-                        <p className="text-xs text-blue-700 mt-1">
-                          {etaData.estimatedArrivalTime.toLocaleTimeString()}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-lg text-blue-700">Calculating...</p>
-                    )}
-                  </div>
+              <div className="bg-green-50 rounded-lg p-4">
+                <div className="text-sm text-green-600">Remaining</div>
+                <div className="text-2xl font-bold text-green-700">
+                  {liveRemaining ? formatDistance(liveRemaining.distance) : formatDistance(routeProgress.remainingDistance)}
                 </div>
               </div>
-
-              {/* Distance Traveled */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
-                <div className="flex items-center">
-                  <span className="text-2xl">📍</span>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-green-600">Distance Traveled</p>
-                    <p className="text-2xl font-bold text-green-900">
-                      {formatDistance(enhancedRoute.distanceMetrics.completedDistance)}
-                    </p>
-                  </div>
-                </div>
+              <div className="bg-purple-50 rounded-lg p-4">
+                <div className="text-sm text-purple-600">Speed</div>
+                <div className="text-2xl font-bold text-purple-700">{etaData.currentSpeed.toFixed(1)} km/h</div>
+                <div className="text-xs">{etaData.speedTrend === "increasing" ? "Accelerating" : etaData.speedTrend === "decreasing" ? "Slowing" : "Steady"}</div>
               </div>
-
-              {/* Distance Remaining - with Distance Matrix Data */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
-                <div className="flex items-center">
-                  <span className="text-2xl">🎯</span>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-purple-600">Distance Remaining</p>
-                    {distanceMatrixData ? (
-                      <>
-                        <p className="text-2xl font-bold text-purple-900">
-                          {formatDistanceFromMatrix(distanceMatrixData.distance.value)}
-                        </p>
-                        <p className="text-xs text-purple-700 mt-1">
-                          (Live traffic data)
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-2xl font-bold text-purple-900">
-                        {formatDistance(enhancedRoute.distanceMetrics.remainingDistance)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Current Speed with Trend */}
-              <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4">
-                <div className="flex items-center">
-                  <span className="text-2xl">🚀</span>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-amber-600">Current Speed</p>
-                    <p className="text-2xl font-bold text-amber-900">
-                      {etaData?.currentSpeed.toFixed(1) || "0"} km/h
-                    </p>
-                    {etaData && (
-                      <p className="text-xs text-amber-700 mt-1">
-                        {etaData.speedTrend === "increasing" && "📈 Accelerating"}
-                        {etaData.speedTrend === "decreasing" && "📉 Slowing"}
-                        {etaData.speedTrend === "stable" && "➡️ Steady"}
-                      </p>
-                    )}
-                  </div>
+              <div className="bg-amber-50 rounded-lg p-4">
+                <div className="text-sm text-amber-600">Confidence</div>
+                <div className={`text-2xl font-bold ${etaData.confidence === "high" ? "text-green-600" : etaData.confidence === "medium" ? "text-yellow-600" : "text-red-600"}`}>
+                  {etaData.confidence.toUpperCase()}
                 </div>
               </div>
             </div>
-
-            {/* ETA Confidence & Details */}
-            {etaData && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-sm">
-                  <div>
-                    <p className="text-gray-600">ETA Confidence</p>
-                    <p className={`text-lg font-semibold mt-1 ${
-                      etaData.confidence === "high" ? "text-green-600" :
-                      etaData.confidence === "medium" ? "text-yellow-600" :
-                      "text-red-600"
-                    }`}>
-                      {etaData.confidence.charAt(0).toUpperCase() + etaData.confidence.slice(1)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Average Speed (15min)</p>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">
-                      {etaData.averageSpeed.toFixed(1)} km/h
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Route Status</p>
-                    <p className={`text-lg font-semibold mt-1 ${
-                      etaData.onRoute ? "text-green-600" : "text-orange-600"
-                    }`}>
-                      {etaData.onRoute ? "On Route" : "Off Route"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Last Updated</p>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">
-                      {etaData.lastUpdated.toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* Map Container */}
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Live Location & Route Progress</h2>
-            <div className="text-sm text-gray-500 mt-2 md:mt-0">
-              Last updated: {lastRefresh.toLocaleTimeString()}
-            </div>
+        {/* Map */}
+        <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+          <MapContainer center={center} zoom={13} style={{ height: "600px" }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+
+            {plannedRoute.length > 0 && <Polyline positions={plannedRoute} color="#94a3b8" weight={5} opacity={0.6} />}
+
+            {routeProgress && (
+              <>
+                <Polyline positions={routeProgress.completedPath} color="#10b981" weight={7} />
+                <Polyline positions={routeProgress.remainingPath} color="#ef4444" weight={6} opacity={0.9} />
+              </>
+            )}
+
+            {coords.current[0] !== 0 && (
+              <Marker position={coords.current} icon={truckIcon}>
+                <Popup>{trackingData.driver_name} • {routeProgress?.progressPercentage.toFixed(1)}% complete</Popup>
+              </Marker>
+            )}
+
+            {coords.loading && <Marker position={coords.loading} icon={loadingIcon} />}
+            {coords.unloading && <Marker position={coords.unloading} icon={unloadingIcon} />}
+          </MapContainer>
+
+          <div className="p-4 bg-gray-50 border-t flex flex-wrap gap-6 text-sm">
+            <div className="flex items-center gap-2"><div className="w-6 h-1 bg-green-500"></div> Completed</div>
+            <div className="flex items-center gap-2"><div className="w-6 h-1 bg-red-500"></div> Remaining</div>
+            <div className="flex items-center gap-2"><div className="w-6 h-1 bg-gray-400"></div> Planned</div>
           </div>
-
-          <LoadScriptTyped googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-            <GoogleMapTyped
-              mapContainerStyle={mapContainerStyle}
-              center={mapCenter}
-              zoom={13}
-              options={mapOptions}
-              onLoad={(map: google.maps.Map) => {
-                setMapRef(map);
-                // Initialize Google Maps services
-                if (!directionsServiceRef.current) {
-                  directionsServiceRef.current = new google.maps.DirectionsService();
-                  console.log("DirectionsService initialized");
-                }
-                if (!distanceMatrixServiceRef.current) {
-                  distanceMatrixServiceRef.current = new google.maps.DistanceMatrixService();
-                  console.log("DistanceMatrixService initialized");
-                }
-              }}
-            >
-              {/* Enhanced Route Visualization */}
-              {enhancedRoute && (
-                <>
-                  {/* Planned Route (light gray) */}
-                  {directionsRoute.length > 1 && (
-                    <PolylineTyped
-                      path={directionsRoute}
-                      options={{
-                        strokeColor: "#9CA3AF",
-                        strokeOpacity: 0.7,
-                        strokeWeight: 4,
-                        strokeLineCap: "round",
-                        strokeLineJoin: "round",
-                        zIndex: 0,
-                      }}
-                    />
-                  )}
-
-                  {/* Completed route (green) */}
-                  {enhancedRoute.completedPath.length > 1 && (
-                    <PolylineTyped
-                      path={enhancedRoute.completedPath}
-                      options={{
-                        strokeColor: "#10B981",
-                        strokeOpacity: 1,
-                        strokeWeight: 6,
-                        strokeLineCap: "round",
-                        strokeLineJoin: "round",
-                        zIndex: 2,
-                      }}
-                    />
-                  )}
-
-                  {/* Remaining route (red) */}
-                  {enhancedRoute.remainingPath.length > 1 && (
-                    <PolylineTyped
-                      path={enhancedRoute.remainingPath}
-                      options={{
-                        strokeColor: "#EF4444",
-                        strokeOpacity: 0.8,
-                        strokeWeight: 5,
-                        strokeLineCap: "round",
-                        strokeLineJoin: "round",
-                        zIndex: 1,
-                      }}
-                    />
-                  )}
-
-                  {/* Current position marker */}
-                  <MarkerTyped
-                    position={enhancedRoute.currentPosition}
-                    icon={{
-                      path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                      scale: 15,
-                      fillColor: "#3B82F6",
-                      fillOpacity: 1,
-                      strokeColor: "#FFFFFF",
-                      strokeWeight: 3,
-                      zIndex: 3,
-                    }}
-                    title={`${trackingData.driver_name} - ${enhancedRoute.progressPercentage.toFixed(1)}% Complete`}
-                  />
-                </>
-              )}
-
-              {/* Loading and Unloading Points */}
-              {trackingData && (() => {
-                try {
-                  const { loadingPoint, unloadingPoint } = getTrackingCoordinates(trackingData);
-                  
-                  return (
-                    <>
-                      {loadingPoint.lat !== 0 && (
-                        <MarkerTyped
-                          position={loadingPoint}
-                          icon={{
-                            path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                            scale: 10,
-                            fillColor: "#F59E0B",
-                            fillOpacity: 1,
-                            strokeColor: "#FFFFFF",
-                            strokeWeight: 2,
-                            zIndex: 2,
-                          }}
-                          title={`Loading Point: ${trackingData.loading_point_name}`}
-                        />
-                      )}
-
-                      {unloadingPoint.lat !== 0 && (
-                        <MarkerTyped
-                          position={unloadingPoint}
-                          icon={{
-                            path: "M-1,0a1,1 0 1,0 2,0a1,1 0 1,0 -2,0",
-                            scale: 10,
-                            fillColor: "#8B5CF6",
-                            fillOpacity: 1,
-                            strokeColor: "#FFFFFF",
-                            strokeWeight: 2,
-                            zIndex: 2,
-                          }}
-                          title={`Unloading Point: ${trackingData.unloading_point_name}`}
-                        />
-                      )}
-                    </>
-                  );
-                } catch (error) {
-                  console.error("Error rendering tracking points:", error);
-                  return null;
-                }
-              })()}
-            </GoogleMapTyped>
-          </LoadScriptTyped>
-
-          {/* Map Legend */}
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4 text-xs md:text-sm">
-            <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
-              <span>Current Location</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-8 h-1 bg-green-500 mr-2"></div>
-              <span>Completed Route</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-8 h-1 bg-red-500 mr-2"></div>
-              <span>Remaining Route</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-8 h-1 bg-gray-400 mr-2"></div>
-              <span>Planned Route</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full bg-amber-500 mr-2"></div>
-              <span>Loading Point</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full bg-purple-500 mr-2"></div>
-              <span>Unloading Point</span>
-            </div>
-          </div>
-
-          {/* Last Update Info */}
-          {trackingData.last_update && (
-            <div className="mt-4 bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600">
-                Last location update: <span className="font-semibold">{formatTime(trackingData.last_update)}</span>
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                This page automatically refreshes every 20 minutes. Real-time updates are enabled.
-              </p>
-            </div>
-          )}
         </div>
 
-        {/* Footer */}
-        <div className="mt-8 text-center pb-8">
-          <p className="text-sm text-gray-500">
-            Real-time tracking powered by Mobile Order Tracker
-          </p>
-          <p className="text-xs text-gray-400 mt-2">
-            Auto-refreshing every 20 minutes
-          </p>
+        <div className="text-center text-sm text-gray-500">
+          Last updated: {lastRefresh.toLocaleTimeString()} • Powered by OpenStreetMap & OpenRouteService
         </div>
       </div>
     </div>

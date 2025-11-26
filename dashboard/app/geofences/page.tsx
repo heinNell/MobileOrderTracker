@@ -1,97 +1,93 @@
-// Geofences Page - Geofence Configuration (hardened & fixed)
+// app/geofences/page.tsx - FULLY FEATURED WITH EDIT MODAL
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import type { Geofence } from "../../shared/types";
-// @ts-ignore
-import { Circle, GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
+
+// Dynamic import
+const GeofenceMap = dynamic(
+  () => import("../../components/GeofenceMap").then((mod) => ({ default: mod.GeofenceMap })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-96 bg-gray-100 rounded-lg">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading map...</p>
+        </div>
+      </div>
+    ),
+  }
+);
 
 type Row = Partial<Geofence> & {
-  location?: unknown;
-  location_text?: string; // Add this for WKT from API
+  location_text?: string;
   latitude?: number | string | null;
   longitude?: number | string | null;
 };
 
-// Updated WKT parser for "POINT(lng lat)" format
 function parseWKTPoint(wkt: string): { lat: number; lng: number } | null {
   if (!wkt || typeof wkt !== "string") return null;
-
-  // Match "POINT(lng lat)" format
   const match = wkt.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
   if (!match) return null;
-
   const lng = parseFloat(match[1]);
   const lat = parseFloat(match[2]);
-
-  if (Number.isFinite(lng) && Number.isFinite(lat)) {
-    return { lat, lng };
-  }
-  return null;
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
 }
 
 function getCoords(row: Row) {
-  // Try location_text (WKT) first
   if (row.location_text) {
     const parsed = parseWKTPoint(row.location_text);
     if (parsed) return parsed;
   }
-
-  // Fallback to numeric columns
   const lat = row.latitude != null ? Number(row.latitude) : null;
   const lng = row.longitude != null ? Number(row.longitude) : null;
-
-  if (
-    lat != null &&
-    lng != null &&
-    Number.isFinite(lat) &&
-    Number.isFinite(lng)
-  ) {
+  if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
     return { lat, lng };
   }
-
   return null;
 }
 
 export default function GeofencesPage() {
   const [geofences, setGeofences] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingGeofence, setEditingGeofence] = useState<Row | null>(null);
+
   const [newGeofence, setNewGeofence] = useState({
+    name: "",
+    latitude: -25.7479,
+    longitude: 28.2293,
+    radius_meters: 200,
+  });
+
+  const [editForm, setEditForm] = useState({
     name: "",
     latitude: 0,
     longitude: 0,
-    radius_meters: 100,
+    radius_meters: 200,
+    is_active: true,
   });
-  const [mapCenter, setMapCenter] = useState({ lat: 0, lng: 0 });
-  const [mapZoom, setMapZoom] = useState(2);
+
+  const [mapCenter, setMapCenter] = useState<[number, number]>([-25.7479, 28.2293]);
+  const [mapZoom, setMapZoom] = useState(6);
+
   const router = useRouter();
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
-  const mapContainerStyle = useMemo(
-    () => ({ width: "100%", height: "400px" }),
-    []
-  );
-  const mapOptions = useMemo(
-    () => ({
-      zoomControl: true,
-      streetViewControl: false,
-      mapTypeControl: true,
-      fullscreenControl: true,
-    }),
-    []
-  );
+  // Prevent hydration mismatch by only rendering after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push("/login");
         return;
@@ -99,162 +95,125 @@ export default function GeofencesPage() {
       setUser(session.user);
       fetchGeofences();
     };
-
     checkAuth();
   }, [router]);
 
   const fetchGeofences = async () => {
     try {
-      // Use the geofences_api view that includes location_text
       const { data, error } = await supabase
         .from("geofences_api")
         .select("*")
-        .order("name", { ascending: true });
+        .order("name");
 
       if (error) throw error;
-
-      // Debug: stash rows for quick console inspection
-      (window as any).__APP_DEBUG__ = (window as any).__APP_DEBUG__ || {};
-      (window as any).__APP_DEBUG__.lastGeofences = data;
-
       setGeofences(data || []);
 
-      // center map on first valid geofence, if any
-      const firstWithCoords = (data || []).map(getCoords).find(Boolean) as
-        | { lat: number; lng: number }
-        | undefined;
-      if (firstWithCoords) {
-        setMapCenter(firstWithCoords);
+      const first = (data || []).map(getCoords).find(Boolean);
+      if (first) {
+        setMapCenter([first.lat, first.lng]);
         setMapZoom(12);
       }
     } catch (err) {
-      console.error("Error fetching geofences:", err);
+      console.error("Error:", err);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleMapClick = (lat: number, lng: number) => {
+    if (showEditModal) {
+      // If editing, update edit form
+      setEditForm(prev => ({ ...prev, latitude: lat, longitude: lng }));
+    } else {
+      // If creating new
+      setNewGeofence(prev => ({ ...prev, latitude: lat, longitude: lng }));
+    }
+    setMapCenter([lat, lng]);
+    setMapZoom(15);
+  };
+
   const handleCreateGeofence = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user?.id) return;
+
     try {
-      // Ensure we have auth user
-      if (!user?.id) throw new Error("Not authenticated");
-
-      // Validate input data
-      if (!newGeofence.name || newGeofence.name.trim() === "") {
-        throw new Error("Geofence name is required");
-      }
-      if (!newGeofence.latitude || newGeofence.latitude === 0) {
-        throw new Error("Latitude is required and cannot be 0");
-      }
-      if (!newGeofence.longitude || newGeofence.longitude === 0) {
-        throw new Error("Longitude is required and cannot be 0");
-      }
-      if (!newGeofence.radius_meters || newGeofence.radius_meters <= 0) {
-        throw new Error("Radius must be greater than 0");
-      }
-
-      console.log("Creating geofence with data:", newGeofence);
-
-      // Get user's tenant_id
-      const { data: userRow, error: userError } = await supabase
+      const { data: userRow } = await supabase
         .from("users")
         .select("tenant_id")
         .eq("id", user.id)
         .single();
-      
-      if (userError) {
-        console.error("Error fetching user tenant:", userError);
-        throw new Error(`Failed to get user tenant: ${userError.message}`);
-      }
-      
-      if (!userRow?.tenant_id) {
-        throw new Error("User does not have a tenant assigned");
-      }
 
-      console.log("User tenant_id:", userRow.tenant_id);
-
-      // Insert using numeric lat/lng (trigger will set location)
-      const geofenceData = {
-        tenant_id: userRow.tenant_id,
+      const { error } = await supabase.from("geofences").insert({
+        tenant_id: userRow?.tenant_id,
         name: newGeofence.name.trim(),
-        latitude: parseFloat(newGeofence.latitude.toString()),
-        longitude: parseFloat(newGeofence.longitude.toString()),
-        radius_meters: parseInt(newGeofence.radius_meters.toString()),
+        latitude: newGeofence.latitude,
+        longitude: newGeofence.longitude,
+        radius_meters: newGeofence.radius_meters,
         is_active: true,
-      };
+      });
 
-      console.log("Inserting geofence data:", geofenceData);
-
-      const { data: insertedData, error } = await supabase
-        .from("geofences")
-        .insert(geofenceData)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error("Supabase insert error:", error);
-        throw error;
-      }
-
-      console.log("Successfully created geofence:", insertedData);
+      if (error) throw error;
 
       setShowCreateModal(false);
-      setNewGeofence({
-        name: "",
-        latitude: 0,
-        longitude: 0,
-        radius_meters: 100,
-      });
+      setNewGeofence({ name: "", latitude: -25.7479, longitude: 28.2293, radius_meters: 200 });
       fetchGeofences();
     } catch (err: any) {
-      console.error("Error creating geofence:", err);
-      
-      // Provide more detailed error message
-      let errorMessage = "Failed to create geofence";
-      if (err?.message) {
-        errorMessage += `: ${err.message}`;
-      }
-      if (err?.details) {
-        errorMessage += ` - ${err.details}`;
-      }
-      if (err?.hint) {
-        errorMessage += ` (Hint: ${err.hint})`;
-      }
-      if (err?.code) {
-        errorMessage += ` [Error Code: ${err.code}]`;
-      }
-      
-      alert(errorMessage);
-      console.error("Full error object:", JSON.stringify(err, null, 2));
+      alert("Error creating geofence: " + (err.message || "Unknown"));
     }
   };
 
-  const handleToggleGeofenceStatus = async (id: string, isActive: boolean) => {
+  const handleEditClick = (g: Row) => {
+    const coords = getCoords(g);
+    if (!coords) return;
+
+    setEditForm({
+      name: g.name || "",
+      latitude: coords.lat,
+      longitude: coords.lng,
+      radius_meters: g.radius_meters || 200,
+      is_active: !!g.is_active,
+    });
+    setEditingGeofence(g);
+    setShowEditModal(true);
+    setMapCenter([coords.lat, coords.lng]);
+    setMapZoom(15);
+  };
+
+  const handleUpdateGeofence = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGeofence?.id) return;
+
     try {
       const { error } = await supabase
         .from("geofences")
-        .update({ is_active: !isActive })
-        .eq("id", id);
+        .update({
+          name: editForm.name.trim(),
+          latitude: editForm.latitude,
+          longitude: editForm.longitude,
+          radius_meters: editForm.radius_meters,
+          is_active: editForm.is_active,
+        })
+        .eq("id", editingGeofence.id);
+
       if (error) throw error;
+
+      setShowEditModal(false);
+      setEditingGeofence(null);
       fetchGeofences();
-    } catch (err) {
-      console.error("Error updating geofence status:", err);
-      alert("Failed to update geofence status");
+    } catch (err: any) {
+      alert("Update failed: " + err.message);
     }
   };
 
-  const handleDeleteGeofence = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this geofence?")) return;
-    try {
-      // Delete from enhanced_geofences table (not the view)
-      const { error } = await supabase.from("enhanced_geofences").delete().eq("id", id);
-      if (error) throw error;
-      fetchGeofences();
-    } catch (err) {
-      console.error("Error deleting geofence:", err);
-      alert("Failed to delete geofence");
-    }
+  const handleToggle = async (id: string, active: boolean) => {
+    await supabase.from("geofences").update({ is_active: !active }).eq("id", id);
+    fetchGeofences();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this geofence permanently?")) return;
+    await supabase.from("geofences").delete().eq("id", id);
+    fetchGeofences();
   };
 
   const handleLogout = async () => {
@@ -262,40 +221,38 @@ export default function GeofencesPage() {
     router.push("/login");
   };
 
-  const handleMapClick = (e: google.maps.MapMouseEvent) => {
-    if (e.latLng) {
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      setNewGeofence((g) => ({ ...g, latitude: lat, longitude: lng }));
-      setMapCenter({ lat, lng });
-      setMapZoom(14);
-    }
-  };
+  // Prevent hydration mismatch - don't render anything until mounted
+  if (!mounted) {
+    return null;
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">Loading geofences...</div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-xl text-gray-700">Loading geofences...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
       {/* Header */}
-      <div className="md:hidden bg-white shadow">
-        <div className="px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-900">Geofences</h1>
-          <div className="flex items-center space-x-3">
+      <div className="bg-white shadow">
+        <div className="px-6 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">Geofence Management</h1>
+          <div className="flex gap-3">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm"
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
-              Add
+              + New Geofence
             </button>
             <button
               onClick={handleLogout}
-              className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-sm"
+              className="px-5 py-2.5 bg-gray-200 rounded-lg hover:bg-gray-300"
             >
               Logout
             </button>
@@ -303,303 +260,234 @@ export default function GeofencesPage() {
         </div>
       </div>
 
-      {/* Body */}
-      <div className="p-4 md:p-6">
-        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-            Geofence Management
-          </h1>
-          <div className="mt-4 md:mt-0 flex space-x-3">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 hidden md:block"
-            >
-              Create Geofence
-            </button>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 hidden md:block"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-        <p className="text-gray-600 mb-4">
-          Define and manage geofences for location-based monitoring
+      <div className="p-6 max-w-7xl mx-auto">
+        <p className="text-gray-600 mb-6 text-lg">
+          Click on the map to place a geofence • Click Edit to modify
         </p>
 
-        {/* Map (only render if API key present) */}
-        <div className="bg-white shadow rounded-lg p-4 md:p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Geofence Map</h2>
-
-          {apiKey ? (
-            <LoadScript googleMapsApiKey={apiKey}>
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={mapCenter}
-                zoom={mapZoom}
-                options={mapOptions}
-                onClick={handleMapClick}
-              >
-                {geofences.map((g) => {
-                  const coords = getCoords(g);
-                  if (!coords) return null;
-                  return (
-                    <React.Fragment key={String(g.id)}>
-                      <Marker position={coords} title={g.name || ""} />
-                      {g.is_active && g.radius_meters ? (
-                        <Circle
-                          center={coords}
-                          radius={Number(g.radius_meters)}
-                          options={{
-                            fillColor: "#3B82F6",
-                            fillOpacity: 0.2,
-                            strokeColor: "#3B82F6",
-                            strokeOpacity: 0.8,
-                            strokeWeight: 2,
-                          }}
-                        />
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })}
-              </GoogleMap>
-            </LoadScript>
-          ) : (
-            <div className="p-4 rounded border border-amber-300 bg-amber-50 text-amber-800">
-              Google Maps API key is missing. Set{" "}
-              <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code>.
-            </div>
-          )}
-
-          <p className="mt-3 text-sm text-gray-500">
-            Click on the map to set the center point for a new geofence
-          </p>
+        {/* Map */}
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+          <GeofenceMap
+            center={mapCenter}
+            zoom={mapZoom}
+            geofences={geofences
+              .map(g => {
+                const c = getCoords(g);
+                return c ? { ...g, latitude: c.lat, longitude: c.lng } : null;
+              })
+              .filter(Boolean) as any}
+            onMapClick={handleMapClick}
+          />
         </div>
 
-        {/* List */}
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Location
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Radius
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {geofences.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-4 text-center text-gray-500"
-                    >
-                      No geofences found
-                    </td>
-                  </tr>
-                ) : (
-                  geofences.map((g) => {
-                    const coords = getCoords(g);
-                    return (
-                      <tr key={String(g.id)} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {g.name}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {coords && 
-                           coords.lat !== undefined && 
-                           coords.lng !== undefined
-                            ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`
-                            : "—"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {g.radius_meters ?? "—"}{" "}
-                          {g.radius_meters ? "meters" : ""}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {g.is_active ? (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                              Active
-                            </span>
-                          ) : (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                              Inactive
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {"id" in g && typeof g.id === "string" ? (
-                            <>
-                              <button
-                                onClick={() =>
-                                  handleToggleGeofenceStatus(
-                                    g.id as string,
-                                    !!g.is_active
-                                  )
-                                }
-                                className={`mr-3 ${
-                                  g.is_active
-                                    ? "text-red-600 hover:text-red-900"
-                                    : "text-green-600 hover:text-green-900"
-                                }`}
-                              >
-                                {g.is_active ? "Deactivate" : "Activate"}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleDeleteGeofence(g.id as string)
-                                }
-                                className="text-red-600 hover:text-red-900"
-                              >
-                                Delete
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-gray-400">Invalid row</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+        {/* Table */}
+        <div className="bg-white rounded-xl shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold">All Geofences</h2>
           </div>
+          <table className="min-w-full">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Radius</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {geofences.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                    No geofences yet. Click "+ New Geofence" to create one.
+                  </td>
+                </tr>
+              ) : (
+                geofences.map((g) => {
+                  const coords = getCoords(g);
+                  return (
+                    <tr key={g.id} className="hover:bg-gray-50 transition">
+                      <td className="px-6 py-4 font-medium text-gray-900">{g.name || "Unnamed"}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "—"}
+                      </td>
+                      <td className="px-6 py-4 text-sm">{g.radius_meters || "—"} m</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                          g.is_active
+                            ? "bg-green-100 text-green-800"
+                            : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {g.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm space-x-4">
+                        <button
+                          onClick={() => handleEditClick(g)}
+                          className="text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleToggle(g.id as string, !!g.is_active)}
+                          className={g.is_active ? "text-orange-600 hover:text-orange-800" : "text-green-600 hover:text-green-800"}
+                        >
+                          {g.is_active ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(g.id as string)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Create Geofence Modal */}
+      {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">
-                Create New Geofence
-              </h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-                aria-label="Close"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateGeofence} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Geofence Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newGeofence.name}
-                  onChange={(e) =>
-                    setNewGeofence({ ...newGeofence, name: e.target.value })
-                  }
-                />
-              </div>
-
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold mb-6">Create New Geofence</h2>
+            <form onSubmit={handleCreateGeofence} className="space-y-5">
+              <input
+                type="text"
+                placeholder="Geofence Name (e.g. Warehouse A)"
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={newGeofence.name}
+                onChange={(e) => setNewGeofence({ ...newGeofence, name: e.target.value })}
+              />
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Latitude
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newGeofence.latitude}
-                    onChange={(e) =>
-                      setNewGeofence({
-                        ...newGeofence,
-                        latitude: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Longitude
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newGeofence.longitude}
-                    onChange={(e) =>
-                      setNewGeofence({
-                        ...newGeofence,
-                        longitude: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Radius (meters)
-                </label>
                 <input
                   type="number"
-                  min={10}
-                  max={10000}
+                  step="any"
+                  placeholder="Latitude"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newGeofence.radius_meters}
-                  onChange={(e) =>
-                    setNewGeofence({
-                      ...newGeofence,
-                      radius_meters: parseInt(e.target.value) || 100,
-                    })
-                  }
+                  className="px-4 py-3 border rounded-lg"
+                  value={newGeofence.latitude}
+                  readOnly
+                />
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="Longitude"
+                  required
+                  className="px-4 py-3 border rounded-lg"
+                  value={newGeofence.longitude}
+                  readOnly
                 />
               </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <input
+                type="number"
+                placeholder="Radius in meters"
+                min="50"
+                required
+                className="w-full px-4 py-3 border rounded-lg"
+                value={newGeofence.radius_meters}
+                onChange={(e) => setNewGeofence({ ...newGeofence, radius_meters: parseInt(e.target.value) || 200 })}
+              />
+              <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="px-6 py-3 border rounded-lg hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                 >
                   Create Geofence
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingGeofence && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold mb-6">Edit Geofence</h2>
+            <form onSubmit={handleUpdateGeofence} className="space-y-5">
+              <input
+                type="text"
+                placeholder="Name"
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    className="w-full px-4 py-3 border rounded-lg"
+                    value={editForm.latitude}
+                    onChange={(e) => setEditForm({ ...editForm, latitude: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    className="w-full px-4 py-3 border rounded-lg"
+                    value={editForm.longitude}
+                    onChange={(e) => setEditForm({ ...editForm, longitude: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Radius (meters)</label>
+                <input
+                  type="number"
+                  min="50"
+                  required
+                  className="w-full px-4 py-3 border rounded-lg"
+                  value={editForm.radius_meters}
+                  onChange={(e) => setEditForm({ ...editForm, radius_meters: parseInt(e.target.value) || 200 })}
+                />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="active"
+                  checked={editForm.is_active}
+                  onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
+                  className="h-5 w-5 text-blue-600 rounded"
+                />
+                <label htmlFor="active" className="ml-3 text-lg">Active</label>
+              </div>
+              <div className="flex justify-end gap-3 pt-6 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingGeofence(null);
+                  }}
+                  className="px-6 py-3 border rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>

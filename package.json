@@ -11,6 +11,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@turf/along": "^7.3.0",
+    "@turf/helpers": "^7.3.0",
+    "@turf/length": "^7.3.0",
     "expo": "^54.0.13",
     "expo-dev-client": "~6.0.15",
     "react-dom": "19.1.0",
